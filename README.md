@@ -141,3 +141,8 @@ just run demos/   # build and run
 just test         # unit tests
 just              # list every recipe
 ```
+
+## Development
+
+Developed with assistance from [Claude Code](https://claude.com/claude-code). All changes
+are reviewed, tested, and maintained by me.
