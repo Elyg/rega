@@ -26,6 +26,7 @@
 #include <ImfStringVectorAttribute.h>
 #include <ImfThreading.h>
 #include <ImfTileDescriptionAttribute.h>
+#include <ImfTiledInputPart.h>
 #include <ImfTimeCodeAttribute.h>
 #include <ImfVecAttribute.h>
 #include <algorithm>
@@ -328,9 +329,7 @@ void readWhatIsThere(Imf::InputPart& part, LayerImage& img)
 {
 	const Imf::Header& h = part.header();
 	const Imath::Box2i dw = h.dataWindow();
-	const int lines = h.hasTileDescription()
-	                      ? static_cast<int>(h.tileDescription().ySize)
-	                      : Imf::getCompressionNumScanlines(h.compression());
+	const int lines = Imf::getCompressionNumScanlines(h.compression());
 	int read = 0, total = 0;
 	for(int y = dw.min.y; y <= dw.max.y; y += lines, ++total)
 	{
@@ -345,6 +344,45 @@ void readWhatIsThere(Imf::InputPart& part, LayerImage& img)
 	}
 	img.m_chunksRead = read;
 	img.m_chunks = total;
+}
+
+/// A tiled part's full-resolution level, tile by tile when the whole of it
+/// will not read: a bucket render still going (its tile table not written
+/// yet) or a copy cut short shows the buckets it has, wherever they are.
+/// The generic InputPart refuses such a file outright.
+void readTiles(Imf::MultiPartInputFile& file,
+               int part,
+               const Imf::FrameBuffer& fb,
+               LayerImage& img)
+{
+	Imf::TiledInputPart tiles(file, part);
+	tiles.setFrameBuffer(fb);
+	const int nx = tiles.numXTiles(0), ny = tiles.numYTiles(0);
+	try
+	{
+		tiles.readTiles(0, nx - 1, 0, ny - 1, 0, 0);
+		return;
+	}
+	catch(const std::exception&)
+	{
+	}
+	int read = 0;
+	for(int y = 0; y < ny; ++y)
+	{
+		for(int x = 0; x < nx; ++x)
+		{
+			try
+			{
+				tiles.readTile(x, y, 0, 0);
+				++read;
+			}
+			catch(const std::exception&)
+			{
+			}
+		}
+	}
+	img.m_chunksRead = read;
+	img.m_chunks = nx * ny;
 }
 
 } // namespace
@@ -411,8 +449,7 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 	try
 	{
 		Imf::MultiPartInputFile file(info.m_path.c_str());
-		Imf::InputPart part(file, l.m_part);
-		const Imf::Header& h = part.header();
+		const Imf::Header& h = file.header(l.m_part);
 		Imath::Box2i dw = h.dataWindow();
 
 		LayerImage img;
@@ -449,6 +486,12 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 			                           px,
 			                           px * img.m_width));
 		}
+		if(h.hasTileDescription())
+		{
+			readTiles(file, l.m_part, fb, img);
+			return img;
+		}
+		Imf::InputPart part(file, l.m_part);
 		part.setFrameBuffer(fb);
 		try
 		{

@@ -471,9 +471,14 @@ Element App::renderHelp()
 		                      : vbox(std::move(found))) |
 		       size(WIDTH, EQUAL, fullW) | size(HEIGHT, GREATER_THAN, fullH);
 	}
-	// Scrollable when the terminal is still too short: ↑/↓ or wheel.
+	// Scrollable when the terminal is still too short: ↑/↓ or wheel, a line
+	// at a time. The frame centres its focus: aim it half a view below the
+	// first line to show.
 	const int maxH = std::max(5, Terminal::Size().dimy - 6);
-	m_helpScroll = std::clamp(m_helpScroll, 0, 100);
+	body->ComputeRequirement();
+	const int bodyH = body->requirement().min_y;
+	const int viewH = std::min(bodyH, maxH - 1);
+	m_helpScroll = std::clamp(m_helpScroll, 0, std::max(0, bodyH - viewH));
 	const Element footer =
 	    m_helpQuery.empty()
 	        ? text(" type to search   ↑/↓ scroll   ? / Esc close") | dim
@@ -485,7 +490,7 @@ Element App::renderHelp()
 	return vbox({
 	           text(title) | bold | hcenter,
 	           separator(),
-	           body | focusPositionRelative(0, m_helpScroll / 100.0f) |
+	           body | focusPosition(0, m_helpScroll + viewH / 2) |
 	               vscroll_indicator | yframe | size(HEIGHT, LESS_THAN, maxH),
 	           separator(),
 	           footer,
@@ -495,7 +500,7 @@ Element App::renderHelp()
 
 bool App::helpEvent(Event e)
 {
-	// Typing searches; ↑/↓ / PgUp / PgDn / wheel scroll (in 10% steps);
+	// Typing searches; ↑/↓ / wheel scroll a line, PgUp / PgDn a page;
 	// Esc clears the search, then closes; `?` (nothing typed) closes, as
 	// does any other key.
 	int step = 0;
@@ -518,11 +523,12 @@ bool App::helpEvent(Event e)
 	}
 	else if(e == Event::PageDown || e == Event::PageUp)
 	{
-		step = e == Event::PageDown ? 5 : -5;
+		const int page = std::max(1, Terminal::Size().dimy - 8);
+		step = e == Event::PageDown ? page : -page;
 	}
 	if(step != 0)
 	{
-		m_helpScroll = std::clamp(m_helpScroll + step * 10, 0, 100);
+		m_helpScroll = std::max(0, m_helpScroll + step); // render() caps it
 		return true;
 	}
 	if(e == Event::Escape && !m_helpQuery.empty())

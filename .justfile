@@ -84,6 +84,12 @@ demo-sequence *args:
 demo-incomplete *args:
     python3 scripts/incomplete-exrs.py {{ args }}
 
+# Fake bucket renders killed mid-frame (tiled, in progress) in demos/buckets/: `just demo-buckets [source.exr]`
+[group('run')]
+demo-buckets source="demos/rvtui-sequence/shot.1001.exr": configure
+    cmake --build --preset {{ preset }} --target rvtui_buckets
+    ./{{ build_dir }}/rvtui_buckets {{ source }} demos/buckets
+
 # Browse the demo images: `just demo`
 [group('run')]
 demo: fetch-demos build

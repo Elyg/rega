@@ -102,6 +102,10 @@ target_link_libraries(rvtui_core PUBLIC
 add_executable(rvtui src/main.cpp)
 target_link_libraries(rvtui PRIVATE rvtui_core CLI11::CLI11)
 
+# `just demo-buckets`: a bucket render killed mid-frame (not built by default).
+add_executable(rvtui_buckets EXCLUDE_FROM_ALL tools/bucket-render.cpp)
+target_link_libraries(rvtui_buckets PRIVATE OpenEXR::OpenEXR)
+
 if(RVTUI_BUILD_TESTS)
     find_package(GTest REQUIRED)
     enable_testing()

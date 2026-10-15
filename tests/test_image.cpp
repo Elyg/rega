@@ -215,15 +215,38 @@ TEST(ExrLoader, ReadsARenderStillBeingWritten)
 	EXPECT_FLOAT_EQ(*img.at(0, 0, 0), 0.0f);
 }
 
-TEST(ExrLoader, ReadsTheTileRowsACutShortTiledFileHas)
+TEST(ExrLoader, ReadsTheTilesACutShortTiledFileHas)
 {
+	// 20x13 in 8x8 tiles: 3 x 2. The last one written, (2, 1), loses its end;
+	// the others in its row stay.
 	auto p = writeExr("cut-tiled.exr", {"R", "G", "B"}, 20, 13, /*tiled=*/true);
 	std::string bytes = readBytes(p);
 	writeBytes(p, bytes.substr(0, bytes.size() - 10));
 	auto img = rv::loadLayer(rv::probeImage(p), 0);
-	EXPECT_EQ(img.m_chunksRead, 1); // of two rows of 8x8 tiles
-	EXPECT_EQ(img.m_chunks, 2);
+	EXPECT_EQ(img.m_chunksRead, 5);
+	EXPECT_EQ(img.m_chunks, 6);
 	EXPECT_FLOAT_EQ(*img.at(1, 19, 7), pattern(1, 19, 7));
+	EXPECT_FLOAT_EQ(*img.at(1, 12, 10), pattern(1, 12, 10)); // tile (1, 1)
+	EXPECT_FLOAT_EQ(*img.at(1, 19, 12), 0.0f);               // tile (2, 1)
+}
+
+TEST(ExrLoader, ReadsTheBucketsOfARenderStillGoing)
+{
+	// A bucket renderer killed mid-frame: its tile table still all zeros,
+	// the first row of buckets on disk.
+	auto p = writeExr("buckets.exr", {"R", "G", "B"}, 20, 13, /*tiled=*/true);
+	std::string bytes = readBytes(p);
+	const size_t table = offsetTable(bytes, 6);
+	ASSERT_GT(table, 0u);
+	uint64_t fourth;
+	std::memcpy(&fourth, bytes.data() + table + 3 * 8, 8);
+	std::fill_n(bytes.begin() + table, 6 * 8, '\0');
+	writeBytes(p, bytes.substr(0, fourth));
+	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	EXPECT_EQ(img.m_chunksRead, 3);
+	EXPECT_EQ(img.m_chunks, 6);
+	EXPECT_FLOAT_EQ(*img.at(2, 19, 0), pattern(2, 19, 0));
+	EXPECT_FLOAT_EQ(*img.at(2, 3, 10), 0.0f);
 }
 
 TEST(ExrLoader, MultiPart)

@@ -94,7 +94,7 @@ private:
 	AppContext m_ctx;
 	Mode m_mode = Mode::BROWSER;
 	bool m_help = false;
-	int m_helpScroll = 0;    ///< percent of the help scrolled (short terminals)
+	int m_helpScroll = 0;    ///< first help line shown (short terminals)
 	std::string m_helpQuery; ///< typed while the help is open: shows matches
 
 	Browser m_browser;

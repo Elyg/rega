@@ -38,7 +38,7 @@ fi
 
 echo "[format] $("$clang_format" --version)"
 
-files=$(find include src tests -type f \( -name '*.h' -o -name '*.cpp' \) 2>/dev/null || true)
+files=$(find include src tests tools -type f \( -name '*.h' -o -name '*.cpp' \) 2>/dev/null || true)
 [ -z "$files" ] && { echo "[format] nothing to format"; exit 0; }
 
 if [ $check -eq 1 ]; then
