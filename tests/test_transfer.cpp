@@ -119,9 +119,9 @@ TEST(Kitty, TmuxWrapCopiesTheRunsBetweenEscapes)
 
 TEST(Kitty, CompactPlaceholdersKeepsDiacriticsOnlyAfterABreak)
 {
-	ftxui::Screen screen(6, 2);
+	ftxui::Screen screen(7, 2);
 	const auto id = ftxui::Color::Palette256(7);
-	for(int x = 0; x < 6; ++x)
+	for(int x = 0; x < 7; ++x)
 	{
 		for(int y = 0; y < 2; ++y)
 		{
@@ -138,18 +138,39 @@ TEST(Kitty, CompactPlaceholdersKeepsDiacriticsOnlyAfterABreak)
 	                                       bare,
 	                                       "a",
 	                                       kitty::placeholderCell(0, 4),
+	                                       bare,
 	                                       bare};
 	const std::vector<std::string> row1 = {kitty::placeholderCell(1, 0),
 	                                       bare,
 	                                       bare,
 	                                       bare,
 	                                       kitty::placeholderCell(1, 4),
-	                                       kitty::placeholderCell(1, 5)};
-	for(int x = 0; x < 6; ++x)
+	                                       kitty::placeholderCell(1, 5),
+	                                       bare};
+	for(int x = 0; x < 7; ++x)
 	{
 		EXPECT_EQ(screen.PixelAt(x, 0).character, row0[x]) << x;
 		EXPECT_EQ(screen.PixelAt(x, 1).character, row1[x]) << x;
 	}
+}
+
+TEST(Kitty, CompactPlaceholdersKeepsDiacriticsOutOfTheLastColumn)
+{
+	// Overlay text ending one cell short of the right edge: tmux (autowrap
+	// off) would hang the last cell's diacritics on the text.
+	ftxui::Screen screen(4, 1);
+	const auto strip = ftxui::Color::RGB(40, 40, 40);
+	for(int x = 0; x < 4; ++x)
+	{
+		screen.PixelAt(x, 0).character = kitty::placeholderCell(0, x);
+		screen.PixelAt(x, 0).foreground_color = ftxui::Color::Palette256(7);
+	}
+	screen.PixelAt(2, 0).character = "e";
+	screen.PixelAt(2, 0).background_color = strip;
+	compactPlaceholders(screen);
+	EXPECT_EQ(screen.PixelAt(2, 0).character, "e");
+	EXPECT_EQ(screen.PixelAt(3, 0).character, " ");
+	EXPECT_EQ(screen.PixelAt(3, 0).background_color, strip);
 }
 
 TEST(Kitty, CompressesOnlyWhenItPays)

@@ -214,6 +214,7 @@ ftxui::Element placeAt(ftxui::Elements children, std::vector<ftxui::Box> boxes)
 void compactPlaceholders(ftxui::Screen& screen)
 {
 	static const std::string BARE = kitty::barePlaceholderCell();
+	const int last = screen.dimx() - 1;
 	for(int y = 0; y < screen.dimy(); ++y)
 	{
 		std::optional<std::pair<int, int>> left;
@@ -226,6 +227,16 @@ void compactPlaceholders(ftxui::Screen& screen)
 			   rc->first == left->first && rc->second == left->second + 1)
 			{
 				px.character = BARE;
+			}
+			else if(rc && x == last && x > 0)
+			{
+				// With autowrap off (FTXUI's ?7l), tmux hangs the diacritics
+				// of a last-column cell on the cell before it: an "e" of
+				// overlay text grew accents. Extend what is to the left
+				// instead.
+				const auto& prev = screen.PixelAt(x - 1, y);
+				px.character = " ";
+				px.background_color = prev.background_color;
 			}
 			left = rc;
 			leftFg = px.foreground_color;

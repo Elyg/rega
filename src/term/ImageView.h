@@ -248,7 +248,9 @@ ftxui::Element placeAt(ftxui::Elements children, std::vector<ftxui::Box> boxes);
 /// picture costs to print (8 → 4 bytes a cell); FTXUI reprints every cell each
 /// frame, and through tmux a burst past ~8 bytes a cell gets dropped (kitty
 /// transmits with it). Run on the finished screen, after anything drawn over
-/// the image: a cell right of a break keeps its diacritics.
+/// the image: a cell right of a break keeps its diacritics, unless it is in
+/// the last column, where tmux misplaces them: there it takes the background
+/// of the cell to its left instead.
 void compactPlaceholders(ftxui::Screen& screen);
 
 } // namespace rv
