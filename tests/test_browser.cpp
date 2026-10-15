@@ -381,8 +381,7 @@ TEST_F(BrowserTest, PreviewSaysWhenTheImageIsIncomplete)
 	EXPECT_TRUE(waitFor(
 	    [&]
 	    {
-		    return find("loading…").first < 0 &&
-		           find("decoding…").first < 0 &&
+		    return find("loading…").first < 0 && find("decoding…").first < 0 &&
 		           m_c.m_svc.pendingJobs() == 0;
 	    }));
 	EXPECT_LT(find("incomplete image").first, 0);
