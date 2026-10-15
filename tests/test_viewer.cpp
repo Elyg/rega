@@ -857,3 +857,61 @@ TEST_F(ViewerTest, HudShowsTheResolution)
 	draw();
 	EXPECT_GE(titleAt(m_v, "40×20").first, 0);
 }
+
+TEST_F(ViewerTest, ADiffPairShowsLabelledTilesAndNGoesPairByPair)
+{
+	// B is wider: its extra pixels differ from A's nothing by 0.5.
+	std::vector<OpenItem> items(2);
+	items[0].m_a = entryForPath(writeExr(m_dir / "old.exr", {"R", "G", "B"}));
+	items[0].m_labelsA.lines(Slot::TC).push_back("main");
+	items[0].m_b =
+	    entryForPath(writeExr(m_dir / "new.exr", {"R", "G", "B"}, 16, 4));
+	items[0].m_labelsB.lines(Slot::TC).push_back("current");
+	items[1].m_a = layersEntry();
+	m_v.openItems(std::move(items));
+	EXPECT_TRUE(m_v.tiled());
+	drawSheet();
+	EXPECT_EQ(m_v.tilesShown(), 3);
+	for(const char* s : {"main", "current", "diff", "max Δ 0.5", "[1/2]"})
+	{
+		EXPECT_GE(titleAt(m_v, s).first, 0) << s;
+	}
+	// `A` hides them with the annotations.
+	press(key("A"));
+	EXPECT_LT(titleAt(m_v, "current").first, 0);
+	EXPECT_LT(titleAt(m_v, "max Δ").first, 0);
+	press(key("A"));
+
+	press(key("n")); // the lone image: shown alone
+	EXPECT_FALSE(m_v.tiled());
+	EXPECT_EQ(m_v.state().m_current, 3);
+	EXPECT_GE(titleAt(m_v, "[2/2]").first, 0);
+	press(key("n")); // round to the pair, tiled again
+	EXPECT_TRUE(m_v.tiled());
+	EXPECT_EQ(m_v.state().m_current, 0);
+}
+
+TEST(OpenItems, LabelsFollowTheirFileIntoItsSequenceAndPairsStayPairs)
+{
+	const fs::path dir = freshDir("open-items");
+	for(const char* f : {"s.0001.exr", "s.0002.exr", "x.exr", "y.exr"})
+	{
+		writeExr(dir / f, {"R"});
+	}
+	const std::string d = dir.string() + "/";
+	std::vector<std::string> missing;
+	const auto items = openItems({{d + "s.0001.exr:label=top:seq"},
+	                              {d + "s.0002.exr"},
+	                              {d + "x.exr:label=bl:old", d + "y.exr"},
+	                              {d + "gone.exr", d + "y.exr"}},
+	                             missing);
+	ASSERT_EQ(items.size(), 3u);
+	EXPECT_EQ(items[0].m_a.m_kind, Entry::Kind::SEQUENCE);
+	EXPECT_EQ(items[0].m_labelsA.lines(Slot::TC),
+	          std::vector<std::string>{"seq"});
+	ASSERT_TRUE(items[1].m_b);
+	EXPECT_EQ(items[1].m_labelsA.lines(Slot::BL),
+	          std::vector<std::string>{"old"});
+	EXPECT_FALSE(items[2].m_b); // A missing: B alone
+	EXPECT_EQ(missing, std::vector<std::string>{d + "gone.exr"});
+}

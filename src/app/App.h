@@ -29,6 +29,9 @@ struct AppOptions
 {
 	/// Directory, image(s) or sequence glob to open; empty = current dir.
 	std::vector<std::string> m_paths;
+	/// With `--diff`: everything to open, pairs and paths, in the order
+	/// given (m_paths unused).
+	std::vector<OpenArg> m_args;
 	std::string m_graphics = "auto"; ///< auto | kitty | halfblock
 	std::string m_transfer =
 	    "auto"; ///< kitty pixels: auto | direct | shm | file

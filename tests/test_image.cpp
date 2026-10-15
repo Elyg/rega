@@ -18,6 +18,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <thread>
@@ -145,6 +146,84 @@ TEST(ExrLoader, ReadsTiled)
 	EXPECT_TRUE(info.m_parts[0].m_tiled);
 	auto img = rv::loadLayer(info, 0);
 	EXPECT_FLOAT_EQ(*img.at(1, 19, 12), pattern(1, 19, 12));
+}
+
+namespace
+{
+
+// Where the offset table of a single-part file with `chunks` chunks starts:
+// its first entry points just past it.
+size_t offsetTable(const std::string& bytes, int chunks)
+{
+	for(size_t i = 8; i + 8 <= bytes.size(); ++i)
+	{
+		uint64_t v;
+		std::memcpy(&v, bytes.data() + i, 8);
+		if(v == i + 8 * chunks)
+		{
+			return i;
+		}
+	}
+	return 0;
+}
+
+std::string readBytes(const fs::path& p)
+{
+	std::ifstream in(p, std::ios::binary);
+	return {std::istreambuf_iterator<char>(in), {}};
+}
+
+void writeBytes(const fs::path& p, const std::string& bytes)
+{
+	std::ofstream(p, std::ios::binary) << bytes;
+}
+
+} // namespace
+
+TEST(ExrLoader, ReadsWhatACutShortCopyHas)
+{
+	// 40 lines of ZIP are three 16-line chunks; lose the end of the last.
+	auto p = writeExr("cut.exr", {"R", "G", "B"}, 8, 40);
+	std::string bytes = readBytes(p);
+	writeBytes(p, bytes.substr(0, bytes.size() - 10));
+	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	EXPECT_TRUE(img.incomplete());
+	EXPECT_EQ(img.m_chunksRead, 2);
+	EXPECT_EQ(img.m_chunks, 3);
+	EXPECT_FLOAT_EQ(*img.at(0, 3, 31), pattern(0, 3, 31));
+	EXPECT_FLOAT_EQ(*img.at(0, 3, 32), 0.0f);
+}
+
+TEST(ExrLoader, ReadsARenderStillBeingWritten)
+{
+	// The writer zeroes the offset table and fills it in on close.
+	auto p = writeExr("rendering.exr", {"R", "G", "B"}, 8, 40);
+	std::string bytes = readBytes(p);
+	const size_t table = offsetTable(bytes, 3);
+	ASSERT_GT(table, 0u);
+	std::fill_n(bytes.begin() + table, 8 * 3, '\0');
+	writeBytes(p, bytes.substr(0, bytes.size() - 10));
+	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	EXPECT_EQ(img.m_chunksRead, 2);
+	EXPECT_FLOAT_EQ(*img.at(2, 7, 20), pattern(2, 7, 20));
+
+	// Only just opened: no chunks at all is an empty frame, not an error.
+	writeBytes(p, bytes.substr(0, table + 8 * 3));
+	img = rv::loadLayer(rv::probeImage(p), 0);
+	EXPECT_EQ(img.m_chunksRead, 0);
+	EXPECT_EQ(img.m_chunks, 3);
+	EXPECT_FLOAT_EQ(*img.at(0, 0, 0), 0.0f);
+}
+
+TEST(ExrLoader, ReadsTheTileRowsACutShortTiledFileHas)
+{
+	auto p = writeExr("cut-tiled.exr", {"R", "G", "B"}, 20, 13, /*tiled=*/true);
+	std::string bytes = readBytes(p);
+	writeBytes(p, bytes.substr(0, bytes.size() - 10));
+	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	EXPECT_EQ(img.m_chunksRead, 1); // of two rows of 8x8 tiles
+	EXPECT_EQ(img.m_chunks, 2);
+	EXPECT_FLOAT_EQ(*img.at(1, 19, 7), pattern(1, 19, 7));
 }
 
 TEST(ExrLoader, MultiPart)
@@ -736,4 +815,81 @@ TEST(ImageService, PrefetchesLandQuietly)
 		std::this_thread::sleep_for(std::chrono::milliseconds(5));
 	}
 	EXPECT_GE(notified.load(), 1);
+}
+
+namespace
+{
+
+// A layer covering `dw`, every channel `v` (full resolution).
+rv::LayerImage flat(rv::Box2i dw, std::vector<std::string> names, float v)
+{
+	rv::LayerImage img;
+	img.m_dataWindow = img.m_displayWindow = dw;
+	img.m_width = dw.width();
+	img.m_height = dw.height();
+	img.m_channelNames = std::move(names);
+	for(size_t c = 0; c < img.m_channelNames.size(); ++c)
+	{
+		rv::Plane p =
+		    rv::Plane::floats(static_cast<size_t>(img.m_width) * img.m_height);
+		for(size_t i = 0; i < p.size(); ++i)
+		{
+			p.set(i, v);
+		}
+		img.m_planes.push_back(std::move(p));
+	}
+	return img;
+}
+
+} // namespace
+
+TEST(Diff, AbsoluteDifferenceOverTheUnionOfWindowsAndChannels)
+{
+	const auto a = flat({0, 0, 3, 1}, {"R", "G"}, 1.0f);
+	const auto b = flat({2, 0, 5, 1}, {"R", "B"}, 0.25f);
+	const auto d = rv::diffLayers(a, b);
+	EXPECT_EQ(d.m_dataWindow, (rv::Box2i{0, 0, 5, 1}));
+	ASSERT_EQ(d.m_channelNames, (std::vector<std::string>{"R", "B", "G"}));
+	EXPECT_FLOAT_EQ(*d.at(0, 0, 0), 1.0f);  // only A: against 0
+	EXPECT_FLOAT_EQ(*d.at(0, 2, 1), 0.75f); // both
+	EXPECT_FLOAT_EQ(*d.at(1, 5, 0), 0.25f); // B's channel, B's pixel
+	EXPECT_FLOAT_EQ(*d.at(2, 5, 0), 0.0f);  // A's channel, B's pixel
+	EXPECT_FLOAT_EQ(rv::maxValue(d), 1.0f);
+}
+
+TEST(Diff, IdenticalIncludingNanIsZeroOneNanStays)
+{
+	auto a = flat({0, 0, 1, 0}, {"R"}, 0.5f);
+	auto b = a;
+	a.m_planes[0].set(0, NAN);
+	b.m_planes[0].set(0, NAN);
+	auto same = rv::diffLayers(a, b);
+	EXPECT_FLOAT_EQ(rv::maxValue(same), 0.0f);
+	EXPECT_EQ(same.m_nanPixels, 0);
+	b.m_planes[0].set(0, 0.5f);
+	EXPECT_EQ(rv::diffLayers(a, b).m_nanPixels, 1);
+}
+
+TEST(ImageService, DiffsTwoFilesAndReportsAMissingSide)
+{
+	auto a = writeExr("diff-a.exr", {"R", "G", "B"}, 6, 4);
+	auto b = writeExr("diff-b.exr", {"R", "G", "B"}, 6, 4);
+	rv::ImageService svc(nullptr, size_t(64) << 20, 1);
+	rv::LayerImagePtr d;
+	for(int i = 0; i < 500 && !d; ++i)
+	{
+		d = svc.diffLayer(a, b, "", 1);
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	}
+	ASSERT_TRUE(d);
+	EXPECT_FLOAT_EQ(rv::maxValue(*d), 0.0f);
+
+	const fs::path gone = tmpDir() / "diff-gone.exr";
+	fs::remove(gone);
+	for(int i = 0; i < 500 && !svc.diffError(gone, b); ++i)
+	{
+		EXPECT_FALSE(svc.diffLayer(gone, b, "", 1));
+		std::this_thread::sleep_for(std::chrono::milliseconds(5));
+	}
+	EXPECT_TRUE(svc.diffError(gone, b).has_value());
 }

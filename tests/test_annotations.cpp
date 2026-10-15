@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 
 #include <filesystem>
+#include <fstream>
 #include <map>
 
 using namespace rv;
@@ -175,4 +176,32 @@ TEST(Annotations, StateRoundTripPruneAndHistory)
 	EXPECT_NE(d.findSource("/s/204"), nullptr);
 	EXPECT_EQ(d.findSource("/s/4"), nullptr);
 	EXPECT_NE(d.findSource("/s/5"), nullptr);
+}
+
+TEST(Labels, SplitOffThePathOneSlotEach)
+{
+	auto [path, labels] =
+	    splitLabels("dir/a.exr:label=top:main v2:label=bl:[#@res]");
+	EXPECT_EQ(path, "dir/a.exr");
+	EXPECT_EQ(labels.lines(Slot::TC), std::vector<std::string>{"main v2"});
+	EXPECT_EQ(labels.lines(Slot::BL), std::vector<std::string>{"[#@res]"});
+	// The text runs to the next label, colons and all.
+	EXPECT_EQ(splitLabels("a.exr:label=tr:10:30").second.lines(Slot::TR),
+	          std::vector<std::string>{"10:30"});
+	EXPECT_EQ(splitLabels("a.exr:label=bottom:x").second.lines(Slot::BC),
+	          std::vector<std::string>{"x"});
+}
+
+TEST(Labels, AnExistingFileOrAnUnknownSlotStaysWhole)
+{
+	EXPECT_EQ(splitLabels("a.exr:label=middle:x").first,
+	          "a.exr:label=middle:x");
+	EXPECT_TRUE(splitLabels("a.exr:label=middle:x").second.empty());
+	EXPECT_TRUE(splitLabels("plain.exr").second.empty());
+	const fs::path odd =
+	    fs::temp_directory_path() / "rvtui-tests" / "x.exr:label=top:y";
+	fs::create_directories(odd.parent_path());
+	std::ofstream(odd) << "";
+	EXPECT_EQ(splitLabels(odd.string()).first, odd.string());
+	EXPECT_TRUE(splitLabels(odd.string()).second.empty());
 }

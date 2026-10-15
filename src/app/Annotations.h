@@ -34,6 +34,13 @@ using KeyLookup =
     std::function<std::optional<std::string>(const std::string& key,
                                              bool builtin)>;
 
+/// A command-line image: `path[:label=<slot>:<text>]…`, the slot one of
+/// tl tc tr bl bc br, or top / bottom (tc / bc). The text runs to the next
+/// `:label=` and may hold placeholders. An argument naming an existing file is
+/// all path, and one whose labels don't parse is left whole (and reported
+/// not found). Returns the path and its labels.
+std::pair<std::string, AnnotationSet> splitLabels(const std::string& arg);
+
 /// Substitute the placeholders of one template line. Unknown keys stay literal,
 /// in a dim run.
 OverlayLine resolveLine(const std::string& tmpl, const KeyLookup& lookup);

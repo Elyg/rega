@@ -7,6 +7,7 @@
 #include <ImfChannelList.h>
 #include <ImfChannelListAttribute.h>
 #include <ImfChromaticitiesAttribute.h>
+#include <ImfCompression.h>
 #include <ImfCompressionAttribute.h>
 #include <ImfDoubleAttribute.h>
 #include <ImfEnvmapAttribute.h>
@@ -320,6 +321,32 @@ void collectLayers(const Imf::Header& h,
 	}
 }
 
+/// After a whole-image read failed: read again one chunk-high strip at a
+/// time, keeping the strips that decode. A render still being written, or a
+/// copy cut short, then shows what it has; one only just opened, nothing.
+void readWhatIsThere(Imf::InputPart& part, LayerImage& img)
+{
+	const Imf::Header& h = part.header();
+	const Imath::Box2i dw = h.dataWindow();
+	const int lines = h.hasTileDescription()
+	                      ? static_cast<int>(h.tileDescription().ySize)
+	                      : Imf::getCompressionNumScanlines(h.compression());
+	int read = 0, total = 0;
+	for(int y = dw.min.y; y <= dw.max.y; y += lines, ++total)
+	{
+		try
+		{
+			part.readPixels(y, std::min(y + lines - 1, dw.max.y));
+			++read;
+		}
+		catch(const std::exception&)
+		{
+		}
+	}
+	img.m_chunksRead = read;
+	img.m_chunks = total;
+}
+
 } // namespace
 
 ImageInfo probeExr(const std::filesystem::path& p)
@@ -423,7 +450,14 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 			                           px * img.m_width));
 		}
 		part.setFrameBuffer(fb);
-		part.readPixels(dw.min.y, dw.max.y);
+		try
+		{
+			part.readPixels(dw.min.y, dw.max.y);
+		}
+		catch(const std::exception&)
+		{
+			readWhatIsThere(part, img);
+		}
 		return img;
 	}
 	catch(const std::exception& e)

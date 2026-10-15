@@ -93,12 +93,21 @@ bool ImageService::checkForChanges(
 		spdlog::info("changed on disk: {}", path);
 		std::string old = path + "|" + it->second;
 		it->second = stamp;
-		m_errors.erase(old);
+		// Its diffs too: "D|identA|identB…" holds it either side.
+		auto inDiff = [&](const std::string& k)
+		{
+			return k.starts_with("D|") &&
+			       k.find(old + "|") != std::string::npos;
+		};
+		std::erase_if(m_errors,
+		              [&](const auto& e)
+		              { return e.first == old || inDiff(e.first); });
 		for(auto c = m_cache.begin(); c != m_cache.end();)
 		{
 			const std::string& k = c->first;
 			bool stale = k.compare(0, old.size() + 2, "I|" + old) == 0 ||
-			             k.compare(0, old.size() + 3, "L|" + old + "|") == 0;
+			             k.compare(0, old.size() + 3, "L|" + old + "|") == 0 ||
+			             inDiff(k);
 			if(stale)
 			{
 				m_bytes -= c->second.m_bytes;
@@ -198,6 +207,52 @@ LayerImagePtr ImageService::layerBestEffort(const std::filesystem::path& p,
 		}
 	}
 	return nullptr;
+}
+
+std::string ImageService::diffIdentLocked(const std::filesystem::path& a,
+                                          const std::filesystem::path& b)
+{
+	return "D|" + identLocked(a) + "|" + identLocked(b);
+}
+
+LayerImagePtr ImageService::diffLayer(const std::filesystem::path& a,
+                                      const std::filesystem::path& b,
+                                      const std::string& label,
+                                      int reduce,
+                                      Priority pr)
+{
+	reduce = std::max(1, reduce);
+	Job job{.m_path = b, .m_layer = label, .m_reduce = reduce, .m_pr = pr};
+	{
+		std::lock_guard lk(m_mu);
+		job.m_ident = diffIdentLocked(a, b);
+		job.m_key = fmt::format("{}|{}|{}", job.m_ident, label, reduce);
+		if(auto v = get<LayerImage>(job.m_key))
+		{
+			return v;
+		}
+		if(m_errors.count(job.m_ident))
+		{
+			return nullptr;
+		}
+		job.m_identA = identLocked(a);
+		job.m_identB = identLocked(b);
+	}
+	job.m_diffA = a;
+	enqueue(std::move(job));
+	return nullptr;
+}
+
+std::optional<std::string> ImageService::diffError(
+    const std::filesystem::path& a, const std::filesystem::path& b)
+{
+	std::lock_guard lk(m_mu);
+	auto it = m_errors.find(diffIdentLocked(a, b));
+	if(it == m_errors.end())
+	{
+		return std::nullopt;
+	}
+	return it->second;
 }
 
 bool ImageService::hasLayer(const std::filesystem::path& p,
@@ -355,6 +410,49 @@ void ImageService::put(const std::string& key, CacheEntry entry)
 	}
 }
 
+ImageInfoPtr ImageService::infoCached(const std::filesystem::path& p,
+                                      const std::string& ident)
+{
+	const std::string key = "I|" + ident;
+	{
+		std::lock_guard lk(m_mu);
+		if(auto v = get<ImageInfo>(key))
+		{
+			return v;
+		}
+	}
+	auto info = std::make_shared<const ImageInfo>(probeImage(p));
+	std::lock_guard lk(m_mu);
+	put(key, CacheEntry{info, 4096, {}});
+	return info;
+}
+
+LayerImagePtr ImageService::layerCached(const std::filesystem::path& p,
+                                        const std::string& ident,
+                                        const std::string& label,
+                                        int reduce)
+{
+	const std::string key = layerKey(ident, label, reduce);
+	{
+		std::lock_guard lk(m_mu);
+		if(auto v = get<LayerImage>(key))
+		{
+			return v;
+		}
+	}
+	ImageInfoPtr info = infoCached(p, ident);
+	int li = info->findLayer(label);
+	auto img = loadLayer(*info, li < 0 ? 0 : li);
+	if(reduce > 1)
+	{
+		img = downsample(img, reduce);
+	}
+	auto ptr = std::make_shared<const LayerImage>(std::move(img));
+	std::lock_guard lk(m_mu);
+	put(key, CacheEntry{ptr, ptr->bytes(), {}});
+	return ptr;
+}
+
 void ImageService::run()
 {
 	for(;;)
@@ -373,23 +471,13 @@ void ImageService::run()
 		try
 		{
 			auto t0 = std::chrono::steady_clock::now();
-			std::string infoKey = "I|" + job.m_ident;
-			ImageInfoPtr info;
+			if(job.m_diffA)
 			{
-				std::lock_guard lk(m_mu);
-				info = get<ImageInfo>(infoKey);
-			}
-			if(!info)
-			{
-				info =
-				    std::make_shared<const ImageInfo>(probeImage(job.m_path));
-				std::lock_guard lk(m_mu);
-				put(infoKey, CacheEntry{info, 4096, {}});
-			}
-			if(job.m_layer)
-			{
-				int li = info->findLayer(*job.m_layer);
-				auto img = loadLayer(*info, li < 0 ? 0 : li);
+				// Full resolution both sides, so the pixels line up.
+				auto a =
+				    layerCached(*job.m_diffA, job.m_identA, *job.m_layer, 1);
+				auto b = layerCached(job.m_path, job.m_identB, *job.m_layer, 1);
+				auto img = diffLayers(*a, *b);
 				if(job.m_reduce > 1)
 				{
 					img = downsample(img, job.m_reduce);
@@ -397,6 +485,14 @@ void ImageService::run()
 				auto ptr = std::make_shared<const LayerImage>(std::move(img));
 				std::lock_guard lk(m_mu);
 				put(job.m_key, CacheEntry{ptr, ptr->bytes(), {}});
+			}
+			else if(job.m_layer)
+			{
+				layerCached(job.m_path, job.m_ident, *job.m_layer, job.m_reduce);
+			}
+			else
+			{
+				infoCached(job.m_path, job.m_ident);
 			}
 			spdlog::debug("loaded {} in {} ms",
 			              job.m_key,

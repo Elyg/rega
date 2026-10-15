@@ -31,10 +31,15 @@ rvtui                      # browse the current directory
 rvtui shots/               # browse a directory
 rvtui 'shot.####.exr' ...  # view sequences
 rvtui 'shot.#.exr'         # a lone # finds the padding itself
+rvtui --diff old.exr new.exr ...    # A, B and |A - B| side by side; n / p: next pair
+rvtui a.exr:label=top:main ...      # a label on the image (tl tc tr bl bc br, top, bottom)
 rvtui --dump foo.exr       # print layers, channels and metadata
 rvtui --doctor             # check the terminal / tmux setup
 rvtui --tutorial           # a guided tour on sample images (rendered into ~/.cache/rvtui/tutorial)
 ```
+
+In the browser, mark two images (space) and press `d` to diff them; with
+more marked, they pair up in marking order (1st with 2nd, 3rd with 4th, …).
 
 ## Supported terminals
 

@@ -32,6 +32,11 @@ fs::path Source::frame(int i) const
 	    i, 0, static_cast<int>(m_entry.m_frames.size()) - 1)];
 }
 
+fs::path Source::diffFrame(int i) const
+{
+	return m_diffA ? Source{*m_diffA, m_fillGaps}.frame(i) : frame(i);
+}
+
 int Source::frameCount() const
 {
 	if(filled())
@@ -106,7 +111,137 @@ std::string sourceKey(const Source& s)
 {
 	std::error_code ec;
 	const fs::path dir = fs::absolute(s.m_entry.m_path, ec).parent_path();
-	return (dir / s.m_entry.m_name).lexically_normal().string();
+	const std::string key =
+	    (dir / s.m_entry.m_name).lexically_normal().string();
+	return s.m_diffA ? key + " - " + sourceKey(Source{*s.m_diffA}) : key;
+}
+
+std::vector<OpenItem> openItems(const std::vector<OpenArg>& args,
+                                std::vector<std::string>& missing)
+{
+	std::vector<OpenItem> items;
+	// The one entry `path` (labels off) opens, if any.
+	auto single = [&](const std::string& arg)
+	    -> std::optional<std::pair<Entry, AnnotationSet>>
+	{
+		auto [path, labels] = splitLabels(arg);
+		auto found = entriesForArgs({path}, missing);
+		if(found.empty())
+		{
+			return std::nullopt;
+		}
+		return std::pair{std::move(found.front()), std::move(labels)};
+	};
+	for(size_t i = 0; i < args.size();)
+	{
+		if(args[i].m_diffWith)
+		{
+			auto a = single(args[i].m_path);
+			auto b = single(*args[i].m_diffWith);
+			if(a && b)
+			{
+				items.push_back({std::move(a->first),
+				                 std::move(a->second),
+				                 std::move(b->first),
+				                 std::move(b->second)});
+			}
+			else if(a || b)
+			{
+				auto& one = a ? *a : *b;
+				items.push_back({std::move(one.first), std::move(one.second)});
+			}
+			++i;
+			continue;
+		}
+		// A run of plain paths: their files may make up sequences together.
+		std::vector<std::string> run;
+		std::vector<std::pair<std::string, AnnotationSet>> labelled;
+		for(; i < args.size() && !args[i].m_diffWith; ++i)
+		{
+			auto [path, labels] = splitLabels(args[i].m_path);
+			run.push_back(path);
+			if(!labels.empty())
+			{
+				labelled.emplace_back(path, std::move(labels));
+			}
+		}
+		std::vector<OpenItem> found;
+		for(auto& e : entriesForArgs(run, missing))
+		{
+			found.push_back({std::move(e)});
+		}
+		for(const auto& [path, labels] : labelled)
+		{
+			std::vector<std::string> ignored;
+			for(const auto& mine : entriesForArgs({path}, ignored))
+			{
+				for(auto& item : found)
+				{
+					const auto& fr = item.m_a.m_frames;
+					if(item.m_a.m_path == mine.m_path ||
+					   std::ranges::find(fr, mine.m_path) != fr.end())
+					{
+						for(int s = 0; s < SLOT_COUNT; ++s)
+						{
+							auto& to = item.m_labelsA.m_slots[s];
+							to.insert(to.end(),
+							          labels.m_slots[s].begin(),
+							          labels.m_slots[s].end());
+						}
+						break;
+					}
+				}
+			}
+		}
+		std::ranges::move(found, std::back_inserter(items));
+	}
+	return items;
+}
+
+std::vector<OpenItem> pairItems(std::vector<Entry> marked)
+{
+	std::vector<OpenItem> items;
+	for(size_t i = 0; i < marked.size(); i += 2)
+	{
+		items.push_back({std::move(marked[i])});
+		if(i + 1 < marked.size())
+		{
+			items.back().m_b = std::move(marked[i + 1]);
+		}
+	}
+	return items;
+}
+
+std::vector<Source> sourcesFor(std::vector<OpenItem> items, bool fillGaps)
+{
+	const bool pairs = std::ranges::any_of(items,
+	                                       [](const OpenItem& i)
+	                                       { return i.m_b.has_value(); });
+	std::vector<Source> out;
+	int group = 0;
+	for(auto& item : items)
+	{
+		const int g = pairs ? group++ : -1;
+		if(!item.m_b)
+		{
+			out.push_back(
+			    {std::move(item.m_a), fillGaps, std::move(item.m_labelsA)});
+			out.back().m_group = g;
+			continue;
+		}
+		Source diff{*item.m_b, fillGaps};
+		diff.m_diffA = item.m_a;
+		diff.m_labels.lines(Slot::TC).push_back("diff");
+		diff.m_group = g;
+		out.push_back(
+		    {std::move(item.m_a), fillGaps, std::move(item.m_labelsA)});
+		out.back().m_group = g;
+		out.push_back(
+		    {std::move(*item.m_b), fillGaps, std::move(item.m_labelsB)});
+		out.back().m_group = g;
+		out.push_back(std::move(diff));
+	}
+	return out;
 }
 
 fs::path ViewerState::currentFramePath() const
@@ -157,6 +292,53 @@ const AnnotationSet* ViewerState::sourceAnnotations(const Annotations& ann,
 		return nullptr;
 	}
 	return ann.findSource(sourceKey(m_sources[i]));
+}
+
+std::vector<int> ViewerState::sheetSources() const
+{
+	std::vector<int> out;
+	const int g = m_sources.empty() ? -1 : m_sources[m_current].m_group;
+	for(int i = 0; i < static_cast<int>(m_sources.size()); ++i)
+	{
+		if(g < 0 || m_sources[i].m_group == g)
+		{
+			out.push_back(i);
+		}
+	}
+	return out;
+}
+
+bool ViewerState::grouped() const
+{
+	return !m_sources.empty() && m_sources.front().m_group >= 0;
+}
+
+int ViewerState::groupCount() const
+{
+	return m_sources.empty() ? 0 : m_sources.back().m_group + 1;
+}
+
+int ViewerState::groupIndex(int i) const
+{
+	return m_sources[i].m_group;
+}
+
+int ViewerState::stepGroup(int delta) const
+{
+	const int n = groupCount();
+	if(n == 0)
+	{
+		return m_current;
+	}
+	const int g = ((m_sources[m_current].m_group + delta) % n + n) % n;
+	for(int i = 0; i < static_cast<int>(m_sources.size()); ++i)
+	{
+		if(m_sources[i].m_group == g)
+		{
+			return i;
+		}
+	}
+	return m_current;
 }
 
 namespace

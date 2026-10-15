@@ -88,11 +88,20 @@ Viewer::Viewer(AppContext& ctx, std::function<void()> onClose)
 
 void Viewer::open(std::vector<Entry> entries, bool tile)
 {
-	m_state.m_sources.clear();
+	std::vector<Source> sources;
 	for(auto& e : entries)
 	{
-		m_state.m_sources.push_back({std::move(e), m_fillGaps});
-		m_ctx.m_ann.touch(sourceKey(m_state.m_sources.back()));
+		sources.push_back({std::move(e), m_fillGaps});
+	}
+	openSources(std::move(sources), tile);
+}
+
+void Viewer::openSources(std::vector<Source> sources, bool tile)
+{
+	m_state.m_sources = std::move(sources);
+	for(const auto& s : m_state.m_sources)
+	{
+		m_ctx.m_ann.touch(sourceKey(s));
 	}
 	m_state.m_current = 0;
 	m_state.m_frame = 0;
@@ -101,7 +110,8 @@ void Viewer::open(std::vector<Entry> entries, bool tile)
 	m_state.m_view = ViewParams{};
 	m_state.m_picked.reset();
 	m_fitBesidePanel = false;
-	m_tile = tile;
+	// A diff pair opens as its three tiles.
+	m_tile = tile || (m_state.grouped() && tilesBySource());
 	m_sheetKey.clear(); // fit the sheet again
 	m_meta.resetScroll();
 	m_player.reset(); // fps from the file once known
@@ -251,12 +261,51 @@ const ImageSlot& Viewer::playbackSlot() const
 
 bool Viewer::showsSource(int i) const
 {
-	if(m_tile && m_state.m_sources.size() > 1)
+	if(m_tile && tilesBySource())
 	{
 		// The tiles on screen (all of them before the first draw).
-		return m_tiles.empty() || m_tiles.contains(i);
+		const int t = tileOf(i);
+		return t >= 0 && (m_tiles.empty() || m_tiles.contains(t));
 	}
 	return i == m_state.m_current;
+}
+
+bool Viewer::tilesBySource() const
+{
+	return m_state.sheetSources().size() > 1;
+}
+
+int Viewer::tileOf(int source) const
+{
+	const auto s = m_state.sheetSources();
+	const auto it = std::ranges::find(s, source);
+	return it == s.end() ? -1 : static_cast<int>(it - s.begin());
+}
+
+LayerImagePtr Viewer::layerOf(int source,
+                              const fs::path& path,
+                              const std::string& layer,
+                              int reduce,
+                              ImageService::Priority pr)
+{
+	const Source& src = m_state.m_sources[source];
+	if(src.m_diffA)
+	{
+		return m_ctx.m_svc.diffLayer(src.diffFrame(m_state.m_frame),
+		                             path,
+		                             layer,
+		                             reduce,
+		                             pr);
+	}
+	return m_ctx.m_svc.layerBestEffort(path, layer, reduce, pr);
+}
+
+std::optional<std::string> Viewer::errorOf(int source, const fs::path& path)
+{
+	const Source& src = m_state.m_sources[source];
+	return src.m_diffA
+	           ? m_ctx.m_svc.diffError(src.diffFrame(m_state.m_frame), path)
+	           : m_ctx.m_svc.error(path);
 }
 
 // --- actions ---
@@ -358,20 +407,21 @@ void Viewer::pan(double dxCells, double dyCells)
 
 int Viewer::selectedTile(const ImageInfoPtr& info) const
 {
-	if(m_state.m_sources.size() > 1)
+	if(tilesBySource())
 	{
-		return m_state.m_current;
+		return std::max(0, tileOf(m_state.m_current));
 	}
 	return info ? std::max(0, info->findLayer(m_state.m_layerLabel)) : 0;
 }
 
 void Viewer::selectTile(int i, const ImageInfoPtr& info)
 {
-	if(m_state.m_sources.size() > 1)
+	if(tilesBySource())
 	{
-		if(i >= 0 && i < static_cast<int>(m_state.m_sources.size()))
+		const auto s = m_state.sheetSources();
+		if(i >= 0 && i < static_cast<int>(s.size()))
 		{
-			m_state.m_current = i;
+			m_state.m_current = s[i];
 		}
 	}
 	else if(info && i >= 0 && i < static_cast<int>(info->m_layers.size()))
@@ -624,9 +674,9 @@ void Viewer::prefetchFrame(int f)
 	const ImageSlot& slot = playbackSlot();
 	for(int i = 0; i < static_cast<int>(m_state.m_sources.size()); ++i)
 	{
-		if(!showsSource(i))
+		if(!showsSource(i) || m_state.m_sources[i].m_diffA)
 		{
-			continue;
+			continue; // a diff decodes from A and B, read ahead already
 		}
 		const fs::path path = m_state.m_sources[i].frame(f);
 		auto info = svc.info(path, ImageService::Priority::PREFETCH);
@@ -659,21 +709,28 @@ void Viewer::prepareAhead(int f)
 	};
 	if(!m_tile)
 	{
-		ahead(*m_viewSlot,
-		      m_state.m_sources[m_state.m_current].frame(f),
-		      m_state.m_layerLabel);
+		const Source& src = m_state.m_sources[m_state.m_current];
+		if(!src.m_diffA)
+		{
+			ahead(*m_viewSlot, src.frame(f), m_state.m_layerLabel);
+		}
 		return;
 	}
-	const bool bySource = m_state.m_sources.size() > 1;
+	const bool bySource = tilesBySource();
+	const auto sheet = m_state.sheetSources();
 	for(const auto& [i, t] : m_tiles)
 	{
 		if(i >= static_cast<int>(m_tileRefs.size()) ||
-		   (bySource && i >= static_cast<int>(m_state.m_sources.size())))
+		   (bySource && i >= static_cast<int>(sheet.size())))
 		{
 			continue;
 		}
-		const auto& src = m_state.m_sources[bySource ? i : m_state.m_current];
-		ahead(*t.m_slot, src.frame(f), m_tileRefs[i].m_layer);
+		const auto& src =
+		    m_state.m_sources[bySource ? sheet[i] : m_state.m_current];
+		if(!src.m_diffA)
+		{
+			ahead(*t.m_slot, src.frame(f), m_tileRefs[i].m_layer);
+		}
 	}
 }
 
@@ -814,6 +871,42 @@ KeyLookup Viewer::keyLookup(int source,
 		}
 		return std::nullopt;
 	};
+}
+
+void Viewer::markIncomplete(OverlayText& over, const LayerImagePtr& img)
+{
+	// Shown whether or not annotations are: the frame is missing pixels.
+	if(img && img->incomplete())
+	{
+		over[static_cast<int>(Slot::TR)].push_back({{"incomplete image"}});
+	}
+}
+
+void Viewer::addLabels(OverlayText& over,
+                       int source,
+                       const KeyLookup& lookup,
+                       const LayerImagePtr& decoded) const
+{
+	if(!m_ctx.m_ann.m_visible)
+	{
+		return; // `A` hides them with the annotations
+	}
+	const Source& src = m_state.m_sources[source];
+	for(int s = 0; s < SLOT_COUNT; ++s)
+	{
+		for(const auto& line : src.m_labels.m_slots[s])
+		{
+			over[s].push_back(resolveLine(line, lookup));
+		}
+	}
+	if(src.m_diffA && decoded)
+	{
+		const float most = maxValue(*decoded);
+		over[static_cast<int>(Slot::BC)].push_back(
+		    {{most == 0 && decoded->m_nanPixels == 0
+		          ? std::string("identical")
+		          : fmt::format("max Δ {:.4g}", most)}});
+	}
 }
 
 OverlayText Viewer::overlayText(std::initializer_list<const AnnotationSet*> sets,
@@ -1244,6 +1337,12 @@ bool Viewer::keyEvent(const Event& e, const ImageInfoPtr& info)
 		{
 			cycleLayer(info, ch("]") ? 1 : -1);
 		}
+		else if(m_state.grouped())
+		{
+			// A diff session: pair by pair, each tiled (a lone image not).
+			m_state.m_current = m_state.stepGroup(ch("n") ? 1 : -1);
+			m_tile = tilesBySource();
+		}
 		else
 		{
 			const int n = static_cast<int>(m_state.m_sources.size());
@@ -1544,8 +1643,16 @@ bool Viewer::keyEvent(const Event& e, const ImageInfoPtr& info)
 Element Viewer::renderHud(const ImageInfoPtr& info)
 {
 	const Source& src = m_state.m_sources[m_state.m_current];
-	std::string name = src.m_entry.m_name;
-	if(m_state.m_sources.size() > 1)
+	std::string name =
+	    src.m_diffA ? "diff " + src.m_entry.m_name : src.m_entry.m_name;
+	if(m_state.grouped())
+	{
+		name = fmt::format("[{}/{}] {}",
+		                   m_state.groupIndex(m_state.m_current) + 1,
+		                   m_state.groupCount(),
+		                   name);
+	}
+	else if(m_state.m_sources.size() > 1)
 	{
 		name = fmt::format("[{}/{}] {}",
 		                   m_state.m_current + 1,
@@ -1706,7 +1813,7 @@ Sample Viewer::sampleAt(int cellX, int cellY)
 				slot = t.m_slot.get();
 				path = m_tileRefs[i].m_path;
 				layer = m_tileRefs[i].m_layer;
-				source = m_state.m_sources.size() > 1 ? i : source;
+				source = m_tileRefs[i].m_source;
 				break;
 			}
 		}
@@ -1733,9 +1840,17 @@ Sample Viewer::sampleAt(int cellX, int cellY)
 	out.m_y = static_cast<int>(std::floor(coord->second));
 	// Exact values come from full resolution, fetched for the readout only;
 	// until it lands, read whatever resolution is on screen (marked ≈).
-	LayerImagePtr full = m_ctx.m_svc.layer(path, layer, 1);
-	LayerImagePtr img =
-	    full ? full : m_ctx.m_svc.layerBestEffort(path, layer, 1);
+	const Source& from = m_state.m_sources[source];
+	LayerImagePtr full =
+	    from.m_diffA ? m_ctx.m_svc.diffLayer(from.diffFrame(m_state.m_frame),
+	                                         path,
+	                                         layer,
+	                                         1)
+	                 : m_ctx.m_svc.layer(path, layer, 1);
+	LayerImagePtr img = full ? full
+	                    : from.m_diffA
+	                        ? slot->shown()
+	                        : m_ctx.m_svc.layerBestEffort(path, layer, 1);
 	if(!img)
 	{
 		return out;
@@ -1774,9 +1889,10 @@ Sample Viewer::sampleAt(int cellX, int cellY)
 
 Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 {
-	const bool bySource = m_state.m_sources.size() > 1;
+	const bool bySource = tilesBySource();
+	const auto sheetSources = m_state.sheetSources();
 	const int n = bySource
-	                  ? static_cast<int>(m_state.m_sources.size())
+	                  ? static_cast<int>(sheetSources.size())
 	                  : (info ? static_cast<int>(info->m_layers.size()) : 0);
 	if(n == 0)
 	{
@@ -1805,15 +1921,18 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 	{
 		if(bySource)
 		{
-			m_tileRefs[i] = {m_state.m_sources[i].frame(m_state.m_frame),
-			                 m_state.m_layerLabel};
+			const Source& src = m_state.m_sources[sheetSources[i]];
+			m_tileRefs[i] = {src.frame(m_state.m_frame),
+			                 m_state.m_layerLabel,
+			                 sheetSources[i]};
 			infos[i] = m_ctx.m_svc.info(m_tileRefs[i].m_path);
-			key += "|" + sourceKey(m_state.m_sources[i]);
+			key += "|" + sourceKey(src);
 		}
 		else
 		{
 			m_tileRefs[i] = {m_state.currentFramePath(),
-			                 info->m_layers[i].label()};
+			                 info->m_layers[i].label(),
+			                 m_state.m_current};
 			infos[i] = info;
 			key += "|" + m_tileRefs[i].m_layer;
 		}
@@ -1890,22 +2009,25 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 			t.m_zoom = k;
 		}
 		t.m_view = view;
-		LayerImagePtr li =
-		    ti ? m_ctx.m_svc.layerBestEffort(ref.m_path,
-		                                     ref.m_layer,
-		                                     reduceFor(*ti, slot))
-		       : nullptr;
-		if(!li)
+		LayerImagePtr li = ti ? layerOf(ref.m_source,
+		                                ref.m_path,
+		                                ref.m_layer,
+		                                reduceFor(*ti, slot))
+		                      : nullptr;
+		const LayerImagePtr decoded = li;
+		const auto err = li ? std::nullopt : errorOf(ref.m_source, ref.m_path);
+		if(!li && !err)
 		{
 			// Still decoding: keep the tile's last picture up, as the
 			// single view does (see render()).
 			li = slot.shown();
 		}
-		Element img = text("…") | dim | center;
+		Element img = err ? text("error") | color(Color::Red) | center
+		                  : text("…") | dim | center;
 		if(li)
 		{
 			// A contact sheet shows the frame outline at most.
-			const int src = bySource ? i : m_state.m_current;
+			const int src = ref.m_source;
 			DisplayParams disp = displayFor(src, ref.m_path);
 			if(disp.m_outlines == Outlines::FRAME_AND_DATA)
 			{
@@ -1917,18 +2039,22 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 			{
 				disp.m_marker = pickedMarker();
 			}
+			const KeyLookup lookup =
+			    keyLookup(src, ref.m_path, ti, ref.m_layer);
 			OverlayText over =
 			    overlayText({m_state.sourceAnnotations(m_ctx.m_ann, src)},
-			                keyLookup(src, ref.m_path, ti, ref.m_layer));
+			                lookup);
 			if(m_names)
 			{
 				// `T`: what the tile is, under any annotations there.
 				const std::string name =
-				    bySource              ? m_state.m_sources[i].m_entry.m_name
+				    bySource ? m_state.m_sources[src].m_entry.m_name
 				    : ref.m_layer.empty() ? std::string("rgba")
 				                          : ref.m_layer;
 				over[static_cast<int>(Slot::BL)].push_back({{name}});
 			}
+			addLabels(over, src, lookup, decoded);
+			markIncomplete(over, li);
 			img = slot.element(li, view, disp, over);
 		}
 		children.push_back(img);
@@ -2041,8 +2167,10 @@ Element Viewer::render()
 		m_viewSlot->setMaxPixels(pixelCap());
 		int reduce = reduceFor(*info, *m_viewSlot);
 		LayerImagePtr img =
-		    m_ctx.m_svc.layerBestEffort(path, m_state.m_layerLabel, reduce);
-		if(!img)
+		    layerOf(m_state.m_current, path, m_state.m_layerLabel, reduce);
+		const LayerImagePtr decoded = img;
+		const auto err = img ? std::nullopt : errorOf(m_state.m_current, path);
+		if(!img && !err)
 		{
 			// Still decoding: keep the last picture up. Blanking it would also
 			// make kitty redraw every placeholder cell once the new one is in,
@@ -2063,10 +2191,13 @@ Element Viewer::render()
 		// The main view rings the picked pixel whichever image it came from.
 		DisplayParams disp = displayFor(m_state.m_current, path);
 		disp.m_marker = pickedMarker();
-		OverlayText over = overlayText(
-		    {&m_ctx.m_ann.global(),
-		     m_state.sourceAnnotations(m_ctx.m_ann, m_state.m_current)},
-		    keyLookup(m_state.m_current, path, info, m_state.m_layerLabel));
+		const KeyLookup lookup =
+		    keyLookup(m_state.m_current, path, info, m_state.m_layerLabel);
+		OverlayText over =
+		    overlayText({&m_ctx.m_ann.global(),
+		                 m_state.sourceAnnotations(m_ctx.m_ann,
+		                                           m_state.m_current)},
+		                lookup);
 		if(m_names && info && !info->m_layers.empty())
 		{
 			// `T`: the layer on screen, resolved as the HUD does it.
@@ -2077,8 +2208,11 @@ Element Viewer::render()
 			over[static_cast<int>(Slot::BL)].push_back(
 			    {{layer.empty() ? std::string("rgba") : layer}});
 		}
-		main = img ? m_viewSlot->element(img, m_state.m_view, disp, over)
-		           : text("decoding…") | dim | center;
+		addLabels(over, m_state.m_current, lookup, decoded);
+		markIncomplete(over, img);
+		main = img   ? m_viewSlot->element(img, m_state.m_view, disp, over)
+		       : err ? paragraph("error: " + *err) | color(Color::Red) | center
+		             : text("decoding…") | dim | center;
 		main = main | flex;
 	}
 

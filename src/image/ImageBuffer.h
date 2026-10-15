@@ -234,6 +234,13 @@ struct LayerImage
 	/// source's.
 	int64_t m_nanPixels = 0, m_infPixels = 0;
 	std::vector<ChannelStats> m_stats; ///< per plane; empty until scanned
+	/// An incomplete file (still rendering, or cut short): of m_chunks strips,
+	/// only m_chunksRead decoded; the rest are zero. Both 0 when complete.
+	int m_chunksRead = 0, m_chunks = 0;
+	bool incomplete() const
+	{
+		return m_chunksRead < m_chunks;
+	}
 
 	Box2i fitBounds() const // frame plus overscan, see ImageInfo
 	{
@@ -274,6 +281,16 @@ void scanLayer(LayerImage& img);
 
 /// Box-downsample by an integer factor (factor 1 returns a copy).
 LayerImage downsample(const LayerImage& src, int factor);
+
+/// |a - b| per channel (matched by short name), over the union of the data
+/// windows (a pixel or channel one side lacks counts as 0), at full
+/// resolution. B's display window; both NaN is no difference, one NaN stays
+/// NaN. Scanned: m_stats max is the largest difference. Incomplete when
+/// either side is.
+LayerImage diffLayers(const LayerImage& a, const LayerImage& b);
+
+/// The largest finite value in any channel of a scanned image (0 if none).
+float maxValue(const LayerImage& img);
 
 /// Which planes feed R, G, B, A when showing a layer in colour (-1 = absent).
 struct ChannelMap

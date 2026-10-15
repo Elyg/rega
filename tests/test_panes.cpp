@@ -843,3 +843,43 @@ TEST_F(Panes, FilesClosesOnItsNumberAndHandsBackFocus)
 	EXPECT_TRUE(p.event(key("3")));
 	EXPECT_FALSE(p.isOpen());
 }
+
+TEST_F(Panes, MetaOnADiffListsWhatDiffersAndDShowsBothWhole)
+{
+	using D = MetaPane::Item::Diff;
+	const fs::path dir = freshDir("meta-diff");
+	const fs::path a = writeExr(dir / "a.exr", {"R", "G", "B"}, 8, 4);
+	const fs::path b = writeExr(dir / "b.exr", {"R", "G", "B"}, 16, 4);
+	Source diff{entryForPath(b)};
+	diff.m_diffA = entryForPath(a);
+	m_state.m_sources = {diff};
+	m_state.m_current = 0;
+	ImageInfoPtr ib;
+	ASSERT_TRUE(
+	    waitFor([&] { return (ib = m_c.m_svc.info(b)) && m_c.m_svc.info(a); }));
+	MetaPane p(m_state, m_c.m_ctx);
+	auto find = [](const std::vector<MetaPane::Item>& items,
+	               const std::string& name) -> const MetaPane::Item*
+	{
+		const auto it = std::ranges::find(items, name, &MetaPane::Item::m_name);
+		return it == items.end() ? nullptr : &*it;
+	};
+
+	auto items = p.items(ib);
+	EXPECT_EQ(items[1].m_name, "2 differences"); // data + display window
+	const auto* dw = find(items, "dataWindow");
+	ASSERT_TRUE(dw);
+	EXPECT_EQ(dw->m_diff, D::CHANGED);
+	EXPECT_NE(dw->m_value, dw->m_valueB);
+	EXPECT_FALSE(find(items, "compression")); // the same: not listed
+
+	EXPECT_TRUE(p.event(key("d"), ib)); // both headers whole
+	items = p.items(ib);
+	ASSERT_TRUE(find(items, "compression"));
+	EXPECT_EQ(find(items, "compression")->m_diff, D::SAME);
+	EXPECT_EQ(items[1].m_name, "2 differences");
+
+	// The same file both sides.
+	m_state.m_sources[0].m_diffA = entryForPath(b);
+	EXPECT_EQ(p.items(ib)[1].m_name, "headers identical");
+}

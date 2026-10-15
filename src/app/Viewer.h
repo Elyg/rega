@@ -42,6 +42,14 @@ public:
 
 	/// Show `entries` (`tile`: as a contact sheet), from the first frame, fit.
 	void open(std::vector<Entry> entries, bool tile = false);
+	/// The same for sources made already (labels, diff pairs: see
+	/// sourcesFor()); a diff pair opens tiled.
+	void openSources(std::vector<Source> sources, bool tile = false);
+	/// Images and diff pairs (see OpenItem).
+	void openItems(std::vector<OpenItem> items)
+	{
+		openSources(sourcesFor(std::move(items), m_fillGaps));
+	}
 	/// Handle an event; true when consumed.
 	[[nodiscard]] bool event(ftxui::Event e);
 	[[nodiscard]] ftxui::Element render();
@@ -130,6 +138,20 @@ private:
 	const ImageSlot& playbackSlot() const;
 	/// Whether source `i` is on screen (every source when tiled).
 	bool showsSource(int i) const;
+	/// Whether the sheet has a tile per source (else per layer), and which
+	/// tile source `i` is (-1: not on the sheet).
+	bool tilesBySource() const;
+	int tileOf(int source) const;
+	/// What source `source` shows for `path` (a frame of it): its layer, or
+	/// for a diff, A against B; and why it could not be read.
+	LayerImagePtr
+	layerOf(int source,
+	        const std::filesystem::path& path,
+	        const std::string& layer,
+	        int reduce,
+	        ImageService::Priority pr = ImageService::Priority::NOW);
+	std::optional<std::string> errorOf(int source,
+	                                   const std::filesystem::path& path);
 	void cycleLayer(const ImageInfoPtr& info, int delta);
 	void zoomBy(double factor,
 	            std::optional<std::pair<double, double>> anchor = std::nullopt);
@@ -229,6 +251,15 @@ private:
 	/// overlay is hidden.
 	OverlayText overlayText(std::initializer_list<const AnnotationSet*> sets,
 	                        const KeyLookup& lookup) const;
+	/// Note on the picture that `img` is missing chunks (top right).
+	static void markIncomplete(OverlayText& over, const LayerImagePtr& img);
+	/// The labels source `source` was given (hidden with the annotations);
+	/// a diff's also says how far apart A and B are, once `decoded` (its own
+	/// pixels, not a stand-in) is in.
+	void addLabels(OverlayText& over,
+	               int source,
+	               const KeyLookup& lookup,
+	               const LayerImagePtr& decoded) const;
 
 	// --- events / drawing ---
 	bool mouseEvent(ftxui::Event e, const ImageInfoPtr& info);
@@ -276,6 +307,7 @@ private:
 	{
 		std::filesystem::path m_path;
 		std::string m_layer;
+		int m_source = 0; ///< the source it shows
 	};
 	std::vector<TileRef> m_tileRefs;
 	SheetLayout m_sheet;

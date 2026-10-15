@@ -147,6 +147,8 @@ LayerImage downsample(const LayerImage& src, int factor)
 	out.m_nanPixels = src.m_nanPixels;
 	out.m_infPixels = src.m_infPixels;
 	out.m_stats = src.m_stats;
+	out.m_chunksRead = src.m_chunksRead;
+	out.m_chunks = src.m_chunks;
 	out.m_reduce = src.m_reduce * factor;
 	out.m_width = std::max(1, src.m_width / factor);
 	out.m_height = std::max(1, src.m_height / factor);
@@ -183,6 +185,86 @@ LayerImage downsample(const LayerImage& src, int factor)
 		out.m_planes.push_back(std::move(dst));
 	}
 	return out;
+}
+
+LayerImage diffLayers(const LayerImage& a, const LayerImage& b)
+{
+	LayerImage out;
+	out.m_info = b.m_info;
+	out.m_dataWindow = a.m_dataWindow.unite(b.m_dataWindow);
+	out.m_displayWindow = b.m_displayWindow;
+	out.m_width = out.m_dataWindow.width();
+	out.m_height = out.m_dataWindow.height();
+	out.m_channelNames = b.m_channelNames;
+	for(const auto& n : a.m_channelNames)
+	{
+		if(std::ranges::find(out.m_channelNames, n) == out.m_channelNames.end())
+		{
+			out.m_channelNames.push_back(n);
+		}
+	}
+	auto planeOf = [](const LayerImage& img, const std::string& name)
+	{
+		const auto it = std::ranges::find(img.m_channelNames, name);
+		return it == img.m_channelNames.end()
+		           ? -1
+		           : static_cast<int>(it - img.m_channelNames.begin());
+	};
+	// A sample of `img` at image (x, y): 0 outside it or without the plane.
+	auto sample = [](const LayerImage& img, int c, int x, int y)
+	{
+		if(c < 0 || !img.m_dataWindow.contains(x, y))
+		{
+			return 0.0f;
+		}
+		return img.m_planes[c][static_cast<size_t>(y - img.m_dataWindow.m_y0) *
+		                           img.m_width +
+		                       (x - img.m_dataWindow.m_x0)];
+	};
+	const size_t n = static_cast<size_t>(out.m_width) * out.m_height;
+	for(const auto& name : out.m_channelNames)
+	{
+		const int ca = planeOf(a, name), cb = planeOf(b, name);
+		Plane dst = Plane::floats(n);
+		parallelFor(out.m_height,
+		            32,
+		            [&](int yBegin, int yEnd)
+		            {
+			            for(int row = yBegin; row < yEnd; ++row)
+			            {
+				            const int y = out.m_dataWindow.m_y0 + row;
+				            for(int col = 0; col < out.m_width; ++col)
+				            {
+					            const int x = out.m_dataWindow.m_x0 + col;
+					            const float va = sample(a, ca, x, y);
+					            const float vb = sample(b, cb, x, y);
+					            const bool same = va == vb || (std::isnan(va) &&
+					                                           std::isnan(vb));
+					            dst.set(static_cast<size_t>(row) * out.m_width +
+					                        col,
+					                    same ? 0.0f : std::fabs(va - vb));
+				            }
+			            }
+		            });
+		out.m_planes.push_back(std::move(dst));
+	}
+	out.m_chunksRead = a.m_chunksRead + b.m_chunksRead;
+	out.m_chunks = a.m_chunks + b.m_chunks;
+	scanLayer(out);
+	return out;
+}
+
+float maxValue(const LayerImage& img)
+{
+	float m = 0;
+	for(const auto& s : img.m_stats)
+	{
+		if(s.m_count)
+		{
+			m = std::max(m, s.m_max);
+		}
+	}
+	return m;
 }
 
 ChannelMap mapChannels(const std::vector<std::string>& names)

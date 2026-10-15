@@ -79,6 +79,11 @@ demo-sequence *args:
     nix shell --impure --expr 'let p = (builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem}; in p.python3.withPackages (ps: [ ps.openexr ps.numpy ])' \
         -c python3 scripts/demo-sequence.py {{ args }}
 
+# Cut the demo sequence into incomplete EXRs (truncated copies, renders in progress) in demos/incomplete/
+[group('run')]
+demo-incomplete *args:
+    python3 scripts/incomplete-exrs.py {{ args }}
+
 # Browse the demo images: `just demo`
 [group('run')]
 demo: fetch-demos build

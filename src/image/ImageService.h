@@ -61,6 +61,17 @@ public:
 	                              int reduce,
 	                              Priority pr = Priority::NOW);
 
+	/// |A - B| of a layer (see diffLayers): both decoded at full resolution
+	/// (and cached so), then reduced. nullptr until it lands, or after an
+	/// error (see diffError()).
+	LayerImagePtr diffLayer(const std::filesystem::path& a,
+	                        const std::filesystem::path& b,
+	                        const std::string& layerLabel,
+	                        int reduce,
+	                        Priority pr = Priority::NOW);
+	std::optional<std::string> diffError(const std::filesystem::path& a,
+	                                     const std::filesystem::path& b);
+
 	bool hasLayer(const std::filesystem::path& p,
 	              const std::string& layerLabel,
 	              int reduce);
@@ -108,6 +119,9 @@ private:
 		std::optional<std::string> m_layer; ///< nullopt: header only
 		int m_reduce = 1;
 		Priority m_pr;
+		/// A diff: A's file and ident (m_path, m_ident: B's, and the pair's).
+		std::optional<std::filesystem::path> m_diffA;
+		std::string m_identA, m_identB;
 	};
 	struct CacheEntry
 	{
@@ -122,8 +136,18 @@ private:
 	static std::string layerKey(const std::string& ident,
 	                            const std::string& layer,
 	                            int reduce);
+	/// "D|identA|identB": what a diff's errors key on. m_mu held.
+	std::string diffIdentLocked(const std::filesystem::path& a,
+	                            const std::filesystem::path& b);
 	void enqueue(Job job);
 	void run();
+	/// From the cache, else decoded (and cached). Worker threads only.
+	ImageInfoPtr infoCached(const std::filesystem::path& p,
+	                        const std::string& ident);
+	LayerImagePtr layerCached(const std::filesystem::path& p,
+	                          const std::string& ident,
+	                          const std::string& label,
+	                          int reduce);
 	void put(const std::string& key, CacheEntry entry);
 	template <class T>
 	std::shared_ptr<const T> get(const std::string& key);

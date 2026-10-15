@@ -25,13 +25,16 @@ struct BrowserTest : ::testing::Test
 	fs::path m_dir = freshDir("browser");
 	std::optional<std::vector<Entry>> m_opened;
 	bool m_openedTiled = false;
+	std::optional<std::vector<Entry>> m_diffed;
 	Browser m_b{m_c.m_ctx,
 	            "",
 	            [this](std::vector<Entry> entries, bool tile)
 	            {
 		            m_opened = std::move(entries);
 		            m_openedTiled = tile;
-	            }};
+	            },
+	            [this](std::vector<Entry> marked)
+	            { m_diffed = std::move(marked); }};
 
 	BrowserTest()
 	{
@@ -362,4 +365,42 @@ TEST(Browser, ChooserFileGetsTheMarkedPaths)
 	std::string line;
 	std::getline(in, line);
 	EXPECT_EQ(line, (dir / "b.png").string());
+}
+
+TEST_F(BrowserTest, PreviewSaysWhenTheImageIsIncomplete)
+{
+	// 40 lines of ZIP are three chunks; one copy loses the end of the last.
+	writeExr(m_dir / "whole.exr", {"R", "G", "B"}, 8, 40);
+	const fs::path cut = writeExr(m_dir / "cut.exr", {"R", "G", "B"}, 8, 40);
+	fs::resize_file(cut, fs::file_size(cut) - 10);
+	m_b.openDirectory(m_dir);
+	auto shown = [&](const std::string& name)
+	{
+		select(name);
+		EXPECT_TRUE(waitFor(
+		    [&]
+		    {
+			    (void)find("");
+			    return m_c.m_svc.pendingJobs() == 0;
+		    }));
+		return find("incomplete image").first >= 0;
+	};
+	EXPECT_TRUE(shown("cut.exr"));
+	EXPECT_FALSE(shown("whole.exr"));
+}
+
+TEST_F(BrowserTest, DDiffsTheMarkedOrOneMarkedWithTheOneHere)
+{
+	press(key("d")); // nothing marked: a hint, no diff
+	EXPECT_FALSE(m_diffed);
+	EXPECT_FALSE(m_c.m_ctx.m_message.empty());
+
+	select("b.png");
+	press(key(" "));
+	select(sequenceName());
+	press(key("d"));
+	ASSERT_TRUE(m_diffed);
+	ASSERT_EQ(m_diffed->size(), 2u);
+	EXPECT_EQ((*m_diffed)[0].m_name, "b.png"); // marked first: A
+	EXPECT_EQ((*m_diffed)[1].m_name, sequenceName());
 }

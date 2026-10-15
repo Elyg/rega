@@ -150,11 +150,21 @@ int main(int argc, char** argv)
 	cli.add_option("--bench", benchPath)->group(""); // hidden: stage timings
 	std::string dumpPath, graphics = "auto", transfer = "auto", chooserFile,
 	                      cwdFile;
-	cli.add_option("paths",
-	               paths,
-	               "Directory, or image(s) to view; a sequence needs a glob: "
-	               "shot.*.exr, 'shot.####.exr' or 'shot.#.exr' (any "
-	               "padding)");
+	auto* pathsOpt = cli.add_option(
+	    "paths",
+	    paths,
+	    "Directory, or image(s) to view; a sequence needs a glob: "
+	    "shot.*.exr, 'shot.####.exr' or 'shot.#.exr' (any padding). "
+	    "Label one with :label=<slot>:<text> (slot tl tc tr bl bc br, "
+	    "top or bottom), e.g. a.exr:label=top:main");
+	std::vector<std::pair<std::string, std::string>> diffs;
+	auto* diffOpt =
+	    cli.add_option("--diff",
+	                   diffs,
+	                   "Compare A with B: shown as A, B and |A - B|, tiled "
+	                   "(repeatable; "
+	                   "paths can carry labels; n / p go pair by pair)")
+	        ->allow_extra_args(false); // a pair, then paths again
 	cli.add_option("--dump",
 	               dumpPath,
 	               "Print layers, channels and metadata, then exit");
@@ -225,6 +235,33 @@ int main(int argc, char** argv)
 		}
 		rv::AppOptions opts;
 		opts.m_paths = paths;
+		if(!diffs.empty())
+		{
+			// Pairs and plain paths, in the order given. The order lists an
+			// option once per value: a pair twice.
+			size_t p = 0, d = 0, diffValues = 0;
+			for(const CLI::Option* o : cli.parse_order())
+			{
+				if(o == pathsOpt && p < paths.size())
+				{
+					opts.m_args.push_back({paths[p++]});
+				}
+				else if(o == diffOpt && diffValues++ % 2 == 0 &&
+				        d < diffs.size())
+				{
+					opts.m_args.push_back({diffs[d].first, diffs[d].second});
+					++d;
+				}
+			}
+			for(; d < diffs.size(); ++d)
+			{
+				opts.m_args.push_back({diffs[d].first, diffs[d].second});
+			}
+			for(; p < paths.size(); ++p)
+			{
+				opts.m_args.push_back({paths[p]});
+			}
+		}
 		if(tutorial)
 		{
 			const auto dir = rv::tutorial::defaultDir();

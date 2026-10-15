@@ -23,8 +23,19 @@ struct Source
 	/// `G`: a frame per number from the first to the last, a missing one
 	/// showing the nearest file, so 1001, 1050, 1100 plays 100 frames long.
 	bool m_fillGaps = false;
+	/// Labels given with the path (`a.exr:label=top:main`): for this session
+	/// only, shown and hidden (`A`) with the annotations.
+	AnnotationSet m_labels;
+	/// A diff (|A - B|): this is A; m_entry is B, whose frames, header and
+	/// metadata it goes by.
+	std::optional<Entry> m_diffA;
+	/// Sources sharing a group are shown together, tiled (a diff pair: A, B
+	/// and their diff); -1: none, the sheet shows every source.
+	int m_group = -1;
 	/// Frame `i` (clamped); the file itself for a single image.
 	std::filesystem::path frame(int i) const;
+	/// A diff's A side at frame `i` (see frame()).
+	std::filesystem::path diffFrame(int i) const;
 	int frameCount() const;
 	std::string frameLabel(int i) const; ///< its number ("" for an image)
 	int frameNumber(int i) const;        ///< its number (0 for an image)
@@ -41,8 +52,38 @@ private:
 };
 
 /// Key of a source in the annotations state file: absolute dir / display name
-/// ("/shots/a.####.exr").
+/// ("/shots/a.####.exr"); a diff's adds " - " and A's.
 std::string sourceKey(const Source& s);
+
+/// Something to view: an image or sequence, or with `m_b`, a diff pair.
+struct OpenItem
+{
+	Entry m_a;
+	AnnotationSet m_labelsA;
+	std::optional<Entry> m_b;
+	AnnotationSet m_labelsB;
+};
+/// A command-line image: a path (labels allowed, see splitLabels()), or
+/// with `m_diffWith`, a `--diff` pair, this being A.
+struct OpenArg
+{
+	std::string m_path;
+	std::optional<std::string> m_diffWith;
+};
+/// What `args` open, in order. A run of plain paths groups into sequences
+/// as entriesForArgs() does, each keeping the labels given with it; a pair
+/// one side of which is missing opens the other alone. Unmatched paths go
+/// to `missing`.
+std::vector<OpenItem> openItems(const std::vector<OpenArg>& args,
+                                std::vector<std::string>& missing);
+/// The browser's marks as pairs: 1st against 2nd, 3rd against 4th, …; an
+/// odd last one alone.
+std::vector<OpenItem> pairItems(std::vector<Entry> marked);
+
+/// The viewer's sources for `items`, in order. With any pair, each item is a
+/// group: a pair becomes A, B and their diff (labelled "diff"), anything
+/// else a group of its own.
+std::vector<Source> sourcesFor(std::vector<OpenItem> items, bool fillGaps);
 
 /// Keyboard focus inside the viewer, lazygit style: the image [1] or a pane.
 enum class Focus
@@ -126,6 +167,17 @@ struct ViewerState
 	const Source* numberedSource() const;
 	/// The lines source `i` adds (nullptr: none, or no such source).
 	const AnnotationSet* sourceAnnotations(const Annotations& ann, int i) const;
+	/// What the sheet tiles by source: the active source's group, else every
+	/// source. One source tiles its layers instead.
+	std::vector<int> sheetSources() const;
+	/// Whether groups are in use (a diff session): n / p step by group.
+	bool grouped() const;
+	/// The groups in order, and which one source `i` is in (its index).
+	int groupCount() const;
+	int groupIndex(int i) const;
+	/// The first source of the group `delta` groups on from the active one
+	/// (wrapping).
+	int stepGroup(int delta) const;
 };
 
 /// Whether cell (x, y) is inside `b`.

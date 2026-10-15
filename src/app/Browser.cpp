@@ -95,9 +95,13 @@ bool sameEntry(const Entry& a, const Entry& b)
 
 } // namespace
 
-Browser::Browser(AppContext& ctx, std::string chooserFile, OpenFn onOpen)
+Browser::Browser(AppContext& ctx,
+                 std::string chooserFile,
+                 OpenFn onOpen,
+                 DiffFn onDiff)
     : m_ctx(ctx), m_chooserFile(std::move(chooserFile)),
-      m_onOpen(std::move(onOpen)), m_previewSlot(newSlot(ctx))
+      m_onOpen(std::move(onOpen)), m_onDiff(std::move(onDiff)),
+      m_previewSlot(newSlot(ctx))
 {
 }
 
@@ -732,6 +736,33 @@ bool Browser::event(Event e)
 	{
 		enterSelected(true);
 	}
+	else if(e == Event::Character('d'))
+	{
+		// Marked images in pairs; one marked pairs with the one here.
+		std::vector<Entry> marked;
+		for(const auto& en : m_marks)
+		{
+			if(en.isImage())
+			{
+				marked.push_back(en);
+			}
+		}
+		const Entry* here = selectedEntry();
+		if(marked.size() == 1 && here && here->isImage() &&
+		   here->m_path != marked.front().m_path)
+		{
+			marked.push_back(*here);
+		}
+		if(marked.size() < 2)
+		{
+			m_ctx.m_message = "d: mark two images to diff (space), or mark "
+			                  "one and stand on the other";
+		}
+		else if(m_onDiff)
+		{
+			m_onDiff(std::move(marked));
+		}
+	}
 	else if(e == Event::Character('R'))
 	{
 		std::string keep = selectedEntry() ? selectedEntry()->m_name : "";
@@ -971,6 +1002,10 @@ Element Browser::renderPreview()
 	                                 part.m_compression,
 	                                 part.m_tiled ? " · tiled" : "")) |
 	                dim);
+	if(img && img->incomplete())
+	{
+		lines.push_back(text("incomplete image") | color(Color::Yellow));
+	}
 	if(!(part.m_dataWindow == part.m_displayWindow))
 	{
 		lines.push_back(text(fmt::format("data window {}x{} @ [{}, {}]",
@@ -1015,8 +1050,11 @@ Element Browser::renderPreview()
 	// The viewer's colour management (OCIO view), at default exposure.
 	DisplayParams disp;
 	disp.m_ocio = m_ctx.m_colour.transformFor(p, sourceKey(Source{*e}));
-	Element image = img ? m_previewSlot->element(img, ViewParams{}, disp)
-	                    : text("decoding…") | dim | center | flex;
+	const auto err = img ? std::nullopt : m_ctx.m_svc.error(p);
+	Element image =
+	    img   ? m_previewSlot->element(img, ViewParams{}, disp)
+	    : err ? paragraph("error: " + *err) | color(Color::Red) | center | flex
+	          : text("decoding…") | dim | center | flex;
 	return vbox({image | flex, separatorLight(), vbox(std::move(lines))});
 }
 

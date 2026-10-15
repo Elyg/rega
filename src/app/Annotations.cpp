@@ -324,4 +324,39 @@ fs::path Annotations::defaultStatePath()
 	return base / "rvtui" / "annotations";
 }
 
+std::pair<std::string, AnnotationSet> splitLabels(const std::string& arg)
+{
+	static const std::string MARK = ":label=";
+	std::error_code ec;
+	const size_t first = arg.find(MARK);
+	if(first == std::string::npos || fs::exists(arg, ec))
+	{
+		return {arg, {}};
+	}
+	AnnotationSet labels;
+	for(size_t at = first; at != std::string::npos;)
+	{
+		const size_t slotAt = at + MARK.size();
+		const size_t colon = arg.find(':', slotAt);
+		if(colon == std::string::npos)
+		{
+			return {arg, {}};
+		}
+		std::string key = arg.substr(slotAt, colon - slotAt);
+		key = key == "top" ? "tc" : key == "bottom" ? "bc" : key;
+		const auto slot = slotFromKey(key);
+		if(!slot)
+		{
+			return {arg, {}};
+		}
+		const size_t next = arg.find(MARK, colon);
+		labels.lines(*slot).push_back(arg.substr(colon + 1,
+		                                         next == std::string::npos
+		                                             ? std::string::npos
+		                                             : next - colon - 1));
+		at = next;
+	}
+	return {arg.substr(0, first), std::move(labels)};
+}
+
 } // namespace rv

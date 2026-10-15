@@ -24,6 +24,12 @@ MetaPane::MetaPane(ViewerState& state, AppContext& ctx)
 {
 }
 
+bool MetaPane::onDiff() const
+{
+	return !m_state.m_sources.empty() &&
+	       m_state.m_sources[m_state.m_current].m_diffA.has_value();
+}
+
 std::vector<MetaPane::Item> MetaPane::items(const ImageInfoPtr& info) const
 {
 	using K = Item::Kind;
@@ -31,6 +37,12 @@ std::vector<MetaPane::Item> MetaPane::items(const ImageInfoPtr& info) const
 	if(!info)
 	{
 		return items;
+	}
+	if(onDiff())
+	{
+		const Source& src = m_state.m_sources[m_state.m_current];
+		return diffItems(m_ctx.m_svc.info(src.diffFrame(m_state.m_frame)),
+		                 info);
 	}
 	items.push_back(
 	    {K::TITLE, m_state.currentFramePath().filename().string(), ""});
@@ -54,6 +66,113 @@ std::vector<MetaPane::Item> MetaPane::items(const ImageInfoPtr& info) const
 		}
 		items.push_back({K::LAYER, l.label(), chans});
 	}
+	return items;
+}
+
+std::vector<MetaPane::Item> MetaPane::diffItems(const ImageInfoPtr& a,
+                                                const ImageInfoPtr& b) const
+{
+	using K = Item::Kind;
+	using D = Item::Diff;
+	const Source& src = m_state.m_sources[m_state.m_current];
+	std::vector<Item> items;
+	items.push_back({K::TITLE, "header diff", ""});
+	const size_t summary = items.size();
+	items.push_back({K::SUMMARY, "", ""});
+	items.push_back({K::PATH, "A", src.diffFrame(m_state.m_frame).string()});
+	items.push_back({K::PATH, "B", m_state.currentFramePath().string()});
+	if(!a)
+	{
+		items[summary].m_name = "reading A…";
+		return items;
+	}
+	int differ = 0;
+	// (name, value) rows of both sides, matched by name: B's order, then
+	// what only A has. A heading goes in once it has a row under it.
+	using Rows = std::vector<std::pair<std::string, std::string>>;
+	auto merge = [&](Item heading, const Rows& ra, const Rows& rb, K kind)
+	{
+		std::vector<Item> rows;
+		auto find = [](const Rows& r, const std::string& n)
+		{
+			return std::ranges::find_if(r,
+			                            [&](const auto& x)
+			                            { return x.first == n; });
+		};
+		for(const auto& [name, vb] : rb)
+		{
+			const auto ia = find(ra, name);
+			if(ia == ra.end())
+			{
+				rows.push_back({kind, name, "", D::ONLY_B, vb});
+			}
+			else if(ia->second != vb)
+			{
+				rows.push_back({kind, name, ia->second, D::CHANGED, vb});
+			}
+			else if(m_diffAll)
+			{
+				rows.push_back({kind, name, vb, D::SAME, ""});
+			}
+		}
+		for(const auto& [name, va] : ra)
+		{
+			if(find(rb, name) == rb.end())
+			{
+				rows.push_back({kind, name, va, D::ONLY_A, ""});
+			}
+		}
+		differ += static_cast<int>(
+		    std::ranges::count_if(rows,
+		                          [](const Item& it)
+		                          { return it.m_diff != D::SAME; }));
+		if(!rows.empty() || m_diffAll)
+		{
+			items.push_back(std::move(heading));
+			std::ranges::move(rows, std::back_inserter(items));
+		}
+	};
+	auto attributes = [](const ImageInfoPtr& info, size_t p)
+	{
+		Rows r;
+		if(p < info->m_parts.size())
+		{
+			for(const auto& at : info->m_parts[p].m_attributes)
+			{
+				r.emplace_back(at.m_name, at.m_value);
+			}
+		}
+		return r;
+	};
+	for(size_t p = 0; p < std::max(a->m_parts.size(), b->m_parts.size()); ++p)
+	{
+		const auto& named =
+		    p < b->m_parts.size() ? b->m_parts[p] : a->m_parts[p];
+		merge({K::PART, fmt::format("part {}", p), named.m_name},
+		      attributes(a, p),
+		      attributes(b, p),
+		      K::ATTRIBUTE);
+	}
+	auto layers = [](const ImageInfoPtr& info)
+	{
+		Rows r;
+		for(const auto& l : info->m_layers)
+		{
+			std::string chans;
+			for(const auto& c : l.m_channels)
+			{
+				chans += (chans.empty() ? "" : " ") + LayerInfo::shortName(c);
+			}
+			r.emplace_back(l.label(), chans);
+		}
+		return r;
+	};
+	merge({K::LAYERS, "layers", ""}, layers(a), layers(b), K::LAYER);
+	items[summary].m_name =
+	    differ == 0
+	        ? "headers identical"
+	        : fmt::format("{} difference{}", differ, differ == 1 ? "" : "s");
+	items[summary].m_diff = differ == 0 ? D::SAME : D::CHANGED;
 	return items;
 }
 
@@ -83,14 +202,15 @@ std::vector<MetaPane::Item> MetaPane::shown(const ImageInfoPtr& info) const
 	auto hit = [&](const Item& it)
 	{
 		return fuzzyMatch(it.m_name, m_filter).has_value() ||
-		       containsNoCase(it.m_value, m_filter);
+		       containsNoCase(it.m_value, m_filter) ||
+		       (!it.m_valueB.empty() && containsNoCase(it.m_valueB, m_filter));
 	};
 	// The title always; a heading once a row under it matches (or itself).
 	std::vector<Item> out;
 	std::optional<Item> heading;
 	for(Item& it : all)
 	{
-		if(it.m_kind == K::TITLE)
+		if(it.m_kind == K::TITLE || it.m_kind == K::SUMMARY)
 		{
 			out.push_back(std::move(it));
 		}
@@ -162,15 +282,26 @@ Elements MetaPane::itemLines(const Item& it, int nameCol, bool expand) const
 	{
 		case K::TITLE:
 			return plain(it.m_name, 1, bold);
+		case K::SUMMARY:
+			return plain(it.m_name,
+			             1,
+			             color(it.m_diff == Item::Diff::SAME ? Color::Green
+			                                                 : Color::Yellow));
 		case K::PATH:
 		{
+			// A diff's two: "A /…", "B /…".
+			const std::string side = it.m_name == "path" ? "" : it.m_name + " ";
 			if(expand)
 			{
-				return plain(it.m_value, 1, dim);
+				return plain(side + it.m_value, 1, dim);
 			}
 			// Keep the tail (the interesting end) when it does not fit.
-			return {text(" " + ui::ellipsizeStart(it.m_value,
-			                                      std::max(8, width - 2))) |
+			return {text(" " + side +
+			             ui::ellipsizeStart(it.m_value,
+			                                std::max(8,
+			                                         width - 2 -
+			                                             static_cast<int>(
+			                                                 side.size())))) |
 			        dim};
 		}
 		case K::PART:
@@ -185,16 +316,55 @@ Elements MetaPane::itemLines(const Item& it, int nameCol, bool expand) const
 			break;
 	}
 	// name  value, in two columns.
+	using D = Item::Diff;
 	const bool attr = it.m_kind == K::ATTRIBUTE;
+	const bool differs = it.m_diff != D::NONE && it.m_diff != D::SAME;
 	const Decorator nameStyle =
-	    attr ? color(Color::Yellow)
-	         : (it.m_name == m_state.m_layerLabel ? bold : nothing);
+	    it.m_diff == D::SAME ? dim
+	    : attr               ? color(Color::Yellow)
+	           : (it.m_name == m_state.m_layerLabel ? bold : nothing);
 	const Decorator valueStyle = attr ? nothing : dim;
 	const int valueCol = NAME_INDENT + nameCol;
 	const int valueRoom = std::max(1, width - valueCol);
 	const std::string indent(NAME_INDENT, ' ');
 	auto nameCell = [&](const std::string& name)
 	{ return text(indent + name) | nameStyle | size(WIDTH, EQUAL, valueCol); };
+	if(differs)
+	{
+		// A's value → B's, red → green; "—" for the side without it.
+		const std::string va = it.m_diff == D::ONLY_B ? "—" : it.m_value;
+		const std::string vb = it.m_diff == D::ONLY_A ? "—" : it.m_valueB;
+		const Decorator red = color(Color::Red), green = color(Color::Green);
+		if(!expand)
+		{
+			const int half = std::max(1, (valueRoom - 3) / 2);
+			return {hbox({
+			    nameCell(ui::ellipsizeMiddle(it.m_name, nameCol - 1)),
+			    text(ui::ellipsizeEnd(va, half)) | red,
+			    text(" → ") | dim,
+			    text(ui::ellipsizeEnd(vb, valueRoom - 3 - half)) | green,
+			})};
+		}
+		// Expanded: the whole name, then each side wrapped on its own.
+		Elements out;
+		for(const auto& l : ui::wrapWidth(it.m_name, width - NAME_INDENT))
+		{
+			out.push_back(text(indent + l) | nameStyle);
+		}
+		auto side = [&](const char* tag, const std::string& v, Decorator style)
+		{
+			const auto lines = ui::wrapWidth(v, std::max(1, width - 6));
+			for(size_t i = 0; i < lines.size(); ++i)
+			{
+				out.push_back(hbox({text(indent + "  "),
+				                    text(i == 0 ? tag : "  ") | dim,
+				                    text(lines[i]) | style}));
+			}
+		};
+		side("A ", va, red);
+		side("B ", vb, green);
+		return out;
+	}
 	if(!expand)
 	{
 		return {hbox({
@@ -270,14 +440,20 @@ Element MetaPane::render(const ImageInfoPtr& info)
 			m_lineItems.push_back(i);
 		}
 	}
+	const std::string at =
+	    fmt::format("{}/{}", (focus ? m_cursor : m_scroll) + 1, total);
 	Element footer =
-	    focus ? ui::paneHints(fmt::format("{}/{}", m_cursor + 1, total),
-	                          {{"/", "filter"},
-	                           {"v", "select"},
-	                           {"y/Y", "copy"},
-	                           {"2", "close"}})
-	          : ui::paneHints(fmt::format("{}/{}", m_scroll + 1, total),
-	                          {{"2", "focus"}});
+	    !focus     ? ui::paneHints(at, {{"2", "focus"}})
+	    : onDiff() ? ui::paneHints(at,
+	                               {{"d", m_diffAll ? "differences" : "all"},
+	                                {"/", "filter"},
+	                                {"y/Y", "copy"},
+	                                {"2", "close"}})
+	               : ui::paneHints(at,
+	                               {{"/", "filter"},
+	                                {"v", "select"},
+	                                {"y/Y", "copy"},
+	                                {"2", "close"}});
 	if(m_filtering || !m_filter.empty())
 	{
 		// As the browser's: the filter, how many rows it lets through.
@@ -332,6 +508,17 @@ void MetaPane::copy(const ImageInfoPtr& info, bool valuesOnly)
 		if(valuesOnly)
 		{
 			line = it.m_value.empty() ? it.m_name : it.m_value;
+		}
+		else if(it.m_diff == Item::Diff::CHANGED ||
+		        it.m_diff == Item::Diff::ONLY_A ||
+		        it.m_diff == Item::Diff::ONLY_B)
+		{
+			line =
+			    fmt::format("{}: {} → {}",
+			                it.m_name,
+			                it.m_diff == Item::Diff::ONLY_B ? "—" : it.m_value,
+			                it.m_diff == Item::Diff::ONLY_A ? "—"
+			                                                : it.m_valueB);
 		}
 		else if(it.m_kind == K::ATTRIBUTE || it.m_kind == K::LAYER)
 		{
@@ -522,6 +709,11 @@ bool MetaPane::event(const Event& e, const ImageInfoPtr& info)
 	else if(ch("v") || ch("V"))
 	{
 		m_anchor = m_anchor < 0 ? m_cursor : -1;
+	}
+	else if(ch("d") && onDiff())
+	{
+		m_diffAll = !m_diffAll; // the differences ⇄ both headers whole
+		m_anchor = -1;
 	}
 	else if(ch("y"))
 	{

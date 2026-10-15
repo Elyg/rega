@@ -48,13 +48,19 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
             { m_screen.Post(std::move(task)); },
             .m_quit = [this] { m_screen.ExitLoopClosure()(); },
             .m_message = {}},
-      m_browser(m_ctx,
-                opts.m_chooserFile,
-                [this](std::vector<Entry> entries, bool tile)
-                {
-	                m_viewer.open(std::move(entries), tile);
-	                m_mode = Mode::VIEWER;
-                }),
+      m_browser(
+          m_ctx,
+          opts.m_chooserFile,
+          [this](std::vector<Entry> entries, bool tile)
+          {
+	          m_viewer.open(std::move(entries), tile);
+	          m_mode = Mode::VIEWER;
+          },
+          [this](std::vector<Entry> marked)
+          {
+	          m_viewer.openItems(pairItems(std::move(marked)));
+	          m_mode = Mode::VIEWER;
+          }),
       m_viewer(m_ctx, [this] { m_mode = Mode::BROWSER; }),
       m_watcher(POLL_INTERVAL,
                 [this](std::vector<fs::path> changed)
@@ -121,7 +127,8 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 
 	std::error_code ec;
 	const auto& paths = opts.m_paths;
-	if(paths.empty() || (paths.size() == 1 && fs::is_directory(paths[0], ec)))
+	if(opts.m_args.empty() &&
+	   (paths.empty() || (paths.size() == 1 && fs::is_directory(paths[0], ec))))
 	{
 		m_browser.openDirectory(
 		    paths.empty() ? fs::current_path()
@@ -129,8 +136,24 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 	}
 	else
 	{
+		std::vector<OpenArg> args = opts.m_args;
+		if(args.empty())
+		{
+			for(const auto& p : paths)
+			{
+				args.push_back({p});
+			}
+		}
 		std::vector<std::string> missing;
-		std::vector<Entry> entries = entriesForArgs(paths, missing);
+		std::vector<OpenItem> items = openItems(args, missing);
+		const bool pairs = std::ranges::any_of(items,
+		                                       [](const OpenItem& i)
+		                                       { return i.m_b.has_value(); });
+		std::vector<Entry> entries;
+		for(const auto& i : items)
+		{
+			entries.push_back(i.m_a);
+		}
 		if(entries.empty())
 		{
 			m_browser.openDirectory(fs::current_path());
@@ -146,11 +169,13 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 			                        entryForPath(first).m_name);
 			// Several: they are selected (marked) there too, so Enter in the
 			// browser opens the same set again. One is just under the cursor.
-			if(entries.size() > 1)
+			// Pairs: A sides are often copies elsewhere (git's other
+			// version), so nothing is marked.
+			if(entries.size() > 1 && !pairs)
 			{
 				m_browser.mark(entries);
 			}
-			m_viewer.open(std::move(entries));
+			m_viewer.openItems(std::move(items));
 			m_mode = Mode::VIEWER;
 			if(!missing.empty())
 			{
@@ -321,6 +346,7 @@ Element App::renderHelp()
 		    row(".", "toggle hidden files"),
 		    row("space", "mark (view marked together)"),
 		    row("a", "mark every image here (again: unmark)"),
+		    row("d", "diff the marked in pairs (one marked: with this)"),
 		    row("click", "select (double: open) / parent dir"),
 		    row("o", "choose → --chooser-file, quit"),
 		    row("q / Q", "quit"),
@@ -333,6 +359,7 @@ Element App::renderHelp()
 		    section("Image"),
 		    row("[ / ]", "previous / next layer (AOV)"),
 		    row("n / p N", "next / previous image (marked files)"),
+		    row("", "diff: next / previous pair (A, B, |A - B|)"),
 		    row("+ / - / wheel", "zoom"),
 		    row("f / z", "fit / 1:1"),
 		    row("hjkl ←↓↑→ HJKL", "pan (shift = faster)"),
@@ -380,6 +407,7 @@ Element App::renderHelp()
 		        "inspector: move, copy line / value, clear pick"),
 		    row("  wheel { }", "metadata: scroll"),
 		    row("  /  click", "metadata: filter (Esc clear) / move there"),
+		    row("  d", "metadata, diff tile: differences / both whole"),
 		    row("  drag C-click", "metadata: select rows (then y / Y)"),
 		    row("  J / K  d", "files: move down / up, drop"),
 		    row("  e", "files: sequence ⇄ its frames (up to 500)"),

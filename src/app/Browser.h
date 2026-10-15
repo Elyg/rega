@@ -29,11 +29,16 @@ class Browser
 public:
 	/// View `entries` (`tile`: as a contact sheet).
 	using OpenFn = std::function<void(std::vector<Entry> entries, bool tile)>;
+	/// `d`: the marked images as diff pairs (see pairItems()).
+	using DiffFn = std::function<void(std::vector<Entry> marked)>;
 
 	/// @param chooserFile where `o` writes the chosen paths before quitting
 	///                    (empty = `o` only says so).
 	/// @param onOpen      called with the entries to open in the viewer.
-	Browser(AppContext& ctx, std::string chooserFile, OpenFn onOpen);
+	Browser(AppContext& ctx,
+	        std::string chooserFile,
+	        OpenFn onOpen,
+	        DiffFn onDiff = {});
 	Browser(const Browser&) = delete;
 	Browser& operator=(const Browser&) = delete;
 
@@ -122,6 +127,7 @@ private:
 	AppContext& m_ctx;
 	std::string m_chooserFile;
 	OpenFn m_onOpen;
+	DiffFn m_onDiff;
 
 	std::filesystem::path m_cwd;
 	std::vector<Entry> m_entries;
