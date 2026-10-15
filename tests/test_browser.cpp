@@ -374,19 +374,18 @@ TEST_F(BrowserTest, PreviewSaysWhenTheImageIsIncomplete)
 	const fs::path cut = writeExr(m_dir / "cut.exr", {"R", "G", "B"}, 8, 40);
 	fs::resize_file(cut, fs::file_size(cut) - 10);
 	m_b.openDirectory(m_dir);
-	auto shown = [&](const std::string& name)
-	{
-		select(name);
-		EXPECT_TRUE(waitFor(
-		    [&]
-		    {
-			    (void)find("");
-			    return m_c.m_svc.pendingJobs() == 0;
-		    }));
-		return find("incomplete image").first >= 0;
-	};
-	EXPECT_TRUE(shown("cut.exr"));
-	EXPECT_FALSE(shown("whole.exr"));
+	// Each draw asks for what is missing: the header, then the pixels.
+	select("cut.exr");
+	EXPECT_TRUE(waitFor([&] { return find("incomplete image").first >= 0; }));
+	select("whole.exr");
+	EXPECT_TRUE(waitFor(
+	    [&]
+	    {
+		    return find("loading…").first < 0 &&
+		           find("decoding…").first < 0 &&
+		           m_c.m_svc.pendingJobs() == 0;
+	    }));
+	EXPECT_LT(find("incomplete image").first, 0);
 }
 
 TEST_F(BrowserTest, DDiffsTheMarkedOrOneMarkedWithTheOneHere)

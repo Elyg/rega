@@ -872,9 +872,11 @@ TEST_F(ViewerTest, ADiffPairShowsLabelledTilesAndNGoesPairByPair)
 	EXPECT_TRUE(m_v.tiled());
 	drawSheet();
 	EXPECT_EQ(m_v.tilesShown(), 3);
+	// Each draw asks for what is missing (A and B, then their diff).
 	for(const char* s : {"main", "current", "diff", "max Δ 0.5", "[1/2]"})
 	{
-		EXPECT_GE(titleAt(m_v, s).first, 0) << s;
+		EXPECT_TRUE(waitFor([&] { return titleAt(m_v, s).first >= 0; }))
+		    << s;
 	}
 	// `A` hides them with the annotations.
 	press(key("A"));
