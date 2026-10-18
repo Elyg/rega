@@ -177,7 +177,7 @@ TerminalReply parseTerminalReply(std::string_view in)
 
 TerminalReply queryTerminal()
 {
-	static const TerminalReply reply = []
+	static const TerminalReply REPLY = []
 	{
 		using Clock = std::chrono::steady_clock;
 		using std::chrono::milliseconds;
@@ -242,7 +242,7 @@ TerminalReply queryTerminal()
 		close(tty);
 		return parseTerminalReply(in);
 	}();
-	return reply;
+	return REPLY;
 }
 
 bool isOuterTmux(bool tmuxEnv, const std::string& term)
