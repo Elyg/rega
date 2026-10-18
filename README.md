@@ -53,6 +53,19 @@ rvtui detects which one to use. To choose yourself: `--graphics kitty` or
 
 ## Install
 
+### Linux and macOS
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Elyg/rvtui/main/scripts/install.sh | bash
+```
+
+[scripts/install.sh](scripts/install.sh) puts the latest
+[release](https://github.com/Elyg/rvtui/releases) into `~/.local/bin`: a fully static
+binary on Linux (x86_64, aarch64; any distro, no dependencies), or the Apple Silicon build
+on macOS. To pin a release or pick another folder, set them for `bash`:
+`… | RVTUI_VERSION=0.0.15 RVTUI_BIN_DIR=~/bin bash`. On NixOS, use the flake instead
+(below).
+
 ### Home Manager (flake)
 
 ```nix
@@ -79,46 +92,6 @@ come from the nixpkgs cache).
 nix run github:Elyg/rvtui -- shots/
 nix profile install github:Elyg/rvtui
 ```
-
-### Linux
-
-Each [GitHub Release](https://github.com/Elyg/rvtui/releases) has a fully static (musl)
-binary that runs on any distro with no dependencies. Two architectures:
-
-| Arch            | Tarball                                |
-| --------------- | -------------------------------------- |
-| x86_64          | `rvtui-<version>-linux-x86_64.tar.gz`  |
-| aarch64 (ARM64) | `rvtui-<version>-linux-aarch64.tar.gz` |
-
-```bash
-v=$(curl -sLo /dev/null -w '%{url_effective}' https://github.com/Elyg/rvtui/releases/latest)
-v=${v##*/v}
-mkdir -p ~/.local/bin
-arch=$(uname -m)
-curl -L "https://github.com/Elyg/rvtui/releases/download/v$v/rvtui-$v-linux-$arch.tar.gz" \
-  | tar -xz -C ~/.local/bin rvtui
-```
-
-This installs the latest release for your architecture into `~/.local/bin`, which needs
-to be on your `PATH`.
-
-On NixOS, or anywhere with Nix, use the flake instead (above): it builds against nixpkgs
-(glibc) rather than using the static binary.
-
-### macOS
-
-Apple Silicon only: `rvtui-<version>-macos-arm64.tar.gz` from the same release page. It
-links only against system libraries.
-
-```bash
-v=$(curl -sLo /dev/null -w '%{url_effective}' https://github.com/Elyg/rvtui/releases/latest)
-v=${v##*/v}
-mkdir -p ~/.local/bin
-curl -L "https://github.com/Elyg/rvtui/releases/download/v$v/rvtui-$v-macos-arm64.tar.gz" \
-  | tar -xz -C ~/.local/bin rvtui
-```
-
-This installs the latest release into `~/.local/bin`, which needs to be on your `PATH`.
 
 ## Setup
 
@@ -178,7 +151,7 @@ it with `--graphics kitty`.
 ```
 ┌──────────┐    ┌────────┐
 │ terminal │───▶│ zellij │───▶ rvtui     zellij can't show rvtui's images
-└──────────┘    └────────┘
+└──────────┘    └────────┘               (falls back to half-blocks)
 
 ┌───────────────────────────┐
 │ iTerm2, WezTerm, Warp,    │
