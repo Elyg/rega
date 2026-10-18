@@ -29,6 +29,9 @@ bool worthCompressing(const uint8_t* data, size_t n);
 /// Wrap an escape sequence in tmux DCS passthrough (requires `allow-passthrough
 /// on`).
 std::string tmuxWrap(std::string_view seq);
+/// `seq` wrapped once per tmux in the way (0: as is; 2: tmux in tmux, the
+/// outer one ssh'd from).
+std::string tmuxWrap(std::string seq, int tmuxes);
 
 /// How transmit() and friends place the image.
 struct TransmitOptions
@@ -36,8 +39,8 @@ struct TransmitOptions
 	uint32_t m_id = 0;          ///< kitty image id
 	int m_cols = 0, m_rows = 0; ///< placement size in cells (0 = natural size)
 	bool m_virtualPlacement =
-	    true; ///< U=1: displayed through Unicode placeholder cells
-	bool m_tmux = false;
+	    true;              ///< U=1: displayed through Unicode placeholder cells
+	int m_tmux = 0;        ///< tmuxes in the way, see tmuxWrap()
 	size_t m_chunk = 4096; ///< base64 bytes per escape
 };
 
@@ -59,9 +62,9 @@ bool writeSharedMemory(const std::string& name, const Rgba8Image& img);
 bool writeFile(const std::string& path, const Rgba8Image& img);
 
 /// Delete an image and free its data.
-std::string deleteImage(uint32_t id, bool tmux);
+std::string deleteImage(uint32_t id, int tmux);
 /// Delete the placements of an image, keeping its data.
-std::string deletePlacements(uint32_t id, bool tmux);
+std::string deletePlacements(uint32_t id, int tmux);
 
 /// The placement id of every virtual placement: one per image, so a picture
 /// sent again under the same image id replaces its placement instead of
@@ -77,16 +80,16 @@ class Transmitter
 public:
 	using WriteFn = std::function<void(std::string_view bytes, bool flush)>;
 
-	/// @param tmux     wrap escapes in tmux passthrough.
+	/// @param tmux     tmuxes to wrap escapes for (passthrough), see tmuxWrap.
 	/// @param transfer how pixels reach the terminal.
 	/// @param write    where escapes go (term::writeRaw; a capture in tests).
-	Transmitter(bool tmux, Transfer transfer, WriteFn write);
+	Transmitter(int tmux, Transfer transfer, WriteFn write);
 	/// Removes the shared memory / files still around.
 	~Transmitter();
 	Transmitter(const Transmitter&) = delete;
 	Transmitter& operator=(const Transmitter&) = delete;
 
-	[[nodiscard]] bool tmux() const noexcept
+	[[nodiscard]] int tmux() const noexcept
 	{
 		return m_tmux;
 	}
@@ -141,7 +144,7 @@ public:
 	static constexpr size_t MAX_IN_FLIGHT = 8;
 
 private:
-	const bool m_tmux;
+	const int m_tmux;
 	std::atomic<Transfer> m_transfer;
 	const WriteFn m_write;
 	mutable std::mutex m_mutex;

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <string_view>
 
 namespace rv
 {
@@ -32,12 +33,23 @@ struct TermCaps
 	/// terminal that attaches later.
 	int m_resend = 0;
 	bool m_tmux = false;
+	/// A tmux beyond ssh: TERM, or in tmux its client's terminal, names tmux
+	/// (see isOuterTmux()). Escapes still go through its passthrough, but
+	/// `tmux` commands can't reach it, nor terminal answers get back.
+	bool m_outerTmux = false;
 	int m_cellW = 10, m_cellH = 20; ///< pixels per cell
 	std::string m_terminalName;
 	/// A misconfiguration worth a lasting warning (e.g. kitty graphics off
 	/// because tmux has no allow-passthrough). Short; `rvtui --doctor` has the
 	/// details. Empty when nothing to report.
 	std::string m_note;
+
+	/// The tmuxes escapes pass through, each wrapping them once: ours, one
+	/// beyond ssh, or both (tmux on a machine ssh'd to from a tmux pane).
+	[[nodiscard]] int tmuxLayers() const noexcept
+	{
+		return int(m_tmux) + int(m_outerTmux);
+	}
 };
 
 /// `tmux display -p <format>` for the current client ("" on failure).
@@ -62,9 +74,35 @@ bool tmuxClientOverSsh(const std::string& pids);
 /// them; shared memory goes once read). Outside it: direct over ssh, else
 /// shared memory.
 Transfer autoTransfer(bool tmux, bool sshEnv, bool tmuxSshClient);
-/// A TERM / TERM_PROGRAM value of a terminal with kitty graphics + Unicode
-/// placeholders (ghostty, kitty).
+/// A TERM / TERM_PROGRAM / LC_TERMINAL value of a terminal with kitty graphics
+/// + Unicode placeholders (ghostty, kitty).
 bool isKittyTerminal(const std::string& name);
+
+/// TERM names tmux (or screen, tmux's old default) while $TMUX is unset: ssh
+/// from a tmux pane carries TERM across but not TMUX, so the tmux the
+/// terminal sits behind is on the other machine.
+bool isOuterTmux(bool tmuxEnv, const std::string& term);
+/// LC_TERMINAL as it stands: in tmux the session's, which `update-environment`
+/// refreshes on every attach (the pane's own is from when it started), else
+/// ours. ssh carries it by default, so it names the terminal behind a tmux
+/// beyond ssh (an `ssh` wrapper sets it there).
+std::string terminalHint(bool tmux);
+
+/// What the terminal said to queryTerminal().
+struct TerminalReply
+{
+	/// It answered DA1, which every terminal does, after the other queries:
+	/// whatever it didn't answer by then it never will.
+	bool m_answered = false;
+	bool m_kittyGraphics = false; ///< it answered the kitty graphics query OK
+	std::string m_version; ///< XTVERSION, e.g. "ghostty 1.2.0"; "" if none
+};
+/// Parse what came back for queryTerminal()'s queries.
+TerminalReply parseTerminalReply(std::string_view in);
+/// Ask the terminal on /dev/tty for kitty graphics, XTVERSION and DA1, once
+/// (later calls reuse the answer), before the UI reads from it. Unanswered
+/// (m_answered false) without a terminal, or after 2 s.
+TerminalReply queryTerminal();
 
 /// `forced` is "auto" | "kitty" | "halfblock". `transfer` is "auto" | "direct"
 /// | "shm" | "file"; auto: see autoTransfer().

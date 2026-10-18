@@ -110,6 +110,10 @@ bool waitFor(Pred&& pred)
 
 TEST(Kitty, TmuxWrapCopiesTheRunsBetweenEscapes)
 {
+	// Tmux in tmux: the inner one unwraps, the outer one gets it wrapped.
+	EXPECT_EQ(kitty::tmuxWrap(std::string("plain"), 0), "plain");
+	EXPECT_EQ(kitty::tmuxWrap(std::string("plain"), 2),
+	          "\x1bPtmux;\x1b\x1bPtmux;plain\x1b\x1b\\\x1b\\");
 	EXPECT_EQ(kitty::tmuxWrap("plain"), "\x1bPtmux;plain\x1b\\");
 	EXPECT_EQ(kitty::tmuxWrap("\x1b\x1b"
 	                          "ab\x1b"),

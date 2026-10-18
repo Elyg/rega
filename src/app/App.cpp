@@ -33,7 +33,7 @@ constexpr auto CLIENT_CHECK_INTERVAL = std::chrono::seconds(3);
 App::App(const AppOptions& opts, ScreenInteractive& screen)
     : m_opts(opts), m_screen(screen),
       m_caps(detectCaps(opts.m_graphics, opts.m_transfer)),
-      m_kitty(m_caps.m_tmux, m_caps.m_transfer, &term::writeRaw),
+      m_kitty(m_caps.tmuxLayers(), m_caps.m_transfer, &term::writeRaw),
       m_svc([this] { m_screen.PostEvent(Event::Custom); },
             static_cast<size_t>(opts.m_cacheBytes)),
       m_annPath(Annotations::defaultStatePath()),
@@ -104,13 +104,14 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 			    }
 		    });
 	}
-	spdlog::info("terminal '{}', graphics {} ({}), cell {}x{}px, tmux {}",
+	spdlog::info("terminal '{}', graphics {} ({}), cell {}x{}px, tmux {}{}",
 	             m_caps.m_terminalName,
 	             graphicsModeName(m_caps.m_graphics),
 	             transferName(m_caps.m_transfer),
 	             m_caps.m_cellW,
 	             m_caps.m_cellH,
-	             m_caps.m_tmux);
+	             m_caps.m_tmux,
+	             m_caps.m_outerTmux ? " (beyond ssh)" : "");
 	if(!m_caps.m_note.empty())
 	{
 		spdlog::warn("{}", m_caps.m_note); // stays in the status bar

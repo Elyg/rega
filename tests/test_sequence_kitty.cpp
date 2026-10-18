@@ -261,6 +261,37 @@ TEST(Caps, AutoTransferInTmuxGoesByTheClients)
 	EXPECT_EQ(rv::autoTransfer(false, false, false), Transfer::SHARED_MEMORY);
 }
 
+TEST(Caps, OuterTmuxIsTmuxTermWithoutTmuxEnv)
+{
+	// ssh from a tmux pane: TERM comes along, TMUX doesn't.
+	EXPECT_TRUE(rv::isOuterTmux(false, "tmux-256color"));
+	EXPECT_TRUE(rv::isOuterTmux(false, "screen-256color"));
+	EXPECT_FALSE(rv::isOuterTmux(true, "tmux-256color"));
+	EXPECT_FALSE(rv::isOuterTmux(false, "xterm-ghostty"));
+	EXPECT_FALSE(rv::isOuterTmux(false, ""));
+}
+
+TEST(Caps, TerminalReplyIsWhatCameBeforeDeviceAttributes)
+{
+	const auto ghostty = rv::parseTerminalReply(
+	    "\x1b_Gi=1795;OK\x1b\\\x1bP>|ghostty 1.2.0\x1b\\\x1b[?62;22;52c");
+	EXPECT_TRUE(ghostty.m_answered);
+	EXPECT_TRUE(ghostty.m_kittyGraphics);
+	EXPECT_EQ(ghostty.m_version, "ghostty 1.2.0");
+	// zellij: no images, no XTVERSION, only DA1.
+	const auto zellij = rv::parseTerminalReply("\x1b[?1;2c");
+	EXPECT_TRUE(zellij.m_answered);
+	EXPECT_FALSE(zellij.m_kittyGraphics);
+	EXPECT_EQ(zellij.m_version, "");
+	// An error is no image support; DA1 not in yet is no answer yet.
+	EXPECT_FALSE(rv::parseTerminalReply("\x1b_Gi=1795;EINVAL\x1b\\\x1b[?1c")
+	                 .m_kittyGraphics);
+	EXPECT_FALSE(rv::parseTerminalReply("\x1b_Gi=1795;OK\x1b\\").m_answered);
+	EXPECT_TRUE(rv::isKittyTerminal("kitty(0.35.2)"));
+	EXPECT_TRUE(rv::isKittyTerminal("Ghostty 1.1"));
+	EXPECT_FALSE(rv::isKittyTerminal("WezTerm 20240203"));
+}
+
 TEST(Kitty, ImageIdsNeverCollideWithLiveOnes)
 {
 	// The bug: ids wrapped after 255 allocations onto slots still on screen.

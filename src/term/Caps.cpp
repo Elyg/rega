@@ -1,11 +1,16 @@
 #include "term/Caps.h"
 
 #include <sys/ioctl.h>
+#include <sys/select.h>
 
+#include <cctype>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
 #include <sstream>
 #include <string_view>
+#include <termios.h>
 #include <unistd.h>
 #include <unordered_map>
 #include <utility>
@@ -39,6 +44,29 @@ std::string env(const char* k)
 {
 	const char* v = std::getenv(k);
 	return v ? v : "";
+}
+
+// The kitty graphics query's image id; the answer names it.
+constexpr std::string_view QUERY_ID = "1795";
+
+// Where a DA1 answer (ESC [ ? digits/semicolons c) ends in `in`, or npos.
+size_t deviceAttributesEnd(std::string_view in)
+{
+	for(size_t at = in.find("\x1b[?"); at != std::string_view::npos;
+	    at = in.find("\x1b[?", at + 1))
+	{
+		size_t i = at + 3;
+		while(i < in.size() &&
+		      (std::isdigit(static_cast<unsigned char>(in[i])) || in[i] == ';'))
+		{
+			++i;
+		}
+		if(i < in.size() && in[i] == 'c')
+		{
+			return i + 1;
+		}
+	}
+	return std::string_view::npos;
 }
 } // namespace
 
@@ -127,10 +155,130 @@ Transfer autoTransfer(bool tmux, bool sshEnv, bool tmuxSshClient)
 	return sshEnv ? Transfer::DIRECT : Transfer::SHARED_MEMORY;
 }
 
+TerminalReply parseTerminalReply(std::string_view in)
+{
+	TerminalReply r;
+	const size_t da = deviceAttributesEnd(in);
+	r.m_answered = da != std::string_view::npos;
+	in = in.substr(0, da);
+	const std::string ok = "\x1b_Gi=" + std::string(QUERY_ID) + ";OK";
+	r.m_kittyGraphics = in.find(ok) != std::string_view::npos;
+	// XTVERSION: DCS > | name ST.
+	if(const size_t at = in.find("\x1bP>|"); at != std::string_view::npos)
+	{
+		const size_t end = in.find("\x1b\\", at);
+		if(end != std::string_view::npos)
+		{
+			r.m_version = in.substr(at + 4, end - at - 4);
+		}
+	}
+	return r;
+}
+
+TerminalReply queryTerminal()
+{
+	static const TerminalReply reply = []
+	{
+		using Clock = std::chrono::steady_clock;
+		using std::chrono::milliseconds;
+		// The terminal itself, even with stdout piped (--doctor | less).
+		const int tty = open("/dev/tty", O_RDWR | O_NOCTTY);
+		termios old{};
+		if(tty < 0 || tcgetattr(tty, &old) != 0)
+		{
+			if(tty >= 0)
+			{
+				close(tty);
+			}
+			return TerminalReply{};
+		}
+		termios raw = old;
+		raw.c_lflag &= ~static_cast<tcflag_t>(ICANON | ECHO);
+		raw.c_cc[VMIN] = 0;
+		raw.c_cc[VTIME] = 0;
+		tcsetattr(tty, TCSANOW, &raw);
+		// A 1x1 image to query (a=q stores nothing), XTVERSION, then DA1:
+		// terminals answer in order, so DA1's answer closes the others'.
+		const std::string query = "\x1b_Gi=" + std::string(QUERY_ID) +
+		                          ",s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\"
+		                          "\x1b[>q\x1b[c";
+		for(size_t off = 0; off < query.size();)
+		{
+			const ssize_t n =
+			    write(tty, query.data() + off, query.size() - off);
+			if(n <= 0)
+			{
+				break;
+			}
+			off += static_cast<size_t>(n);
+		}
+		std::string in;
+		const auto deadline = Clock::now() + milliseconds(2000);
+		while(deviceAttributesEnd(in) == std::string::npos)
+		{
+			const auto left = std::chrono::duration_cast<milliseconds>(
+			    deadline - Clock::now());
+			// select, not poll: macOS's poll can't wait on /dev/tty.
+			fd_set fds;
+			FD_ZERO(&fds);
+			FD_SET(tty, &fds);
+			timeval tv{.tv_sec = static_cast<time_t>(left.count() / 1000),
+			           .tv_usec = static_cast<suseconds_t>(left.count() % 1000 *
+			                                               1000)};
+			if(left.count() <= 0 ||
+			   select(tty + 1, &fds, nullptr, nullptr, &tv) <= 0)
+			{
+				break;
+			}
+			char buf[256];
+			const ssize_t n = read(tty, buf, sizeof buf);
+			if(n <= 0)
+			{
+				break;
+			}
+			in.append(buf, static_cast<size_t>(n));
+		}
+		tcsetattr(tty, TCSANOW, &old);
+		close(tty);
+		return parseTerminalReply(in);
+	}();
+	return reply;
+}
+
+bool isOuterTmux(bool tmuxEnv, const std::string& term)
+{
+	return !tmuxEnv && (term.starts_with("tmux") || term.starts_with("screen"));
+}
+
+std::string terminalHint(bool tmux)
+{
+	if(tmux)
+	{
+		// "NAME=value"; "-NAME" when an attach found it unset; nothing when
+		// the session never had it.
+		const std::string line =
+		    run("tmux show-environment LC_TERMINAL 2>/dev/null");
+		if(line.starts_with("LC_TERMINAL="))
+		{
+			return line.substr(sizeof "LC_TERMINAL=" - 1);
+		}
+		if(line == "-LC_TERMINAL")
+		{
+			return "";
+		}
+	}
+	return env("LC_TERMINAL");
+}
+
 bool isKittyTerminal(const std::string& name)
 {
-	return name.find("kitty") != std::string::npos ||
-	       name.find("ghostty") != std::string::npos;
+	std::string lower = name;
+	for(char& c : lower)
+	{
+		c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+	}
+	return lower.find("kitty") != std::string::npos ||
+	       lower.find("ghostty") != std::string::npos;
 }
 
 const char* graphicsModeName(GraphicsMode m)
@@ -204,16 +352,42 @@ TermCaps detectCaps(const std::string& forced, const std::string& transfer)
 	caps.m_tmux = !env("TMUX").empty();
 	std::string term = env("TERM"), prog = env("TERM_PROGRAM");
 	caps.m_terminalName = !prog.empty() ? prog : term;
+	// In tmux the pane's environment may not say (a server started from
+	// elsewhere, e.g. over ssh); the attached client's terminal does. When
+	// that client is a tmux too, ssh'd here from one of its panes, there's
+	// another tmux to pass through.
+	const std::string client =
+	    caps.m_tmux ? tmuxDisplay("#{client_termname}") : "";
+	caps.m_outerTmux = isOuterTmux(caps.m_tmux, term) ||
+	                   (caps.m_tmux && isOuterTmux(false, client));
 
 	// Terminals implementing kitty graphics *with Unicode placeholders*.
 	bool kitty = isKittyTerminal(term) || isKittyTerminal(prog) ||
 	             !env("KITTY_WINDOW_ID").empty() ||
-	             !env("GHOSTTY_RESOURCES_DIR").empty();
-	// In tmux the pane's environment may not say (a server started from
-	// elsewhere, e.g. over ssh); the attached client's terminal does.
-	if(!kitty && caps.m_tmux)
+	             !env("GHOSTTY_RESOURCES_DIR").empty() ||
+	             isKittyTerminal(client);
+	// Behind a tmux beyond ssh only LC_TERMINAL can say (ssh sends LC_* by
+	// default); tmux drops the terminal's answers to queries.
+	if(!kitty && caps.m_outerTmux)
 	{
-		kitty = isKittyTerminal(tmuxDisplay("#{client_termname}"));
+		kitty = isKittyTerminal(terminalHint(caps.m_tmux));
+	}
+	// Anywhere else the terminal is asked, and its answer beats the
+	// environment, which multiplexers (zellij) pass on from a terminal that
+	// draws images to a pane that doesn't. Kitty graphics alone isn't
+	// enough: the images are Unicode placeholders, which WezTerm lacks.
+	if(!caps.m_tmux && !caps.m_outerTmux && forced == "auto")
+	{
+		const TerminalReply r = queryTerminal();
+		if(r.m_answered)
+		{
+			kitty = r.m_kittyGraphics &&
+			        (r.m_version.empty() || isKittyTerminal(r.m_version));
+			if(!r.m_version.empty())
+			{
+				caps.m_terminalName = r.m_version;
+			}
+		}
 	}
 	if(forced == "kitty")
 	{

@@ -158,6 +158,15 @@ std::string tmuxWrap(std::string_view seq)
 	return out;
 }
 
+std::string tmuxWrap(std::string seq, int tmuxes)
+{
+	for(; tmuxes > 0; --tmuxes)
+	{
+		seq = tmuxWrap(std::string_view(seq));
+	}
+	return seq;
+}
+
 namespace
 {
 
@@ -218,7 +227,7 @@ std::string transmit(const Rgba8Image& img, const TransmitOptions& opt)
 		seq += ";";
 		seq.append(payload, pos, len);
 		seq += "\x1b\\";
-		out += opt.m_tmux ? tmuxWrap(seq) : seq;
+		out += tmuxWrap(std::move(seq), opt.m_tmux);
 		pos += len;
 		first = false;
 	} while(pos < payload.size());
@@ -240,7 +249,7 @@ std::string transmitShared(const Rgba8Image& img,
 	    "\x1b_G" + keys + ";" +
 	    base64(reinterpret_cast<const uint8_t*>(name.data()), name.size()) +
 	    "\x1b\\";
-	return opt.m_tmux ? tmuxWrap(seq) : seq;
+	return tmuxWrap(seq, opt.m_tmux);
 }
 
 bool writeFile(const std::string& path, const Rgba8Image& img)
@@ -298,19 +307,19 @@ bool writeSharedMemory(const std::string& name, const Rgba8Image& img)
 	return ok;
 }
 
-std::string deleteImage(uint32_t id, bool tmux)
+std::string deleteImage(uint32_t id, int tmux)
 {
 	std::string seq = "\x1b_Ga=d,d=I,q=2,i=" + std::to_string(id) + "\x1b\\";
-	return tmux ? tmuxWrap(seq) : seq;
+	return tmuxWrap(std::move(seq), tmux);
 }
 
-std::string deletePlacements(uint32_t id, bool tmux)
+std::string deletePlacements(uint32_t id, int tmux)
 {
 	std::string seq = "\x1b_Ga=d,d=i,q=2,i=" + std::to_string(id) + "\x1b\\";
-	return tmux ? tmuxWrap(seq) : seq;
+	return tmuxWrap(std::move(seq), tmux);
 }
 
-Transmitter::Transmitter(bool tmux, Transfer transfer, WriteFn write)
+Transmitter::Transmitter(int tmux, Transfer transfer, WriteFn write)
     : m_tmux(tmux), m_transfer(transfer), m_write(std::move(write))
 {
 	// Whatever the transfer now: it can switch to files later.
