@@ -237,9 +237,16 @@ struct LayerImage
 	/// An incomplete file (still rendering, or cut short): of m_chunks strips,
 	/// only m_chunksRead decoded; the rest are zero. Both 0 when complete.
 	int m_chunksRead = 0, m_chunks = 0;
+	/// Of m_chunksRead, those whose ZIP checksum fails (a bit flipped after
+	/// writing), read regardless: some of their values may be wrong.
+	int m_chunksDamaged = 0;
 	bool incomplete() const
 	{
 		return m_chunksRead < m_chunks;
+	}
+	bool damaged() const
+	{
+		return m_chunksDamaged > 0;
 	}
 
 	Box2i fitBounds() const // frame plus overscan, see ImageInfo

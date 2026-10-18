@@ -1006,6 +1006,16 @@ Element Browser::renderPreview()
 	{
 		lines.push_back(text("incomplete image") | color(Color::Yellow));
 	}
+	if(img && img->damaged())
+	{
+		lines.push_back(
+		    text(fmt::format("damaged image: {} chunk{} fail{} "
+		                     "their checksum",
+		                     img->m_chunksDamaged,
+		                     img->m_chunksDamaged == 1 ? "" : "s",
+		                     img->m_chunksDamaged == 1 ? "s" : "")) |
+		    color(Color::Yellow));
+	}
 	if(!(part.m_dataWindow == part.m_displayWindow))
 	{
 		lines.push_back(text(fmt::format("data window {}x{} @ [{}, {}]",

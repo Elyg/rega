@@ -249,6 +249,52 @@ TEST(ExrLoader, ReadsTheBucketsOfARenderStillGoing)
 	EXPECT_FLOAT_EQ(*img.at(2, 3, 10), 0.0f);
 }
 
+TEST(ExrLoader, ShowsABucketWhoseChecksumFails)
+{
+	// A bit flipped after writing, in tile (2, 1)'s Adler-32: OpenEXR refuses
+	// its zip data, whose deflate stream still gives every byte.
+	auto p = writeExr("flipped.exr", {"R", "G", "B"}, 20, 13, /*tiled=*/true);
+	std::string bytes = readBytes(p);
+	const size_t table = offsetTable(bytes, 6);
+	ASSERT_GT(table, 0u);
+	uint64_t tile;
+	std::memcpy(&tile, bytes.data() + table + 5 * 8, 8);
+	int32_t size;
+	std::memcpy(&size, bytes.data() + tile + 16, 4);
+	ASSERT_LT(size, 4 * 5 * 3 * 4); // zipped, not stored
+	bytes[tile + 20 + size - 1] ^= 1;
+	writeBytes(p, bytes);
+	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	EXPECT_FALSE(img.incomplete());
+	EXPECT_TRUE(img.damaged());
+	EXPECT_EQ(img.m_chunksDamaged, 1);
+	EXPECT_FLOAT_EQ(*img.at(1, 16, 8), pattern(1, 16, 8));
+	EXPECT_FLOAT_EQ(*img.at(2, 19, 12), pattern(2, 19, 12));
+	EXPECT_FLOAT_EQ(*img.at(0, 15, 12), pattern(0, 15, 12)); // tile (1, 1)
+}
+
+TEST(ExrLoader, ShowsAStripWhoseChecksumFails)
+{
+	// 40 lines of ZIP are three 16-line chunks; the middle one's checksum
+	// is off.
+	auto p = writeExr("flipped-strip.exr", {"R", "G", "B"}, 8, 40);
+	std::string bytes = readBytes(p);
+	const size_t table = offsetTable(bytes, 3);
+	ASSERT_GT(table, 0u);
+	uint64_t chunk;
+	std::memcpy(&chunk, bytes.data() + table + 8, 8);
+	int32_t size;
+	std::memcpy(&size, bytes.data() + chunk + 4, 4);
+	ASSERT_LT(size, 8 * 16 * 3 * 4);
+	bytes[chunk + 8 + size - 1] ^= 1;
+	writeBytes(p, bytes);
+	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	EXPECT_FALSE(img.incomplete());
+	EXPECT_EQ(img.m_chunksDamaged, 1);
+	EXPECT_FLOAT_EQ(*img.at(2, 7, 16), pattern(2, 7, 16));
+	EXPECT_FLOAT_EQ(*img.at(0, 0, 31), pattern(0, 0, 31));
+}
+
 TEST(ExrLoader, MultiPart)
 {
 	fs::path p = tmpDir() / "multipart.exr";

@@ -880,6 +880,10 @@ void Viewer::markIncomplete(OverlayText& over, const LayerImagePtr& img)
 	{
 		over[static_cast<int>(Slot::TR)].push_back({{"incomplete image"}});
 	}
+	if(img && img->damaged())
+	{
+		over[static_cast<int>(Slot::TR)].push_back({{"damaged image"}});
+	}
 }
 
 void Viewer::addLabels(OverlayText& over,

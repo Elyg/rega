@@ -2,6 +2,7 @@
 
 #include <spdlog/fmt/fmt.h>
 #include <spdlog/fmt/ranges.h>
+#include <spdlog/spdlog.h>
 
 #include <ImfBoxAttribute.h>
 #include <ImfChannelList.h>
@@ -30,8 +31,10 @@
 #include <ImfTimeCodeAttribute.h>
 #include <ImfVecAttribute.h>
 #include <algorithm>
+#include <libdeflate.h>
 #include <map>
 #include <mutex>
+#include <openexr.h>
 #include <thread>
 
 namespace rv
@@ -322,10 +325,248 @@ void collectLayers(const Imf::Header& h,
 	}
 }
 
+/// A ZIP / ZIPS chunk inflated without checking its Adler-32. A bit flipped
+/// after writing (a disk, a network copy) fails that check, and OpenEXR 3.4
+/// drops the whole chunk where older readers (RV's) show it. The deflate
+/// stream must still give exactly the chunk's bytes. Then undoes what the
+/// writer did before deflating, as OpenEXR's internal_exr_undo_zip: bytes
+/// delta-coded, then split into two halves.
+exr_result_t unzipIgnoringChecksum(exr_decode_pipeline_t* d)
+{
+	const size_t packed = d->chunk.packed_size;
+	const size_t size = d->chunk.unpacked_size;
+	if(packed == size)
+	{
+		return EXR_ERR_SUCCESS; // stored as is: unpacked_buffer is the data
+	}
+	if(packed < 2)
+	{
+		return EXR_ERR_CORRUPT_CHUNK;
+	}
+	struct Decompressor
+	{
+		libdeflate_decompressor* m_d = libdeflate_alloc_decompressor();
+		~Decompressor()
+		{
+			libdeflate_free_decompressor(m_d);
+		}
+	};
+	thread_local Decompressor dec;
+	if(!dec.m_d)
+	{
+		return EXR_ERR_OUT_OF_MEMORY;
+	}
+	std::vector<uint8_t> raw(size);
+	size_t in = 0, out = 0;
+	// Raw deflate past the 2-byte zlib header: the checksum after the
+	// stream is never read.
+	const auto res =
+	    libdeflate_deflate_decompress_ex(dec.m_d,
+	                                     static_cast<const uint8_t*>(
+	                                         d->packed_buffer) +
+	                                         2,
+	                                     packed - 2,
+	                                     raw.data(),
+	                                     size,
+	                                     &in,
+	                                     &out);
+	if(res != LIBDEFLATE_SUCCESS || out != size)
+	{
+		const auto* label =
+		    static_cast<const std::string*>(d->decoding_user_data);
+		spdlog::warn("{}: {}; not shown",
+		             label ? *label : fmt::format("zip chunk {}", d->chunk.idx),
+		             res == LIBDEFLATE_SUCCESS
+		                 ? fmt::format("inflates to {} of {} bytes", out, size)
+		             : res == LIBDEFLATE_INSUFFICIENT_SPACE
+		                 ? fmt::format("inflates to more than {} bytes", size)
+		                 : std::string("its deflate data is broken"));
+		return EXR_ERR_CORRUPT_CHUNK;
+	}
+	for(size_t i = 1; i < size; ++i)
+	{
+		raw[i] = static_cast<uint8_t>(raw[i - 1] + raw[i] - 128);
+	}
+	auto* dst = static_cast<uint8_t*>(d->unpacked_buffer);
+	const size_t second = (size + 1) / 2;
+	for(size_t i = 0; i < size; ++i)
+	{
+		dst[i] = raw[i % 2 ? second + i / 2 : i / 2];
+	}
+	d->bytes_decompressed = size;
+	return EXR_ERR_SUCCESS;
+}
+
+/// Reads again, through OpenEXR's core API with unzipIgnoringChecksum, the
+/// chunks the C++ API refused, into `img`'s planes. Only ZIP / ZIPS: other
+/// codecs have no checksum to skip. Opens the file when first needed.
+class Salvage
+{
+public:
+	Salvage(std::string path, int part, const LayerInfo& l, LayerImage& img)
+	    : m_path(std::move(path)), m_part(part), m_layer(l), m_img(img)
+	{
+	}
+	~Salvage()
+	{
+		if(m_ctx)
+		{
+			exr_finish(&m_ctx);
+		}
+	}
+	Salvage(const Salvage&) = delete;
+	Salvage& operator=(const Salvage&) = delete;
+
+	/// Full-resolution tile (tx, ty), its first pixel at (x, y).
+	bool tile(int tx, int ty, int x, int y)
+	{
+		const std::string what = fmt::format("tile ({}, {})", tx, ty);
+		exr_chunk_info_t ci;
+		return open() &&
+		       check(exr_read_tile_chunk_info(m_ctx, m_part, tx, ty, 0, 0, &ci),
+		             what,
+		             "no chunk") &&
+		       decode(ci, x, y, what) && damaged(what);
+	}
+	/// The strip of scanlines starting at `y`.
+	bool strip(int y)
+	{
+		const std::string what = fmt::format("scanlines from {}", y);
+		exr_chunk_info_t ci;
+		return open() &&
+		       check(exr_read_scanline_chunk_info(m_ctx, m_part, y, &ci),
+		             what,
+		             "no chunk") &&
+		       decode(ci, m_img.m_dataWindow.m_x0, y, what) && damaged(what);
+	}
+
+private:
+	bool open()
+	{
+		if(m_ctx || m_failed)
+		{
+			return m_ctx != nullptr;
+		}
+		exr_context_initializer_t init = EXR_DEFAULT_CONTEXT_INITIALIZER;
+		// Its default prints to stderr, under the TUI.
+		init.error_handler_fn =
+		    [](exr_const_context_t, exr_result_t, const char*) {};
+		exr_compression_t comp = EXR_COMPRESSION_LAST_TYPE;
+		m_failed =
+		    !check(exr_start_read(&m_ctx, m_path.c_str(), &init),
+		           "salvage",
+		           "cannot open") ||
+		    !check(exr_get_compression(m_ctx, m_part, &comp),
+		           "salvage",
+		           "no compression") ||
+		    (comp != EXR_COMPRESSION_ZIP && comp != EXR_COMPRESSION_ZIPS);
+		if(m_failed && comp != EXR_COMPRESSION_LAST_TYPE)
+		{
+			spdlog::debug("{}: salvage: compression {} is not zip, nothing to "
+			              "salvage",
+			              m_path,
+			              static_cast<int>(comp));
+		}
+		if(m_failed && m_ctx)
+		{
+			exr_finish(&m_ctx);
+			m_ctx = nullptr;
+		}
+		return m_ctx != nullptr;
+	}
+
+	/// The chunk `ci` into the layer's planes, its first pixel at (x, y).
+	bool
+	decode(const exr_chunk_info_t& ci, int x, int y, const std::string& what)
+	{
+		spdlog::debug("{}: {}: {} bytes packed, {} unpacked, {}x{} at {}, {}",
+		              m_path,
+		              what,
+		              ci.packed_size,
+		              ci.unpacked_size,
+		              ci.width,
+		              ci.height,
+		              x,
+		              y);
+		exr_decode_pipeline_t d = EXR_DECODE_PIPELINE_INITIALIZER;
+		if(!check(exr_decoding_initialize(m_ctx, m_part, &ci, &d),
+		          what,
+		          "decode setup"))
+		{
+			return false;
+		}
+		const auto& names = m_layer.m_channels;
+		for(int i = 0; i < d.channel_count; ++i)
+		{
+			exr_coding_channel_info_t& ch = d.channels[i];
+			auto it = std::find(names.begin(), names.end(), ch.channel_name);
+			if(it == names.end() || ch.x_samples != 1 || ch.y_samples != 1)
+			{
+				continue; // no pointer: skipped
+			}
+			Plane& p = m_img.m_planes[it - names.begin()];
+			const int px = p.isHalf() ? 2 : 4;
+			auto* base = p.isHalf() ? reinterpret_cast<uint8_t*>(p.halfData())
+			                        : reinterpret_cast<uint8_t*>(p.floatData());
+			ch.user_bytes_per_element = static_cast<int16_t>(px);
+			ch.user_data_type = p.isHalf() ? EXR_PIXEL_HALF : EXR_PIXEL_FLOAT;
+			ch.user_pixel_stride = px;
+			ch.user_line_stride = px * m_img.m_width;
+			ch.decode_to_ptr =
+			    base + (static_cast<size_t>(y - m_img.m_dataWindow.m_y0) *
+			                m_img.m_width +
+			            (x - m_img.m_dataWindow.m_x0)) *
+			               px;
+		}
+		bool ok = check(exr_decoding_choose_default_routines(m_ctx, m_part, &d),
+		                what,
+		                "decode routines");
+		if(ok)
+		{
+			const std::string label = m_path + ": " + what;
+			d.decoding_user_data = const_cast<std::string*>(&label);
+			d.decompress_fn = &unzipIgnoringChecksum;
+			ok = check(exr_decoding_run(m_ctx, m_part, &d), what, "decode");
+		}
+		exr_decoding_destroy(m_ctx, &d);
+		return ok;
+	}
+
+	/// True on success; else logs which step failed and why (debug).
+	bool check(exr_result_t rv, const std::string& what, const char* step) const
+	{
+		if(rv != EXR_ERR_SUCCESS)
+		{
+			spdlog::debug("{}: {}: {}: {}",
+			              m_path,
+			              what,
+			              step,
+			              exr_get_default_error_message(rv));
+		}
+		return rv == EXR_ERR_SUCCESS;
+	}
+
+	bool damaged(const std::string& what)
+	{
+		++m_img.m_chunksDamaged;
+		spdlog::warn("{}: {} fails its zip checksum; shown as it inflates",
+		             m_path,
+		             what);
+		return true;
+	}
+
+	std::string m_path;
+	int m_part;
+	const LayerInfo& m_layer;
+	LayerImage& m_img;
+	exr_context_t m_ctx = nullptr;
+	bool m_failed = false;
+};
+
 /// After a whole-image read failed: read again one chunk-high strip at a
 /// time, keeping the strips that decode. A render still being written, or a
 /// copy cut short, then shows what it has; one only just opened, nothing.
-void readWhatIsThere(Imf::InputPart& part, LayerImage& img)
+void readWhatIsThere(Imf::InputPart& part, Salvage& salvage, LayerImage& img)
 {
 	const Imf::Header& h = part.header();
 	const Imath::Box2i dw = h.dataWindow();
@@ -338,12 +579,22 @@ void readWhatIsThere(Imf::InputPart& part, LayerImage& img)
 			part.readPixels(y, std::min(y + lines - 1, dw.max.y));
 			++read;
 		}
-		catch(const std::exception&)
+		catch(const std::exception& e)
 		{
+			spdlog::debug("{}: scanlines from {}: {}",
+			              part.fileName(),
+			              y,
+			              e.what());
+			read += salvage.strip(y);
 		}
 	}
 	img.m_chunksRead = read;
 	img.m_chunks = total;
+	spdlog::info("{}: {} of {} chunks read, {} of them damaged",
+	             part.fileName(),
+	             read,
+	             total,
+	             img.m_chunksDamaged);
 }
 
 /// A tiled part's full-resolution level, tile by tile when the whole of it
@@ -353,6 +604,7 @@ void readWhatIsThere(Imf::InputPart& part, LayerImage& img)
 void readTiles(Imf::MultiPartInputFile& file,
                int part,
                const Imf::FrameBuffer& fb,
+               Salvage& salvage,
                LayerImage& img)
 {
 	Imf::TiledInputPart tiles(file, part);
@@ -361,10 +613,14 @@ void readTiles(Imf::MultiPartInputFile& file,
 	try
 	{
 		tiles.readTiles(0, nx - 1, 0, ny - 1, 0, 0);
+		spdlog::debug("{}: all {} tiles read", tiles.fileName(), nx * ny);
 		return;
 	}
-	catch(const std::exception&)
+	catch(const std::exception& e)
 	{
+		spdlog::debug("{}: whole level: {}; tile by tile",
+		              tiles.fileName(),
+		              e.what());
 	}
 	int read = 0;
 	for(int y = 0; y < ny; ++y)
@@ -376,13 +632,28 @@ void readTiles(Imf::MultiPartInputFile& file,
 				tiles.readTile(x, y, 0, 0);
 				++read;
 			}
-			catch(const std::exception&)
+			catch(const std::exception& e)
 			{
+				spdlog::debug("{}: tile ({}, {}): {}",
+				              tiles.fileName(),
+				              x,
+				              y,
+				              e.what());
+				const Imath::Box2i dw = tiles.header().dataWindow();
+				read += salvage.tile(x,
+				                     y,
+				                     dw.min.x + x * tiles.tileXSize(),
+				                     dw.min.y + y * tiles.tileYSize());
 			}
 		}
 	}
 	img.m_chunksRead = read;
 	img.m_chunks = nx * ny;
+	spdlog::info("{}: {} of {} tiles read, {} of them damaged",
+	             tiles.fileName(),
+	             read,
+	             img.m_chunks,
+	             img.m_chunksDamaged);
 }
 
 } // namespace
@@ -486,9 +757,21 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 			                           px,
 			                           px * img.m_width));
 		}
+		std::string comp;
+		Imf::getCompressionNameFromId(h.compression(), comp);
+		spdlog::debug("{}: layer '{}' of part {}: {}x{}, {}, {}, {} channels",
+		              info.m_path,
+		              l.label(),
+		              l.m_part,
+		              img.m_width,
+		              img.m_height,
+		              h.hasTileDescription() ? "tiled" : "scanline",
+		              comp,
+		              l.m_channels.size());
+		Salvage salvage(info.m_path, l.m_part, l, img);
 		if(h.hasTileDescription())
 		{
-			readTiles(file, l.m_part, fb, img);
+			readTiles(file, l.m_part, fb, salvage, img);
 			return img;
 		}
 		Imf::InputPart part(file, l.m_part);
@@ -496,10 +779,14 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 		try
 		{
 			part.readPixels(dw.min.y, dw.max.y);
+			spdlog::debug("{}: all scanlines read", info.m_path);
 		}
-		catch(const std::exception&)
+		catch(const std::exception& e)
 		{
-			readWhatIsThere(part, img);
+			spdlog::debug("{}: whole image: {}; strip by strip",
+			              info.m_path,
+			              e.what());
+			readWhatIsThere(part, salvage, img);
 		}
 		return img;
 	}

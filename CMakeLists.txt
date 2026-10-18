@@ -120,6 +120,7 @@ if(RVTUI_BUILD_TESTS)
         tests/test_file_watcher.cpp
         tests/test_image.cpp
         tests/test_line_editor.cpp
+        tests/test_log.cpp
         tests/test_panes.cpp
         tests/test_playbar.cpp
         tests/test_player.cpp

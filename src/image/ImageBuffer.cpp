@@ -149,6 +149,7 @@ LayerImage downsample(const LayerImage& src, int factor)
 	out.m_stats = src.m_stats;
 	out.m_chunksRead = src.m_chunksRead;
 	out.m_chunks = src.m_chunks;
+	out.m_chunksDamaged = src.m_chunksDamaged;
 	out.m_reduce = src.m_reduce * factor;
 	out.m_width = std::max(1, src.m_width / factor);
 	out.m_height = std::max(1, src.m_height / factor);
@@ -250,6 +251,7 @@ LayerImage diffLayers(const LayerImage& a, const LayerImage& b)
 	}
 	out.m_chunksRead = a.m_chunksRead + b.m_chunksRead;
 	out.m_chunks = a.m_chunks + b.m_chunks;
+	out.m_chunksDamaged = a.m_chunksDamaged + b.m_chunksDamaged;
 	scanLayer(out);
 	return out;
 }

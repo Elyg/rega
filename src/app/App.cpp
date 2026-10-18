@@ -630,6 +630,8 @@ bool App::onEvent(Event e)
 int runApp(const AppOptions& opts)
 {
 	log::redirectToFile();
+	// Outlives the screen: what libraries print while it runs goes to the log.
+	const log::StderrToLog stderrToLog;
 	auto screen = ScreenInteractive::Fullscreen();
 	// Placeholder cells encode the kitty image id in a 24-bit foreground
 	// colour, so FTXUI must never downgrade colours. Ghostty/kitty are
