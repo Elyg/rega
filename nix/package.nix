@@ -68,7 +68,6 @@ let
         "jbig"
         "lerc"
         "libdeflate"
-        "tiff-docs"
         "tiff-tests"
       ];
   });
