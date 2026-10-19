@@ -1,6 +1,6 @@
 # rvtui
 
-Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), PNG and JPEG.
+Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG.
 Draws images with the kitty graphics protocol, or half-blocks on any terminal.
 
 ## Demo

@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 
 namespace rv
 {
@@ -16,15 +17,26 @@ std::string lowerExt(const std::filesystem::path& p)
 }
 } // namespace
 
+float srgbToLinear(float v)
+{
+	return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
+}
+
 bool isSupportedImage(const std::filesystem::path& p)
 {
 	auto e = lowerExt(p);
-	return e == ".exr" || e == ".png" || e == ".jpg" || e == ".jpeg";
+	return e == ".exr" || e == ".png" || e == ".jpg" || e == ".jpeg" ||
+	       e == ".tif" || e == ".tiff";
 }
 
 ImageInfo probeImage(const std::filesystem::path& p)
 {
-	return lowerExt(p) == ".exr" ? probeExr(p) : probeStb(p);
+	const auto e = lowerExt(p);
+	if(e == ".exr")
+	{
+		return probeExr(p);
+	}
+	return e == ".tif" || e == ".tiff" ? probeTiff(p) : probeStb(p);
 }
 
 LayerImage loadLayer(const ImageInfo& info, int layerIndex)
@@ -33,8 +45,9 @@ LayerImage loadLayer(const ImageInfo& info, int layerIndex)
 	{
 		throw LoadError("layer index out of range");
 	}
-	LayerImage img = info.m_format == "exr" ? loadExrLayer(info, layerIndex)
-	                                        : loadStbLayer(info, layerIndex);
+	LayerImage img = info.m_format == "exr"    ? loadExrLayer(info, layerIndex)
+	                 : info.m_format == "tiff" ? loadTiffLayer(info, layerIndex)
+	                                           : loadStbLayer(info, layerIndex);
 	scanLayer(img);
 	return img;
 }

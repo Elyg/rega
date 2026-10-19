@@ -8,6 +8,7 @@
   spdlog,
   openexr,
   stb,
+  libtiff,
   zlib,
   libdeflate,
   cli11,
@@ -46,6 +47,29 @@ let
         "MZ_WZAES"
         "MZ_ICONV"
         "MZ_FETCH_LIBS"
+      ];
+  });
+
+  # TIFF textures and plates need only libtiff's built-in codecs and zlib. nixpkgs'
+  # libtiff also links jpeg, xz, zstd, webp and libdeflate, which the static build
+  # would compile from source; and its CMake config doesn't name its dependencies
+  # for a static link, so only ZLIB::ZLIB (found by rvtui anyway) can be among them.
+  tiffStatic = libtiff.overrideAttrs (old: {
+    doCheck = false;
+    propagatedBuildInputs = [ zlib ];
+    cmakeFlags =
+      old.cmakeFlags
+      ++ map (opt: lib.cmakeBool opt false) [
+        "jpeg"
+        "old-jpeg"
+        "lzma"
+        "zstd"
+        "webp"
+        "jbig"
+        "lerc"
+        "libdeflate"
+        "tiff-docs"
+        "tiff-tests"
       ];
   });
 
@@ -92,6 +116,7 @@ stdenv.mkDerivation {
     spdlog
     openexr
     stb
+    (if stdenv.hostPlatform.isStatic then tiffStatic else libtiff)
     zlib
     libdeflate
     cli11
@@ -108,7 +133,7 @@ stdenv.mkDerivation {
   doCheck = true;
 
   meta = {
-    description = "Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), PNG and JPEG";
+    description = "Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG";
     mainProgram = "rvtui";
     platforms = lib.platforms.unix;
   };

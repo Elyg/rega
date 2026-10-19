@@ -52,7 +52,7 @@ struct Box2i
 };
 
 /// One displayable group of channels: an EXR layer within a part ("" = the root
-/// RGBA channels), or the whole image for PNG/JPEG.
+/// RGBA channels), the whole image for PNG/JPEG, or one TIFF page.
 struct LayerInfo
 {
 	int m_part = 0;
@@ -76,7 +76,7 @@ struct Attribute
 	std::string m_value;
 };
 
-/// One EXR part's header; PNG/JPEG have one part.
+/// One EXR part's or TIFF page's header; PNG/JPEG have one part.
 struct PartInfo
 {
 	std::string m_name;
@@ -92,9 +92,9 @@ struct PartInfo
 struct ImageInfo
 {
 	std::string m_path;
-	std::string m_format; ///< "exr" | "png" | "jpeg"
+	std::string m_format; ///< "exr" | "png" | "jpeg" | "tiff"
 	bool m_displayReferred =
-	    false; ///< LDR formats: decoded with sRGB EOTF to linear
+	    false; ///< integer formats: decoded with sRGB EOTF to linear
 	std::vector<PartInfo> m_parts;
 	std::vector<LayerInfo> m_layers;
 	std::optional<double> m_fps;

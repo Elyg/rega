@@ -21,7 +21,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <memory>
 #include <thread>
+#include <tiffio.h>
 
 namespace fs = std::filesystem;
 
@@ -662,6 +664,211 @@ TEST(StbLoader, PngRoundTripsThroughSrgbView)
 		float back = rv::applyDisplay(*img.at(c, 2, 1), d) * 255.0f;
 		EXPECT_NEAR(back, px[(1 * w + 2) * 4 + c], 0.51f);
 	}
+}
+
+namespace
+{
+
+// A TIFF open for writing, closed (and its last page written) on scope exit.
+std::unique_ptr<TIFF, void (*)(TIFF*)> tiffWriter(const fs::path& p)
+{
+	return {TIFFOpen(p.string().c_str(), "w"), TIFFClose};
+}
+
+} // namespace
+
+TEST(TiffLoader, Rgba16StripsLinearisedLikePng)
+{
+	const int w = 3, h = 2;
+	uint16_t px[w * h * 4];
+	for(int i = 0; i < w * h * 4; ++i)
+	{
+		px[i] = static_cast<uint16_t>(i * 2700);
+	}
+	const fs::path p = tmpDir() / "rgba16.TIF";
+	{
+		auto tif = tiffWriter(p);
+		ASSERT_TRUE(tif);
+		TIFFSetField(tif.get(), TIFFTAG_IMAGEWIDTH, w);
+		TIFFSetField(tif.get(), TIFFTAG_IMAGELENGTH, h);
+		TIFFSetField(tif.get(), TIFFTAG_SAMPLESPERPIXEL, 4);
+		TIFFSetField(tif.get(), TIFFTAG_BITSPERSAMPLE, 16);
+		TIFFSetField(tif.get(), TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+		TIFFSetField(tif.get(), TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+		const uint16_t alpha = EXTRASAMPLE_UNASSALPHA;
+		TIFFSetField(tif.get(), TIFFTAG_EXTRASAMPLES, 1, &alpha);
+		TIFFSetField(tif.get(), TIFFTAG_COMPRESSION, COMPRESSION_LZW);
+		TIFFSetField(tif.get(), TIFFTAG_PREDICTOR, PREDICTOR_HORIZONTAL);
+		TIFFSetField(tif.get(), TIFFTAG_ROWSPERSTRIP, 1);
+		for(int y = 0; y < h; ++y)
+		{
+			ASSERT_EQ(TIFFWriteScanline(tif.get(), &px[y * w * 4], y), 1);
+		}
+	}
+	ASSERT_TRUE(rv::isSupportedImage(p));
+	const auto info = rv::probeImage(p);
+	EXPECT_EQ(info.m_format, "tiff");
+	EXPECT_TRUE(info.m_displayReferred);
+	ASSERT_EQ(info.m_layers.size(), 1u);
+	EXPECT_EQ(info.m_layers[0].label(), "rgba");
+	ASSERT_EQ(info.m_layers[0].m_channels,
+	          (std::vector<std::string>{"R", "G", "B", "A"}));
+	EXPECT_EQ(info.m_layers[0].m_types[0], "uint16");
+	EXPECT_EQ(info.m_parts[0].m_compression, "lzw");
+
+	const auto img = rv::loadLayer(info, 0);
+	EXPECT_EQ(img.m_width, w);
+	EXPECT_FLOAT_EQ(*img.at(3, 1, 0), px[7] / 65535.0f); // alpha stays linear
+	rv::DisplayParams d;
+	for(int c = 0; c < 3; ++c)
+	{
+		const float back = rv::applyDisplay(*img.at(c, 2, 1), d);
+		EXPECT_NEAR(back, px[(1 * w + 2) * 4 + c] / 65535.0f, 0.002f);
+	}
+}
+
+TEST(TiffLoader, FloatTilesHalfStripsAndAThumbnailPage)
+{
+	const fs::path p = tmpDir() / "pages.tiff";
+	const int tw = 20, th = 18; // not a whole number of 16x16 tiles
+	const int sw = 5, sh = 3;
+	auto halfValue = [](int x, int y, int c)
+	{ return (x + y * sw) / 8.0f + c; };
+	{
+		auto tif = tiffWriter(p);
+		ASSERT_TRUE(tif);
+		// Page 1: float RGB, tiled, one plane per channel, deflate.
+		TIFF* t = tif.get();
+		TIFFSetField(t, TIFFTAG_IMAGEWIDTH, tw);
+		TIFFSetField(t, TIFFTAG_IMAGELENGTH, th);
+		TIFFSetField(t, TIFFTAG_SAMPLESPERPIXEL, 3);
+		TIFFSetField(t, TIFFTAG_BITSPERSAMPLE, 32);
+		TIFFSetField(t, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
+		TIFFSetField(t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_RGB);
+		TIFFSetField(t, TIFFTAG_PLANARCONFIG, PLANARCONFIG_SEPARATE);
+		TIFFSetField(t, TIFFTAG_COMPRESSION, COMPRESSION_ADOBE_DEFLATE);
+		TIFFSetField(t, TIFFTAG_TILEWIDTH, 16);
+		TIFFSetField(t, TIFFTAG_TILELENGTH, 16);
+		std::vector<float> tile(16 * 16);
+		for(int c = 0; c < 3; ++c)
+		{
+			for(int y0 = 0; y0 < th; y0 += 16)
+			{
+				for(int x0 = 0; x0 < tw; x0 += 16)
+				{
+					for(int i = 0; i < 16 * 16; ++i)
+					{
+						tile[i] = pattern(c, x0 + i % 16, y0 + i / 16);
+					}
+					ASSERT_GE(TIFFWriteTile(t, tile.data(), x0, y0, 0, c), 0);
+				}
+			}
+		}
+		ASSERT_TRUE(TIFFWriteDirectory(t));
+
+		// Page 2: half grey plus an unspecified extra sample (alpha), named.
+		TIFFSetField(t, TIFFTAG_IMAGEWIDTH, sw);
+		TIFFSetField(t, TIFFTAG_IMAGELENGTH, sh);
+		TIFFSetField(t, TIFFTAG_SAMPLESPERPIXEL, 2);
+		TIFFSetField(t, TIFFTAG_BITSPERSAMPLE, 16);
+		TIFFSetField(t, TIFFTAG_SAMPLEFORMAT, SAMPLEFORMAT_IEEEFP);
+		TIFFSetField(t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+		TIFFSetField(t, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+		const uint16_t extra = EXTRASAMPLE_UNSPECIFIED;
+		TIFFSetField(t, TIFFTAG_EXTRASAMPLES, 1, &extra);
+		TIFFSetField(t, TIFFTAG_ROWSPERSTRIP, 2);
+		TIFFSetField(t, TIFFTAG_PAGENAME, "matte");
+		for(int y = 0; y < sh; ++y)
+		{
+			std::vector<uint16_t> row;
+			for(int x = 0; x < sw; ++x)
+			{
+				row.push_back(imath_float_to_half(halfValue(x, y, 0)));
+				row.push_back(imath_float_to_half(halfValue(x, y, 1)));
+			}
+			ASSERT_EQ(TIFFWriteScanline(t, row.data(), y), 1);
+		}
+		ASSERT_TRUE(TIFFWriteDirectory(t));
+
+		// Page 3: an 8-bit preview, kept out of the layers.
+		TIFFSetField(t, TIFFTAG_SUBFILETYPE, FILETYPE_REDUCEDIMAGE);
+		TIFFSetField(t, TIFFTAG_IMAGEWIDTH, 2);
+		TIFFSetField(t, TIFFTAG_IMAGELENGTH, 1);
+		TIFFSetField(t, TIFFTAG_SAMPLESPERPIXEL, 1);
+		TIFFSetField(t, TIFFTAG_BITSPERSAMPLE, 8);
+		TIFFSetField(t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISBLACK);
+		const uint8_t grey[2] = {0, 255};
+		ASSERT_EQ(TIFFWriteScanline(t, const_cast<uint8_t*>(grey), 0), 1);
+	}
+
+	const auto info = rv::probeImage(p);
+	EXPECT_FALSE(info.m_displayReferred);
+	ASSERT_EQ(info.m_parts.size(), 3u);
+	ASSERT_EQ(info.m_layers.size(), 2u);
+	EXPECT_EQ(info.m_layers[0].label(), "page1");
+	EXPECT_EQ(info.m_layers[1].label(), "matte");
+	EXPECT_EQ(info.findLayer("matte"), 1);
+	EXPECT_TRUE(info.m_parts[0].m_tiled);
+	EXPECT_EQ(info.m_layers[0].m_types,
+	          (std::vector<std::string>{"float", "float", "float"}));
+	ASSERT_EQ(info.m_layers[1].m_channels,
+	          (std::vector<std::string>{"Y", "A"}));
+	EXPECT_EQ(info.m_layers[1].m_types[0], "half");
+
+	const auto rgb = rv::loadLayer(info, 0);
+	ASSERT_EQ(rgb.m_planes.size(), 3u);
+	EXPECT_FALSE(rgb.incomplete());
+	for(int c = 0; c < 3; ++c)
+	{
+		for(auto [x, y] : {std::pair{0, 0}, {15, 15}, {16, 0}, {19, 17}})
+		{
+			EXPECT_EQ(*rgb.at(c, x, y), pattern(c, x, y)) << c << " " << x;
+		}
+	}
+	const auto matte = rv::loadLayer(info, 1);
+	EXPECT_EQ(matte.m_width, sw);
+	EXPECT_TRUE(matte.m_planes[0].isHalf());
+	EXPECT_EQ(*matte.at(0, 4, 2), halfValue(4, 2, 0)); // no sRGB for float
+	EXPECT_EQ(*matte.at(1, 3, 1), halfValue(3, 1, 1));
+}
+
+TEST(TiffLoader, PaletteReadThroughRgba)
+{
+	const fs::path p = tmpDir() / "palette.tif";
+	{
+		auto tif = tiffWriter(p);
+		ASSERT_TRUE(tif);
+		TIFF* t = tif.get();
+		TIFFSetField(t, TIFFTAG_IMAGEWIDTH, 2);
+		TIFFSetField(t, TIFFTAG_IMAGELENGTH, 1);
+		TIFFSetField(t, TIFFTAG_SAMPLESPERPIXEL, 1);
+		TIFFSetField(t, TIFFTAG_BITSPERSAMPLE, 8);
+		TIFFSetField(t, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_PALETTE);
+		std::vector<uint16_t> r(256, 0), g(256, 0), b(256, 0);
+		r[1] = 0xffff; // index 1: red
+		b[2] = 0xffff; // index 2: blue
+		TIFFSetField(t, TIFFTAG_COLORMAP, r.data(), g.data(), b.data());
+		uint8_t row[2] = {1, 2};
+		ASSERT_EQ(TIFFWriteScanline(t, row, 0), 1);
+	}
+	const auto info = rv::probeImage(p);
+	ASSERT_EQ(info.m_layers[0].m_channels,
+	          (std::vector<std::string>{"R", "G", "B"}));
+	const auto img = rv::loadLayer(info, 0);
+	EXPECT_FLOAT_EQ(*img.at(0, 0, 0), 1.0f);
+	EXPECT_FLOAT_EQ(*img.at(2, 0, 0), 0.0f);
+	EXPECT_FLOAT_EQ(*img.at(0, 1, 0), 0.0f);
+	EXPECT_FLOAT_EQ(*img.at(2, 1, 0), 1.0f);
+}
+
+TEST(TiffLoader, NotATiffThrowsQuietly)
+{
+	const fs::path p = tmpDir() / "bad.tiff";
+	std::ofstream(p) << "not a tiff at all";
+	testing::internal::CaptureStderr();
+	EXPECT_THROW(rv::probeImage(p), rv::LoadError);
+	// libtiff's default handlers print to stderr, under the TUI.
+	EXPECT_EQ(testing::internal::GetCapturedStderr(), "");
 }
 
 TEST(ImageService, ReloadsFileChangedOnDisk)

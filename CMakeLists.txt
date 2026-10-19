@@ -27,6 +27,7 @@ find_package(spdlog REQUIRED)
 find_package(OpenEXR REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(libdeflate REQUIRED)
+find_package(TIFF REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(OpenColorIO REQUIRED)
 find_package(Threads REQUIRED)
@@ -82,6 +83,7 @@ add_library(rvtui_core STATIC
     src/image/Render.cpp
     src/image/Sequence.cpp
     src/image/StbLoader.cpp
+    src/image/TiffLoader.cpp
     src/term/BitmapSlot.cpp
     src/term/Caps.cpp
     src/term/Doctor.cpp
@@ -96,7 +98,7 @@ add_library(rvtui_core STATIC
 target_include_directories(rvtui_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(rvtui_core PUBLIC
     ${RVTUI_FTXUI} spdlog::spdlog OpenEXR::OpenEXR OpenColorIO::OpenColorIO
-    stb::stb ZLIB::ZLIB
+    stb::stb TIFF::TIFF ZLIB::ZLIB
     ${RVTUI_LIBDEFLATE} Threads::Threads)
 
 add_executable(rvtui src/main.cpp)

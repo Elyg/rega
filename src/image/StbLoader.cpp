@@ -12,16 +12,9 @@
 namespace rv
 {
 
-namespace
-{
-// LDR files are display-referred sRGB; linearise so the pipeline (exposure
-// etc.) is uniform and the default sRGB view transform round-trips to the
-// original pixels.
-float srgbToLinear(float v)
-{
-	return v <= 0.04045f ? v / 12.92f : std::pow((v + 0.055f) / 1.055f, 2.4f);
-}
-} // namespace
+// LDR files are display-referred sRGB; linearised (srgbToLinear) so the
+// pipeline (exposure etc.) is uniform and the default sRGB view transform
+// round-trips to the original pixels.
 
 ImageInfo probeStb(const std::filesystem::path& p)
 {
