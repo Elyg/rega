@@ -1,5 +1,7 @@
 #include "image/Colour.h"
 
+#include "image/Loader.h"
+
 #include <OpenColorIO/OpenColorIO.h>
 #include <spdlog/spdlog.h>
 
@@ -17,24 +19,68 @@ namespace rv
 
 // --- ColourTransform ---
 
-ColourTransform::ColourTransform(bool logShaper, std::vector<float> lut)
-    : m_log(logShaper), m_lut(std::move(lut))
+namespace
+{
+
+// Linear [0, 1] → sRGB code, per pixel: a lookup (64K entries keep the steep
+// toe well under one 8-bit step, as Render's display table does).
+float srgbCode(float v)
+{
+	constexpr int N = 65536;
+	static const std::vector<float> TABLE = []
+	{
+		std::vector<float> t(N);
+		for(int i = 0; i < N; ++i)
+		{
+			const float x = static_cast<float>(i) / (N - 1);
+			t[i] = x <= 0.0031308f ? x * 12.92f
+			                       : 1.055f * std::pow(x, 1.0f / 2.4f) - 0.055f;
+		}
+		return t;
+	}();
+	if(!(v > 0.0f)) // also NaN
+	{
+		return 0.0f;
+	}
+	return v >= 1.0f ? 1.0f : TABLE[static_cast<int>(v * (N - 1) + 0.5f)];
+}
+
+} // namespace
+
+ColourTransform::ColourTransform(Shaper shaper, std::vector<float> lut)
+    : m_shaper(shaper), m_lut(std::move(lut))
 {
 }
 
 float ColourTransform::shaper(float v) const
 {
-	if(m_log)
+	switch(m_shaper)
 	{
-		const float stops = v > 0.0f ? std::log2(v) : LOG_LO;
-		return std::clamp((stops - LOG_LO) / (LOG_HI - LOG_LO), 0.0f, 1.0f);
+		case Shaper::LOG2:
+		{
+			const float stops = v > 0.0f ? std::log2(v) : LOG_LO;
+			return std::clamp((stops - LOG_LO) / (LOG_HI - LOG_LO), 0.0f, 1.0f);
+		}
+		case Shaper::SRGB:
+			return srgbCode(v);
+		case Shaper::LINEAR:
+			break;
 	}
 	return std::isfinite(v) ? std::clamp(v, 0.0f, 1.0f) : 0.0f;
 }
 
 float ColourTransform::unshaper(float t) const
 {
-	return m_log ? std::exp2(LOG_LO + t * (LOG_HI - LOG_LO)) : t;
+	switch(m_shaper)
+	{
+		case Shaper::LOG2:
+			return std::exp2(LOG_LO + t * (LOG_HI - LOG_LO));
+		case Shaper::SRGB:
+			return srgbToLinear(t);
+		case Shaper::LINEAR:
+			break;
+	}
+	return t;
 }
 
 void ColourTransform::apply(float& r, float& g, float& b) const
@@ -449,7 +495,8 @@ void ColourManager::setInput(const std::string& sourceKey,
 }
 
 ColourTransformPtr ColourManager::transformFor(const fs::path& path,
-                                               const std::string& sourceKey)
+                                               const std::string& sourceKey,
+                                               bool srgbDecoded)
 {
 	const auto& cfg = m_impl->m_config;
 	if(!cfg)
@@ -457,7 +504,8 @@ ColourTransformPtr ColourManager::transformFor(const fs::path& path,
 		return nullptr;
 	}
 	const std::string input = inputFor(path, sourceKey);
-	if(auto it = m_transforms.find(input); it != m_transforms.end())
+	const std::pair key{input, srgbDecoded};
+	if(auto it = m_transforms.find(key); it != m_transforms.end())
 	{
 		return it->second;
 	}
@@ -477,15 +525,23 @@ ColourTransformPtr ColourManager::transformFor(const fs::path& path,
 		}
 		auto cpu = pipeline->getProcessor(cfg, cfg->getCurrentContext())
 		               ->getOptimizedCPUProcessor(OCIO::OPTIMIZATION_DEFAULT);
-		// Scene-linear input spans many stops: sample it in log2.
-		const bool log =
-		    cfg->isColorSpaceLinear(input.c_str(), OCIO::REFERENCE_SPACE_SCENE);
-		ColourTransform shape(log, {});
+		// Scene-linear input spans many stops: sample it in log2. Pixels
+		// linearised from sRGB on load are sampled at their stored codes,
+		// which are what OCIO is given: the input space describes the file.
+		using Shaper = ColourTransform::Shaper;
+		const Shaper shaper =
+		    srgbDecoded ? Shaper::SRGB
+		    : cfg->isColorSpaceLinear(input.c_str(),
+		                              OCIO::REFERENCE_SPACE_SCENE)
+		        ? Shaper::LOG2
+		        : Shaper::LINEAR;
+		ColourTransform shape(shaper, {});
 		constexpr int N = ColourTransform::SIZE;
 		std::vector<float> axis(N);
 		for(int i = 0; i < N; ++i)
 		{
-			axis[i] = shape.unshaper(static_cast<float>(i) / (N - 1));
+			const float t = static_cast<float>(i) / (N - 1);
+			axis[i] = srgbDecoded ? t : shape.unshaper(t);
 		}
 		std::vector<float> lut(static_cast<size_t>(N) * N * N * 3);
 		size_t k = 0;
@@ -503,7 +559,7 @@ ColourTransformPtr ColourManager::transformFor(const fs::path& path,
 		}
 		OCIO::PackedImageDesc img(lut.data(), N * N, N, 3);
 		cpu->apply(img);
-		t = std::make_shared<const ColourTransform>(log, std::move(lut));
+		t = std::make_shared<const ColourTransform>(shaper, std::move(lut));
 	}
 	catch(const OCIO::Exception& e)
 	{
@@ -514,7 +570,7 @@ ColourTransformPtr ColourManager::transformFor(const fs::path& path,
 		             m_view,
 		             e.what());
 	}
-	m_transforms[input] = t;
+	m_transforms[key] = t;
 	return t;
 }
 

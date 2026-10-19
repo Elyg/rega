@@ -1,5 +1,6 @@
 #include "TestContext.h"
 #include "image/Colour.h"
+#include "image/Loader.h"
 
 #include <OpenColorIO/OpenColorIO.h>
 #include <gtest/gtest.h>
@@ -49,7 +50,7 @@ TEST(Colour, NoConfigMeansNoTransform)
 	m.loadDefault();
 	EXPECT_FALSE(m.active());
 	EXPECT_EQ(m.configLabel(), "none (sRGB)");
-	EXPECT_EQ(m.transformFor("/x/a.exr", "a"), nullptr);
+	EXPECT_EQ(m.transformFor("/x/a.exr", "a", false), nullptr);
 	EXPECT_EQ(m.configChoices().back().m_id, "");
 }
 
@@ -95,13 +96,13 @@ TEST(Colour, BakedLutMatchesOcio)
 	ASSERT_TRUE(m.useConfig(ColourManager::STUDIO)) << m.error();
 	m.setInput("a", "ACEScg");
 	const auto t0 = std::chrono::steady_clock::now();
-	const ColourTransformPtr lut = m.transformFor("/x/a.exr", "a");
+	const ColourTransformPtr lut = m.transformFor("/x/a.exr", "a", false);
 	const auto ms = std::chrono::duration<double, std::milli>(
 	                    std::chrono::steady_clock::now() - t0)
 	                    .count();
 	ASSERT_NE(lut, nullptr) << m.error();
 	RecordProperty("bake_ms", static_cast<int>(ms));
-	EXPECT_EQ(m.transformFor("/x/b.exr", "a"), lut); // cached per input
+	EXPECT_EQ(m.transformFor("/x/b.exr", "a", false), lut); // cached per input
 
 	// The same transform, exact, per pixel.
 	auto config = OCIO::Config::CreateFromFile(ColourManager::STUDIO);
@@ -123,6 +124,47 @@ TEST(Colour, BakedLutMatchesOcio)
 		float exact[3] = {s[0], s[1], s[2]};
 		cpu->applyRGB(exact);
 		float r = s[0], g = s[1], b = s[2];
+		lut->apply(r, g, b);
+		const float got[3] = {r, g, b};
+		for(int c = 0; c < 3; ++c)
+		{
+			EXPECT_NEAR(got[c], std::clamp(exact[c], 0.0f, 1.0f), 2.0f / 255)
+			    << s[0] << "," << s[1] << "," << s[2] << " channel " << c;
+		}
+	}
+}
+
+TEST(Colour, SrgbDecodedPixelsReachOcioAsTheirCodes)
+{
+	NoOcioEnv env;
+	ColourManager m;
+	ASSERT_TRUE(m.useConfig(ColourManager::STUDIO)) << m.error();
+	// A PNG / 8-bit TIFF: the file rules call it sRGB-encoded, and the loader
+	// has already linearised its codes. OCIO must decode them once, not twice.
+	const std::string input = m.fileRuleFor("/x/a.png");
+	ASSERT_FALSE(input.empty());
+	const ColourTransformPtr lut = m.transformFor("/x/a.png", "a", true);
+	ASSERT_NE(lut, nullptr) << m.error();
+	EXPECT_NE(m.transformFor("/x/a.png", "a", false), lut);
+
+	auto config = OCIO::Config::CreateFromFile(ColourManager::STUDIO);
+	auto dvt = OCIO::DisplayViewTransform::Create();
+	dvt->setSrc(input.c_str());
+	dvt->setDisplay(m.display().c_str());
+	dvt->setView(m.view().c_str());
+	auto cpu = config->getProcessor(dvt)->getDefaultCPUProcessor();
+	const float codes[][3] = {{0, 0, 0},
+	                          {0.02f, 0.02f, 0.02f},
+	                          {0.5f, 0.5f, 0.93f},
+	                          {0.47f, 0.55f, 1},
+	                          {1, 1, 1},
+	                          {0.8f, 0.3f, 0.1f}};
+	for(const auto& s : codes)
+	{
+		float exact[3] = {s[0], s[1], s[2]};
+		cpu->applyRGB(exact);
+		float r = srgbToLinear(s[0]), g = srgbToLinear(s[1]),
+		      b = srgbToLinear(s[2]);
 		lut->apply(r, g, b);
 		const float got[3] = {r, g, b};
 		for(int c = 0; c < 3; ++c)

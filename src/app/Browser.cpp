@@ -1059,7 +1059,9 @@ Element Browser::renderPreview()
 
 	// The viewer's colour management (OCIO view), at default exposure.
 	DisplayParams disp;
-	disp.m_ocio = m_ctx.m_colour.transformFor(p, sourceKey(Source{*e}));
+	disp.m_ocio = m_ctx.m_colour.transformFor(p,
+	                                          sourceKey(Source{*e}),
+	                                          info->m_displayReferred);
 	const auto err = img ? std::nullopt : m_ctx.m_svc.error(p);
 	Element image =
 	    img   ? m_previewSlot->element(img, ViewParams{}, disp)

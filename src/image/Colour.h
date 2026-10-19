@@ -14,8 +14,8 @@ namespace rv
 /// An OCIO display transform (input colour space → display / view, plus a
 /// look) baked into a 3D LUT, so a frame costs a lookup per pixel whatever
 /// the transform (an ACES 2.0 view per pixel on the CPU is too slow to
-/// play). Scene-linear input goes through a log2 shaper first. Immutable:
-/// safe from any thread.
+/// play). A shaper spreads the input over the LUT's axes. Immutable: safe
+/// from any thread.
 class ColourTransform
 {
 public:
@@ -24,8 +24,16 @@ public:
 	/// below 18% grey to well into the highlights.
 	static constexpr float LOG_LO = -12.5f, LOG_HI = 6.5f;
 
+	/// How input values map to LUT coordinates.
+	enum class Shaper
+	{
+		LINEAR, ///< [0, 1] as is: display-referred input
+		LOG2,   ///< scene-linear input, LOG_LO to LOG_HI stops
+		SRGB    ///< pixels decoded from sRGB on load: back to the stored code
+	};
+
 	/// `lut`: SIZE^3 RGB triples, red fastest, sampled at shaper() inverse.
-	ColourTransform(bool logShaper, std::vector<float> lut);
+	ColourTransform(Shaper shaper, std::vector<float> lut);
 
 	/// Display-referred RGB for scene (file) RGB, each in [0, 1].
 	void apply(float& r, float& g, float& b) const;
@@ -35,7 +43,7 @@ public:
 	float unshaper(float t) const;
 
 private:
-	bool m_log;
+	Shaper m_shaper;
 	std::vector<float> m_lut;
 };
 using ColourTransformPtr = std::shared_ptr<const ColourTransform>;
@@ -124,9 +132,12 @@ public:
 	              std::optional<std::string> colourSpace);
 
 	/// The transform for `path`; nullptr without a config (or when it
-	/// cannot be built: see error()).
+	/// cannot be built: see error()). `srgbDecoded`: its pixels were
+	/// linearised from sRGB codes on load (ImageInfo::m_displayReferred);
+	/// the input colour space then applies to those codes, not decoded twice.
 	ColourTransformPtr transformFor(const std::filesystem::path& path,
-	                                const std::string& sourceKey);
+	                                const std::string& sourceKey,
+	                                bool srgbDecoded);
 
 private:
 	struct Impl;
@@ -144,7 +155,8 @@ private:
 	/// Per config id: display, view, look.
 	std::map<std::string, std::vector<std::string>> m_remembered;
 	std::map<std::string, std::string> m_inputs; ///< source key → override
-	std::map<std::string, ColourTransformPtr> m_transforms; ///< by input cs
+	/// By input colour space and srgbDecoded.
+	std::map<std::pair<std::string, bool>, ColourTransformPtr> m_transforms;
 };
 
 } // namespace rv

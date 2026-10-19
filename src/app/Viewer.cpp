@@ -173,9 +173,11 @@ DisplayParams Viewer::displayFor(int source, const fs::path& path)
 	if(disp.m_srgb && source >= 0 &&
 	   source < static_cast<int>(m_state.m_sources.size()))
 	{
+		const ImageInfoPtr info = m_ctx.m_svc.info(path);
 		disp.m_ocio =
 		    m_ctx.m_colour.transformFor(path,
-		                                sourceKey(m_state.m_sources[source]));
+		                                sourceKey(m_state.m_sources[source]),
+		                                info && info->m_displayReferred);
 	}
 	return disp;
 }
