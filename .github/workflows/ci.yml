@@ -34,3 +34,5 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
       # Builds from nixpkgs deps and runs the unit tests (doCheck).
       - run: nix build .#default -L
+      - name: guide keys reference is current (just guide-keys)
+        run: ./result/bin/rvtui --help-keys | diff - docs/src/reference/keys.md

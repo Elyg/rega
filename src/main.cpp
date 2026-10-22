@@ -1,5 +1,6 @@
 #include "BuildInfo.h"
 #include "app/App.h"
+#include "app/HelpKeys.h"
 #include "app/Tutorial.h"
 #include "image/Loader.h"
 #include "image/Render.h"
@@ -142,12 +143,17 @@ int bench(const fs::path& path, int outW, int outH)
 
 int main(int argc, char** argv)
 {
-	CLI::App cli{"rvtui — terminal image browser/viewer for EXR, PNG and JPEG"};
+	CLI::App cli{
+	    "rvtui — terminal image browser/viewer for EXR, TIFF, PNG and JPEG"};
 	cli.set_version_flag("--version", RVTUI_VERSION);
 
 	std::vector<std::string> paths;
 	std::string benchPath;
 	cli.add_option("--bench", benchPath)->group(""); // hidden: stage timings
+	bool helpKeys = false; // hidden: the user guide's keys reference
+	cli.add_flag("--help-keys", helpKeys)->group("");
+	bool tutorialRender = false; // hidden: render the tutorial set, then exit
+	cli.add_flag("--tutorial-render", tutorialRender)->group("");
 	std::string dumpPath, graphics = "auto", transfer = "auto", chooserFile,
 	                      cwdFile;
 	auto* pathsOpt = cli.add_option(
@@ -178,10 +184,10 @@ int main(int argc, char** argv)
 	               "file (auto: in tmux, direct with a client attached over "
 	               "ssh, else file; outside it, direct over ssh, else shm)")
 	    ->check(CLI::IsMember({"auto", "direct", "shm", "file"}));
-	cli.add_option(
-	    "--chooser-file",
-	    chooserFile,
-	    "On open (Enter on a file / o), write chosen paths here and exit");
+	cli.add_option("--chooser-file",
+	               chooserFile,
+	               "Browser: o writes the marked paths (else the selected one) "
+	               "here and exits");
 	std::uint64_t cacheBytes = rv::ImageService::DEFAULT_BUDGET;
 	cli.add_option("--cache",
 	               cacheBytes,
@@ -228,6 +234,19 @@ int main(int argc, char** argv)
 		if(!dumpPath.empty())
 		{
 			return dump(dumpPath);
+		}
+		if(tutorialRender)
+		{
+			// For scripts (the guide's recorder): the set as --tutorial
+			// opens it, rendered only when missing or out of date.
+			rv::tutorial::ensure(rv::tutorial::defaultDir());
+			fmt::print("{}\n", rv::tutorial::defaultDir().string());
+			return 0;
+		}
+		if(helpKeys)
+		{
+			fmt::print("{}\n", rv::help::markdown());
+			return 0;
 		}
 		if(!benchPath.empty())
 		{

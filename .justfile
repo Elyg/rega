@@ -128,6 +128,27 @@ docs:
     RVTUI_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) doxygen Doxyfile
     @echo "build/docs/index.html"
 
+# User guide (mdBook in docs/): docs/book/index.html
+[group('docs')]
+guide:
+    mdbook build docs
+    @echo "docs/book/index.html"
+
+# User guide with live reload: http://localhost:3000
+[group('docs')]
+guide-serve:
+    mdbook serve docs --open
+
+# Regenerate the guide's keys reference from the help overlay's table
+[group('docs')]
+guide-keys: build
+    ./{{ build_dir }}/rvtui --help-keys > docs/src/reference/keys.md
+
+# Record the guide's clips on this Mac (Ghostty + quickrecord): `just guide-record [name…]`
+[group('docs')]
+guide-record *names: build
+    RVTUI_BIN={{ build_dir }}/rvtui ./scripts/guide-record.sh {{ names }}
+
 # --- package -----------------------------------------------------------------
 
 # Release tarball: dist/rvtui-<version>-<arch>.tar.gz (conan, Release)

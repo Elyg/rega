@@ -1,0 +1,26 @@
+[book]
+title = "rvtui"
+description = "User guide for rvtui, the terminal image browser/viewer for OpenEXR, TIFF, PNG and JPEG."
+authors = ["etitas"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+create-missing = false
+
+[output.html]
+default-theme = "ayu"
+preferred-dark-theme = "ayu"
+git-repository-url = "https://github.com/Elyg/rvtui"
+edit-url-template = "https://github.com/Elyg/rvtui/edit/main/docs/{path}"
+additional-css = ["theme/custom.css"]
+additional-js = ["theme/mermaid.min.js", "theme/mermaid-init.js"]
+
+[output.html.fold]
+enable = true
+level = 1
+
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"

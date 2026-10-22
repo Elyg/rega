@@ -402,3 +402,28 @@ TEST_F(BrowserTest, DDiffsTheMarkedOrOneMarkedWithTheOneHere)
 	EXPECT_EQ((*m_diffed)[0].m_name, "b.png"); // marked first: A
 	EXPECT_EQ((*m_diffed)[1].m_name, sequenceName());
 }
+
+TEST(Browser, CopyTextOfAFileAndASequence)
+{
+	rv::Entry file;
+	file.m_path = "/renders/v2/chart.exr";
+	file.m_name = "chart.exr";
+	EXPECT_EQ(rv::entryCopyText(file, 'c'), "/renders/v2/chart.exr");
+	EXPECT_EQ(rv::entryCopyText(file, 'd'), "/renders/v2");
+	EXPECT_EQ(rv::entryCopyText(file, 'f'), "chart.exr");
+	EXPECT_EQ(rv::entryCopyText(file, 'n'), "chart");
+
+	rv::Entry seq;
+	seq.m_kind = rv::Entry::Kind::SEQUENCE;
+	seq.m_path = "/renders/v2/shot.1001.exr";
+	seq.m_name = "shot.####.exr [1001-1100]";
+	EXPECT_EQ(rv::entryCopyText(seq, 'c'), "/renders/v2/shot.####.exr");
+	EXPECT_EQ(rv::entryCopyText(seq, 'f'), "shot.####.exr");
+	EXPECT_EQ(rv::entryCopyText(seq, 'n'), "shot.####");
+
+	rv::Entry dir;
+	dir.m_kind = rv::Entry::Kind::DIR;
+	dir.m_path = "/renders/v2.1";
+	dir.m_name = "v2.1";
+	EXPECT_EQ(rv::entryCopyText(dir, 'n'), "v2.1"); // a folder keeps its dots
+}

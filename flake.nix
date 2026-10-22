@@ -85,6 +85,15 @@
           doxygen # just docs
         ];
 
+        # The user guide (docs/): just guide, and the Pages workflow.
+        guideTools = with pkgs; [
+          mdbook
+          mdbook-mermaid
+        ];
+
+        # Day to day: also the guide, and ffmpeg for just guide-record.
+        devTools = tools ++ guideTools ++ [ pkgs.ffmpeg ];
+
         commonSetup = ''
           export SHELL_TYPE="host"
           export CONAN_HOME="''${CONAN_HOME:-$HOME/.conan2}"
@@ -111,11 +120,13 @@
           packages = tools ++ [ pkgs.gtest ];
         };
 
+        devShells.guide = pkgs.mkShellNoCC { packages = guideTools; };
+
         devShells.default =
           if pkgs.stdenv.hostPlatform.isDarwin then
             # On macOS build with Apple's clang (Xcode CLT) so binaries link against the system SDK.
             pkgs.mkShellNoCC {
-              packages = tools;
+              packages = devTools;
               shellHook = commonSetup + ''
                 export CC=/usr/bin/clang
                 export CXX=/usr/bin/clang++
@@ -124,7 +135,7 @@
             }
           else
             (pkgs.mkShell.override { stdenv = hostLlvm.stdenv; }) {
-              packages = tools;
+              packages = devTools;
               shellHook = commonSetup + ''
                 export CC=clang
                 export CXX=clang++

@@ -1,5 +1,6 @@
 #include "app/App.h"
 
+#include "app/HelpKeys.h"
 #include "image/Loader.h"
 #include "term/Kitty.h"
 #include "term/Output.h"
@@ -313,24 +314,46 @@ Element App::renderHelp()
 		                 size(WIDTH, EQUAL, 16),
 		             ui::highlighted(d, dpos, nothing)});
 	};
-	auto heading = [](const std::string& name)
-	{ return text(name) | bold | color(Color::Cyan); };
-	// Every row is also kept, under its section, for the search.
+	auto heading =
+	    [](const std::string& name, const std::vector<size_t>& pos = {})
+	{ return ui::highlighted(name, pos, nothing) | bold | color(Color::Cyan); };
+	// Every row is also kept, under its section, for the search: the
+	// heading it's drawn under, and its own section's title (a pane's name
+	// finds all of that pane's keys).
 	struct Entry
 	{
-		std::string m_section, m_key, m_text;
+		std::string m_section, m_title, m_key, m_text;
 	};
 	std::vector<Entry> entries;
+	// A column of sections (help::browser() / viewer(), the user guide's
+	// keys reference too), a blank line between them. A section without a
+	// heading searches under the one above it.
 	std::string current;
-	auto row = [&](const std::string& k, const std::string& d)
+	auto column = [&](const std::vector<help::Section>& sections, int col)
 	{
-		entries.push_back({current, k, d});
-		return line(k, d);
-	};
-	auto section = [&](const std::string& name)
-	{
-		current = name;
-		return heading(name);
+		Elements lines;
+		for(const help::Section& s : sections)
+		{
+			if(s.m_column != col)
+			{
+				continue;
+			}
+			if(!lines.empty())
+			{
+				lines.push_back(text(""));
+			}
+			if(s.m_heading)
+			{
+				current = s.m_title;
+				lines.push_back(heading(s.m_title));
+			}
+			for(const help::Row& r : s.m_rows)
+			{
+				entries.push_back({current, s.m_title, r.m_key, r.m_text});
+				lines.push_back(line(r.m_key, r.m_text));
+			}
+		}
+		return vbox(std::move(lines));
 	};
 	// Only the keys of the mode you are in.
 	std::string title;
@@ -338,93 +361,13 @@ Element App::renderHelp()
 	if(m_mode == Mode::BROWSER)
 	{
 		title = " rvtui browser keys ";
-		body = vbox({
-		    row("j/k ↑/↓", "move"),
-		    row("h/l ←/→", "parent / enter dir or view image"),
-		    row("gg / G", "top / bottom"),
-		    row("/", "fuzzy filter (Enter keep, Esc clear)"),
-		    row("e", "expand sequence into frames / collapse"),
-		    row(".", "toggle hidden files"),
-		    row("space", "mark (view marked together)"),
-		    row("a", "mark every image here (again: unmark)"),
-		    row("d", "diff the marked in pairs (one marked: with this)"),
-		    row("click", "select (double: open) / parent dir"),
-		    row("o", "choose → --chooser-file, quit"),
-		    row("q / Q", "quit"),
-		});
+		body = column(help::browser(), 0);
 	}
 	else
 	{
 		title = " rvtui viewer keys ";
-		Element left = vbox({
-		    section("Image"),
-		    row("[ / ]", "previous / next layer (AOV)"),
-		    row("n / p N", "next / previous image (marked files)"),
-		    row("", "diff: next / previous pair (A, B, |A - B|)"),
-		    row("+ / - / wheel", "zoom"),
-		    row("f / z", "fit / 1:1"),
-		    row("hjkl ←↓↑→ HJKL", "pan (shift = faster)"),
-		    row("right drag", "pan (middle button too)"),
-		    row("t", "tile: all layers, or all marked images"),
-		    row("  +- wheel hjkl", "tile: zoom / pan the sheet (f fit, z 1:1)"),
-		    row("click", "select tile / focus pane"),
-		    row("drag", "column edges: width; files title: height"),
-		    row("Enter (tile)", "open the selected tile"),
-		    row("T", "layer name on the image (tiles: each tile's)"),
-		    row("Ctrl+click", "pick colour"),
-		    row("", "[x, y] as in Nuke: from the bottom-left"),
-		    text(""),
-		    section("Sequence"),
-		    row("space", "play / pause"),
-		    row(", .  < >", "step frame / first, last"),
-		    row(":", "go to frame (file number, nearest)"),
-		    row("G", "missing frames: hold the nearest (timing) / skip"),
-		    row("I / O", "in / out point here (again: clear)"),
-		    row("", "playback loops in to out; , . < > stay inside"),
-		    row("left drag", "scrub (on the image or the playbar)"),
-		    row("playbar", "click: go to frame, wheel: step"),
-		    row("F", "cycle playback fps"),
-		    row("P", "playback: capped resolution (keeps up) / full res"),
-		});
-		Element right = vbox({
-		    section("Display"),
-		    row("c r g b a u", "colour / R / G / B / alpha / luma"),
-		    row("e / E", "exposure +/- 0.5 stop"),
-		    row("y / Y", "gamma +/- 0.1"),
-		    row("s", "view transform (sRGB / OCIO view) / raw"),
-		    row("w", "outlines (off): frame + data (dashed) / frame / off"),
-		    row("w (tile)", "selection / frame + selection / frame / off"),
-		    row("!", "paint NaN (magenta) / inf (cyan) pixels"),
-		    row("0", "reset exposure, gamma, channel"),
-		    row("A", "show / hide annotations"),
-		    text(""),
-		    section("Panes"),
-		    row("2 3 4 5 6", "metadata / files / inspector / layers / colour:"),
-		    row("m o/x i /", "the same, as letters"),
-		    row("", "open + focus; again while focused closes"),
-		    row("1", "focus the image"),
-		    row("Tab", "hide all panes / bring them back"),
-		    row("  j k  y  Y  x",
-		        "inspector: move, copy line / value, clear pick"),
-		    row("  wheel { }", "metadata: scroll"),
-		    row("  /  click", "metadata: filter (Esc clear) / move there"),
-		    row("  d", "metadata, diff tile: differences / both whole"),
-		    row("  drag C-click", "metadata: select rows (then y / Y)"),
-		    row("  J / K  d", "files: move down / up, drop"),
-		    row("  e", "files: sequence ⇄ its frames (up to 500)"),
-		    row("  l / h", "files: into a row's annotations / back"),
-		    row("  D D", "files: clear all annotations (in a row: its own)"),
-		    row("  a A Enter d",
-		        "annotations: add below / above, edit, delete"),
-		    row("  J / K  g / s", "annotations: reorder, to global / source"),
-		    row("  Tab ↑↓ C-n", "typing: next slot, history, [#key] / [#@key]"),
-		    row("  j k gg G", "metadata: move (Ctrl-d/u half page)"),
-		    row("  h/l  Enter", "colour: change the row / pick from a list"),
-		    row("  v  y  Y", "select lines / copy line / copy value"),
-		    text(""),
-		    row("q / Esc", "back to browser"),
-		    row("Q", "quit rvtui"),
-		});
+		Element left = column(help::viewer(), 0);
+		Element right = column(help::viewer(), 1);
 		// Two columns when they fit side by side, else one (scrollable).
 		constexpr int TWO_COLUMN_WIDTH = 118;
 		body = Terminal::Size().dimx >= TWO_COLUMN_WIDTH
@@ -433,8 +376,9 @@ Element App::renderHelp()
 	}
 	if(!m_helpQuery.empty())
 	{
-		// The rows whose key or text holds what was typed, one column,
-		// under their sections; a row's continuation ("" key) comes along.
+		// The rows whose key, text or section title holds what was typed,
+		// one column, under their sections; a row's continuation ("" key)
+		// comes along.
 		// In a box the size of the full list, so typing doesn't resize it.
 		body->ComputeRequirement();
 		const int fullW = body->requirement().min_x;
@@ -446,9 +390,13 @@ Element App::renderHelp()
 			const Entry& e = entries[i];
 			auto kpos = ui::findIgnoringCase(e.m_key, m_helpQuery);
 			auto dpos = ui::findIgnoringCase(e.m_text, m_helpQuery);
-			if(kpos.empty() && dpos.empty())
+			const bool inSection =
+			    !ui::findIgnoringCase(e.m_title, m_helpQuery).empty();
+			if((kpos.empty() && dpos.empty() && !inSection) ||
+			   (e.m_key.empty() && inSection && dpos.empty()))
 			{
-				continue;
+				continue; // (a continuation in a found section: its row brings
+				          // it)
 			}
 			if(!e.m_section.empty() && e.m_section != shownSection)
 			{
@@ -456,7 +404,9 @@ Element App::renderHelp()
 				{
 					found.push_back(text(""));
 				}
-				found.push_back(heading(e.m_section));
+				found.push_back(
+				    heading(e.m_section,
+				            ui::findIgnoringCase(e.m_section, m_helpQuery)));
 				shownSection = e.m_section;
 			}
 			found.push_back(line(e.m_key, e.m_text, kpos, dpos));

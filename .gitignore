@@ -13,3 +13,4 @@ demos/*/
 compile_commands.json
 .rvtui-config
 /agent/
+/docs/book/

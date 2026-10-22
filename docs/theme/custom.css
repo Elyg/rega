@@ -1,0 +1,14 @@
+/* Clips: full content width, black behind the frame until it loads. */
+.content video {
+    display: block;
+    width: 100%;
+    height: auto;
+    margin: 1em 0;
+    border-radius: 6px;
+    background: #000;
+}
+
+/* Key cells in the generated tables: keep "j/k ↑/↓" on one line. */
+.content table td:first-child code {
+    white-space: nowrap;
+}

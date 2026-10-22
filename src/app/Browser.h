@@ -21,6 +21,11 @@
 namespace rv
 {
 
+/// What `c` then `what` copies for one browser entry: `c` its path, `d` its
+/// folder, `f` its file name, `n` that name without the extension. A
+/// sequence is its frame pattern (`/renders/shot.####.exr`).
+std::string entryCopyText(const Entry& e, char what);
+
 /// The file browser: parent | current directory | preview, yazi style, with a
 /// fuzzy filter, marks across directories and sequences expandable into
 /// frames. Reports what to view through `onOpen`; knows nothing of the viewer.
@@ -140,6 +145,7 @@ private:
 	std::vector<Entry> m_marks;
 	std::set<std::string> m_expanded; ///< sequences shown as frames (keys)
 	bool m_pendingG = false;
+	bool m_pendingC = false; ///< `c` pressed: the next key says what to copy
 	ImageSlotPtr m_previewSlot;
 	struct TextPreview
 	{

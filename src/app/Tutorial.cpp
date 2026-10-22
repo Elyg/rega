@@ -36,10 +36,15 @@ namespace
 {
 
 // Bump when what write() produces changes: ensure() then renders again.
-constexpr int REVISION = 5;
+constexpr int REVISION = 10;
 constexpr const char* STAMP = ".rvtui-tutorial";
 constexpr int FPS = 24;
-constexpr int STILLS = 5;
+constexpr int STILLS = 6;
+// wip.####.exr, a render still being written: WIP_FRAMES frame numbers from
+// the first, these missing, and the last one only partly written.
+constexpr int WIP_FRAMES = 24;
+constexpr std::array<int, 4> WIP_MISSING = {5, 6, 7, 14};
+constexpr int WIP_FILES = WIP_FRAMES - int(WIP_MISSING.size());
 
 // --- writing -----------------------------------------------------------------
 
@@ -182,9 +187,9 @@ float hitFloor(V3 orig, V3 dir)
 	return t > 1e-4f ? t : FAR;
 }
 
-// Three spheres orbiting over a checkered floor under a light going round the
-// other way; `frame` of `count` is one full, seamless loop.
-std::vector<Channel> renderShot(int frame, int count, int w, int h)
+// The shot's three spheres at `frame` of `count` (one full, seamless loop),
+// orbiting over the floor: red, cyan, yellow.
+std::array<Sphere, 3> shotSpheres(int frame, int count)
 {
 	struct Orbit
 	{
@@ -207,14 +212,37 @@ std::vector<Channel> renderShot(int frame, int count, int w, int h)
 		              o.m_size,
 		              o.m_colour};
 	}
+	return spheres;
+}
+
+// The shot's camera: a ray per pixel of a w x h frame.
+struct ShotCamera
+{
+	V3 m_eye{0.0f, 2.2f, -6.0f};
+	V3 m_fwd = normalize(V3{0.0f, 0.5f, 0.0f} - m_eye);
+	V3 m_right = normalize(cross({0.0f, 1.0f, 0.0f}, m_fwd));
+	V3 m_up = cross(m_fwd, m_right);
+	float m_halfFov = std::tan(20.0f * std::numbers::pi_v<float> / 180);
+
+	V3 ray(float x, float y, int w, int h) const
+	{
+		const float sx = ((x + 0.5f) / w * 2 - 1) * m_halfFov * w / h;
+		const float sy = (1 - (y + 0.5f) / h * 2) * m_halfFov;
+		return normalize(m_fwd + m_right * sx + m_up * sy);
+	}
+};
+
+// Three spheres orbiting over a checkered floor under a light going round the
+// other way; `frame` of `count` is one full, seamless loop.
+std::vector<Channel> renderShot(int frame, int count, int w, int h)
+{
+	const std::array<Sphere, 3> spheres = shotSpheres(frame, count);
+	const float phase = 2 * std::numbers::pi_v<float> * frame / count;
 	const V3 light{4 * std::cos(-phase), 5.0f, 4 * std::sin(-phase)};
 	const V3 skyTop{0.20f, 0.35f, 0.75f}, skyHorizon{0.80f, 0.85f, 0.95f};
 
-	const V3 eye{0.0f, 2.2f, -6.0f};
-	const V3 fwd = normalize(V3{0.0f, 0.5f, 0.0f} - eye);
-	const V3 right = normalize(cross({0.0f, 1.0f, 0.0f}, fwd));
-	const V3 up = cross(fwd, right);
-	const float halfFov = std::tan(20.0f * std::numbers::pi_v<float> / 180);
+	const ShotCamera cam;
+	const V3 eye = cam.m_eye;
 
 	enum : uint8_t
 	{
@@ -246,9 +274,7 @@ std::vector<Channel> renderShot(int frame, int count, int w, int h)
 		for(int x = 0; x < w; ++x)
 		{
 			const size_t px = size_t(y) * w + x;
-			const float sx = ((x + 0.5f) / w * 2 - 1) * halfFov * w / h;
-			const float sy = (1 - (y + 0.5f) / h * 2) * halfFov;
-			const V3 dir = normalize(fwd + right * sx + up * sy);
+			const V3 dir = cam.ray(float(x), float(y), w, h);
 
 			// Nearest hit: 0 = floor, 1.. = spheres, -1 = sky.
 			int obj = 0;
@@ -330,9 +356,10 @@ float linearToSrgb(float c)
 
 // The 24 patches of a ColorChecker (sRGB), then a linear grey step wedge.
 // Layers: the linear values, the same sRGB encoded, and a patch number.
-void writeChart(const fs::path& path, int w, int h)
+// `v2`: a later version to diff against, two patches changed.
+void writeChart(const fs::path& path, int w, int h, bool v2 = false)
 {
-	static constexpr std::array<std::array<int, 3>, 24> PATCHES = {{
+	std::array<std::array<int, 3>, 24> patches = {{
 	    {115, 82, 68},   {194, 150, 130}, {98, 122, 157},  {87, 108, 67},
 	    {133, 128, 177}, {103, 189, 170}, {214, 126, 44},  {80, 91, 166},
 	    {193, 90, 99},   {94, 60, 108},   {157, 188, 64},  {224, 163, 46},
@@ -340,6 +367,11 @@ void writeChart(const fs::path& path, int w, int h)
 	    {187, 86, 149},  {8, 133, 161},   {243, 243, 242}, {200, 200, 200},
 	    {160, 160, 160}, {122, 122, 121}, {85, 85, 85},    {52, 52, 52},
 	}};
+	if(v2)
+	{
+		patches[6] = {236, 150, 40}; // orange, warmer
+		patches[14] = {150, 40, 50}; // red, darker
+	}
 	constexpr int STEPS = 11;
 	enum : uint8_t
 	{
@@ -375,7 +407,7 @@ void writeChart(const fs::path& path, int w, int h)
 				if(inX >= gap && inX < cellW - gap && inY >= gap &&
 				   inY < cellH - gap)
 				{
-					const auto& rgb = PATCHES[row * 6 + col];
+					const auto& rgb = patches[row * 6 + col];
 					v = {srgbToLinear(rgb[0]),
 					     srgbToLinear(rgb[1]),
 					     srgbToLinear(rgb[2])};
@@ -398,17 +430,20 @@ void writeChart(const fs::path& path, int w, int h)
 			p.at(PATCH, px) = float(id);
 		}
 	}
-	writeExr(path,
-	         box(w, h),
-	         box(w, h),
-	         p.m_channels,
-	         "A colour chart over a linear grey wedge (0, 0.1 ... 1). Layers: "
-	         "the linear values; srgb, the same encoded for a display (what "
-	         "an 8-bit file would hold, so it looks washed out through the "
-	         "view transform); patch, each patch's number (1-24, wedge 25-35: "
-	         "E to stop down and see it, or the inspector). Ctrl+click a patch "
-	         "to read "
-	         "every layer at once.");
+	writeExr(
+	    path,
+	    box(w, h),
+	    box(w, h),
+	    p.m_channels,
+	    v2 ? "chart.exr, a later version: the orange patch (7) warmer, "
+	         "the red one (15) darker. In the browser mark chart.exr and "
+	         "this one (space), then d: A, B and |A - B| side by side."
+	       : "A colour chart over a linear grey wedge (0, 0.1 ... 1). "
+	         "Layers: the linear values; srgb, the same encoded for a "
+	         "display (what an 8-bit file would hold, so it looks washed "
+	         "out through the view transform); patch, each patch's number "
+	         "(1-24, wedge 25-35: E to stop down and see it, or the "
+	         "inspector). Ctrl+click a patch to read every layer at once.");
 }
 
 // A sunset sky far brighter than white, split into light groups the way a
@@ -511,66 +546,118 @@ void writeRamp(const fs::path& path, int w, int h)
 	         "values).");
 }
 
-// A data window 10% bigger than the frame on every side, as overscan renders
-// have. Layers: the picture, uv (0-1 over the frame, beyond it outside) and
-// the grid alone.
-void writeOverscan(const fs::path& path, int w, int h)
+// The two windows, after the OpenEXR docs' example: a beach ball whose data
+// window (where the pixels are) is a box around it, inside the display window
+// (the image's frame). The rest of the display window has no pixels.
+void writeBeachball(const fs::path& path, int w, int h)
 {
-	const int ox = std::max(1, w / 10), oy = std::max(1, h / 10);
-	const Imath::Box2i data(Imath::V2i(-ox, -oy),
-	                        Imath::V2i(w - 1 + ox, h - 1 + oy));
-	const int dw = w + 2 * ox, dh = h + 2 * oy;
+	const float r = h * 0.3f, pad = r * 0.18f;
+	const float cx = w * 0.62f, cy = h * 0.5f;
+	const Imath::Box2i data(Imath::V2i(int(std::floor(cx - r - pad)),
+	                                   int(std::floor(cy - r - pad))),
+	                        Imath::V2i(int(std::ceil(cx + r + pad)),
+	                                   int(std::ceil(cy + r + pad))));
+	const int dw = data.max.x - data.min.x + 1;
+	const int dh = data.max.y - data.min.y + 1;
 	enum : uint8_t
 	{
 		R,
 		A = 3,
+		MASK,
 		UV_U,
-		UV_V,
-		GRID
+		UV_V
 	};
 	Planes p(size_t(dw) * dh,
 	         {{"R", Imf::HALF},
 	          {"G", Imf::HALF},
 	          {"B", Imf::HALF},
 	          {"A", Imf::HALF},
+	          {"mask.Y", Imf::HALF},
 	          {"uv.U", Imf::HALF},
-	          {"uv.V", Imf::HALF},
-	          {"grid.Y", Imf::HALF}});
-	const int cell = std::max(2, h / 8);
+	          {"uv.V", Imf::HALF}});
+	// Six panels round the ball, white caps at the poles; the ball tipped
+	// towards the camera so the top cap shows.
+	static constexpr std::array<std::array<float, 3>, 6> PANELS = {{
+	    {0.80f, 0.06f, 0.05f},
+	    {0.85f, 0.85f, 0.82f},
+	    {0.05f, 0.20f, 0.75f},
+	    {0.90f, 0.70f, 0.05f},
+	    {0.10f, 0.55f, 0.15f},
+	    {0.85f, 0.85f, 0.82f},
+	}};
+	const float tilt = 0.45f, ct = std::cos(tilt), st = std::sin(tilt);
+	const V3 light = normalize(V3{-0.5f, 0.7f, 0.6f});
+	const V3 half = normalize(light + V3{0.0f, 0.0f, 1.0f});
+	auto ball = [&](float x, float y, V3& out) -> bool
+	{
+		const float nx = (x - cx) / r, ny = (cy - y) / r;
+		const float rr = nx * nx + ny * ny;
+		if(rr >= 1)
+		{
+			return false;
+		}
+		const V3 n{nx, ny, std::sqrt(1 - rr)};
+		// In the ball's own frame (tipped about x) for the panels.
+		const V3 b{n.x, n.y * ct + n.z * st, -n.y * st + n.z * ct};
+		V3 base(0.85f);
+		if(std::abs(b.y) < 0.93f)
+		{
+			const float lon = std::atan2(b.x, b.z) + std::numbers::pi_v<float>;
+			const auto& c =
+			    PANELS[size_t(lon / (2 * std::numbers::pi_v<float>)*6) % 6];
+			base = {c[0], c[1], c[2]};
+		}
+		const float diff = std::max(0.0f, dot(n, light));
+		const float spec = 0.6f * std::pow(std::max(0.0f, dot(n, half)), 60.0f);
+		out = base * (0.2f + 0.9f * diff) + V3(spec);
+		return true;
+	};
 	for(int y = data.min.y; y <= data.max.y; ++y)
 	{
 		for(int x = data.min.x; x <= data.max.x; ++x)
 		{
 			const size_t px = size_t(y - data.min.y) * dw + (x - data.min.x);
-			const bool inside = x >= 0 && y >= 0 && x < w && y < h;
-			const float r = std::hypot(x - w / 2.0f, y - h / 2.0f);
-			const bool circle =
-			    std::abs(r - h * 0.3f) < std::max(1.0f, h / 120.0f);
-			const bool line = circle || ((x % cell) + cell) % cell == 0 ||
-			                  ((y % cell) + cell) % cell == 0;
-			const float u = (x + 0.5f) / w, v = 1 - (y + 0.5f) / h;
-			V3 c = inside ? V3{0.15f + 0.5f * u, 0.2f, 0.65f - 0.5f * v}
-			              : V3{0.25f, 0.12f, 0.05f};
-			if(line)
+			// The box's own background: dark grey, lighter than the empty
+			// display window's black, with the data window's teal dashes and
+			// the ball's white panels standing out on it.
+			const float v = float(y - data.min.y) / dh;
+			const V3 grey(0.075f - 0.02f * v);
+			// 2 x 2 samples: a smooth edge.
+			V3 sum(0.0f);
+			int hits = 0;
+			for(float sy : {0.25f, 0.75f})
 			{
-				c = circle ? V3(1.0f) : c + V3(0.4f);
+				for(float sx : {0.25f, 0.75f})
+				{
+					V3 c;
+					if(ball(x + sx, y + sy, c))
+					{
+						sum = sum + c;
+						++hits;
+					}
+					else
+					{
+						sum = sum + grey;
+					}
+				}
 			}
-			put3(p, R, px, c);
+			put3(p, R, px, sum * 0.25f);
 			p.at(A, px) = 1.0f;
-			p.at(UV_U, px) = u;
-			p.at(UV_V, px) = v;
-			p.at(GRID, px) = line ? 1.0f : 0.0f;
+			p.at(MASK, px) = hits / 4.0f;
+			p.at(UV_U, px) = (x + 0.5f) / w;
+			p.at(UV_V, px) = 1 - (y + 0.5f) / h;
 		}
 	}
-	writeExr(path,
-	         box(w, h),
-	         data,
-	         p.m_channels,
-	         "Overscan: the data window (the pixels) is 10% bigger than the "
-	         "display window (the frame) on every side; the orange border is "
-	         "outside the frame. w: outlines (frame + data dashed / frame / "
-	         "off). uv runs 0-1 over the frame (from the bottom-left, as in "
-	         "Nuke) and past it in the overscan.");
+	writeExr(
+	    path,
+	    box(w, h),
+	    data,
+	    p.m_channels,
+	    "The two windows, as in the OpenEXR docs: the display window is "
+	    "the image's frame; the data window, the box around the ball, is "
+	    "where the pixels are. The rest of the display window has no pixels "
+	    "(black). w: outlines (display + data window dashed / display "
+	    "window / off).");
 }
 
 // A broken render: beauty = diffuse + specular, and each of those broke in
@@ -678,10 +765,14 @@ m). ? lists every key.
 shot.####.exr  frames {first}-{last}, multi-layer, {fps} fps:
                beauty (RGBA), diffuse, specular,
                albedo, N, Z, mask
+wip.####.exr   a render still being written: frames
+               missing (G), the last one half done
 chart.exr      one RGB layer: colour chart, grey wedge
+chart-v2.exr   chart.exr changed: diff them (d)
 hdr-sky.exr    values far above 1: stop down (E)
 luma-ramp.exr  a single channel (Y)
-overscan.exr   data window bigger than the frame (w)
+beachball.exr  a data window inside the display
+               window: the two windows (w)
 nan-inf.exr    NaN and inf pixels (!: paint them)
 
 A tour
@@ -758,13 +849,24 @@ void write(const fs::path& dir, const Options& opts, const Progress& progress)
 	for(const auto& e : fs::directory_iterator(dir))
 	{
 		const std::string name = e.path().filename().string();
-		if(name.starts_with("shot.") && name.ends_with(".exr"))
+		if(((name.starts_with("shot.") || name.starts_with("wip.")) &&
+		    name.ends_with(".exr")) ||
+		   name == "overscan.exr") // beachball.exr's older name
 		{
 			fs::remove(e.path());
 		}
 	}
 	const int w = opts.m_width, h = opts.m_height;
-	const int total = opts.m_frames + STILLS;
+	// The wip frames written, by index into the WIP_FRAMES.
+	std::vector<int> wip;
+	for(int i = 0; i < WIP_FRAMES; ++i)
+	{
+		if(std::ranges::find(WIP_MISSING, i) == WIP_MISSING.end())
+		{
+			wip.push_back(i);
+		}
+	}
+	const int total = opts.m_frames + STILLS + WIP_FILES;
 	std::atomic<int> done{0};
 	std::mutex progressMutex;
 	auto wrote = [&]
@@ -777,50 +879,80 @@ void write(const fs::path& dir, const Options& opts, const Progress& progress)
 		}
 	};
 	// Every file is its own task: frames first (the bulk), then the stills.
-	parallelFor(total,
-	            1,
-	            [&](int begin, int end)
-	            {
-		            for(int i = begin; i < end; ++i)
-		            {
-			            if(i < opts.m_frames)
-			            {
-				            writeExr(dir / fmt::format("shot.{:04d}.exr",
-				                                       opts.m_first + i),
-				                     box(w, h),
-				                     box(w, h),
-				                     renderShot(i, opts.m_frames, w, h),
-				                     "A multi-layer render: beauty (RGBA), "
-				                     "diffuse, specular, albedo, N (world "
-				                     "normals), Z (depth) and mask (one "
-				                     "channel per sphere). 5: layers, t: "
-				                     "tile them all.",
-				                     FPS);
-			            }
-			            else
-			            {
-				            switch(i - opts.m_frames)
-				            {
-					            case 0:
-						            writeChart(dir / "chart.exr", w, h);
-						            break;
-					            case 1:
-						            writeSky(dir / "hdr-sky.exr", w, h);
-						            break;
-					            case 2:
-						            writeRamp(dir / "luma-ramp.exr", w, h);
-						            break;
-					            case 3:
-						            writeOverscan(dir / "overscan.exr", w, h);
-						            break;
-					            default:
-						            writeNanInf(dir / "nan-inf.exr", w, h);
-						            break;
-				            }
-			            }
-			            wrote();
-		            }
-	            });
+	parallelFor(
+	    total,
+	    1,
+	    [&](int begin, int end)
+	    {
+		    for(int i = begin; i < end; ++i)
+		    {
+			    if(i < opts.m_frames)
+			    {
+				    writeExr(dir / fmt::format("shot.{:04d}.exr",
+				                               opts.m_first + i),
+				             box(w, h),
+				             box(w, h),
+				             renderShot(i, opts.m_frames, w, h),
+				             "A multi-layer render: beauty (RGBA), "
+				             "diffuse, specular, albedo, N (world "
+				             "normals), Z (depth) and mask (one "
+				             "channel per sphere). 5: layers, t: "
+				             "tile them all.",
+				             FPS);
+			    }
+			    else if(i >= opts.m_frames + STILLS)
+			    {
+				    const int f = wip[i - opts.m_frames - STILLS];
+				    const fs::path path =
+				        dir / fmt::format("wip.{:04d}.exr", opts.m_first + f);
+				    writeExr(
+				        path,
+				        box(w, h),
+				        box(w, h),
+				        renderShot(f, WIP_FRAMES, w, h),
+				        fmt::format("A render still being written: frames "
+				                    "{}-{} and {} aren't there yet (G: hold "
+				                    "the nearest or skip them) and the last "
+				                    "frame is cut short, its bottom still "
+				                    "missing.",
+				                    opts.m_first + WIP_MISSING[0],
+				                    opts.m_first + WIP_MISSING[2],
+				                    opts.m_first + WIP_MISSING[3]),
+				        FPS);
+				    if(f == WIP_FRAMES - 1)
+				    {
+					    // The renderer's still writing it: the header
+					    // and the top strips only.
+					    fs::resize_file(path, fs::file_size(path) * 3 / 5);
+				    }
+			    }
+			    else
+			    {
+				    switch(i - opts.m_frames)
+				    {
+					    case 0:
+						    writeChart(dir / "chart.exr", w, h);
+						    break;
+					    case 5:
+						    writeChart(dir / "chart-v2.exr", w, h, true);
+						    break;
+					    case 1:
+						    writeSky(dir / "hdr-sky.exr", w, h);
+						    break;
+					    case 2:
+						    writeRamp(dir / "luma-ramp.exr", w, h);
+						    break;
+					    case 3:
+						    writeBeachball(dir / "beachball.exr", w, h);
+						    break;
+					    case 4:
+						    writeNanInf(dir / "nan-inf.exr", w, h);
+						    break;
+				    }
+			    }
+			    wrote();
+		    }
+	    });
 	std::string readme = README;
 	readme = replaceAll(readme, "{first}", std::to_string(opts.m_first));
 	readme = replaceAll(readme,

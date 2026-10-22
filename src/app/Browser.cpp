@@ -14,6 +14,7 @@
 #include <fstream>
 #include <functional>
 #include <optional>
+#include <utility>
 
 namespace fs = std::filesystem;
 using namespace ftxui;
@@ -422,6 +423,28 @@ void Browser::enterSelected(bool tile)
 	}
 }
 
+std::string entryCopyText(const Entry& e, char what)
+{
+	fs::path path = fs::absolute(e.m_path);
+	if(e.m_kind == Entry::Kind::SEQUENCE)
+	{
+		// The pattern the name shows ("shot.####.exr [1001-1100]").
+		path = path.parent_path() / e.m_name.substr(0, e.m_name.rfind(" ["));
+	}
+	switch(what)
+	{
+		case 'd':
+			return path.parent_path().string();
+		case 'f':
+			return path.filename().string();
+		case 'n':
+			return e.m_kind == Entry::Kind::DIR ? path.filename().string()
+			                                    : path.stem().string();
+		default:
+			return path.string();
+	}
+}
+
 bool Browser::previewEvent(const Event& e)
 {
 	const int page = std::max(1, m_previewBox.y_max - m_previewBox.y_min - 3);
@@ -639,7 +662,55 @@ bool Browser::event(Event e)
 	m_pendingG = false;
 	int page = std::max(1, Terminal::Size().dimy - 4);
 
-	if(e == Event::Character('q'))
+	// `c` then c / d / f / n: copy the marked entries' (else the selected
+	// one's) path, folder, file name or name, one a line. Any other key
+	// cancels and does its own thing.
+	if(std::exchange(m_pendingC, false))
+	{
+		for(char what : {'c', 'd', 'f', 'n'})
+		{
+			if(e != Event::Character(what))
+			{
+				continue;
+			}
+			std::vector<Entry> from = m_marks;
+			if(from.empty())
+			{
+				if(const Entry* sel = selectedEntry())
+				{
+					from.push_back(*sel);
+				}
+			}
+			std::vector<std::string> lines;
+			for(const Entry& en : from)
+			{
+				std::string line = entryCopyText(en, what);
+				if(std::ranges::find(lines, line) == lines.end())
+				{
+					lines.push_back(std::move(line)); // one folder once
+				}
+			}
+			std::string text;
+			for(const std::string& line : lines)
+			{
+				text += (text.empty() ? "" : "\n") + line;
+			}
+			if(!text.empty())
+			{
+				m_ctx.copyText(text);
+			}
+			return true;
+		}
+		m_ctx.m_message.clear();
+	}
+
+	if(e == Event::Character('c'))
+	{
+		m_pendingC = true;
+		m_ctx.m_message =
+		    "copy: c path  d folder  f file name  n name (marked: all)";
+	}
+	else if(e == Event::Character('q'))
 	{
 		m_ctx.m_quit();
 	}

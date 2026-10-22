@@ -1437,10 +1437,10 @@ bool Viewer::keyEvent(const Event& e, const ImageInfoPtr& info)
 			m_tileSelection = true;
 		}
 		const bool f = m_state.m_disp.m_outlines != Outlines::NONE;
-		m_ctx.m_message = f && m_tileSelection ? "outlines: frame + selection"
-		                  : f                  ? "outlines: frame"
-		                  : m_tileSelection    ? "outlines: selection"
-		                                       : "outlines: off";
+		m_ctx.m_message = f && m_tileSelection ? "outlines: windows + selection"
+		                  : f               ? "outlines: display + data window"
+		                  : m_tileSelection ? "outlines: selection"
+		                                    : "outlines: off";
 	}
 	else if(ch("w"))
 	{
@@ -1451,11 +1451,12 @@ bool Viewer::keyEvent(const Event& e, const ImageInfoPtr& info)
 		    : m_state.m_disp.m_outlines == Outlines::FRAME
 		        ? Outlines::NONE
 		        : Outlines::FRAME_AND_DATA;
-		m_ctx.m_message = m_state.m_disp.m_outlines == Outlines::FRAME_AND_DATA
-		                      ? "outlines: frame + data window"
-		                  : m_state.m_disp.m_outlines == Outlines::FRAME
-		                      ? "outlines: frame only"
-		                      : "outlines: off";
+		m_ctx.m_message =
+		    m_state.m_disp.m_outlines == Outlines::FRAME_AND_DATA
+		        ? "outlines: display window + data window (dashed)"
+		    : m_state.m_disp.m_outlines == Outlines::FRAME
+		        ? "outlines: display window only"
+		        : "outlines: off";
 	}
 	else if(ch("0"))
 	{

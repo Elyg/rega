@@ -3,7 +3,16 @@
 Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG.
 Draws images with the kitty graphics protocol, or half-blocks on any terminal.
 
+<h2 align="center"><a href="https://elyg.github.io/rvtui">📖 User guide</a></h2>
+<p align="center">Every feature with a short clip · terminal and tmux setup · colour (OCIO, ACES) · every key</p>
+
 ## Demo
+
+### **Overview** ###
+Browsing with live previews, opening and playing a sequence, its layers one by one and
+all tiled, the metadata. The images are from `rvtui --tutorial`.
+
+![rvtui overview](docs/src/media/intro.mp4)
 
 ### **Viewer** ###
 Playing a multi-layer EXR sequence, switching layers (AOVs), every layer
@@ -66,121 +75,20 @@ on macOS. To pin a release or pick another folder, set them for `bash`:
 `… | RVTUI_VERSION=0.0.15 RVTUI_BIN_DIR=~/bin bash`. On NixOS, use the flake instead
 (below).
 
-### Home Manager (flake)
-
-```nix
-# flake.nix
-inputs = {
-  rvtui.url = "github:Elyg/rvtui";   # latest main, or "github:Elyg/rvtui/v0.0.15" to pin a release
-  rvtui.inputs.nixpkgs.follows = "nixpkgs";
-};
-
-# home.nix (pass `inputs` through extraSpecialArgs)
-home.packages = [ inputs.rvtui.packages.${pkgs.stdenv.hostPlatform.system}.default ];
-
-# or with the overlay:
-nixpkgs.overlays = [ inputs.rvtui.overlays.default ];
-home.packages = [ pkgs.rvtui ];
-```
-
-There is no binary cache yet, so the first install builds rvtui from source (dependencies
-come from the nixpkgs cache).
-
-### Nix, without Home Manager
-
-```bash
-nix run github:Elyg/rvtui -- shots/
-nix profile install github:Elyg/rvtui
-```
+Nix, Home Manager and pinning a release: [Install](https://elyg.github.io/rvtui/install.html).
 
 ## Setup
 
-What rvtui needs, by what sits between the terminal and rvtui:
+Ghostty and kitty just work, directly or over ssh. In tmux, add
+`set -g allow-passthrough on`. **`rvtui --doctor`** says what's missing. Every case
+(tmux before or after ssh, other terminals): [Terminal setup](https://elyg.github.io/rvtui/setup.html).
 
-**✅ Just works**
+## Learn more
 
-terminal: Ghostty / kitty
-
-```
-┌──────────┐
-│ terminal │──────────────▶ rvtui
-└──────────┘
-
-┌──────────┐    ┌─────┐
-│ terminal │───▶│ ssh │───▶ rvtui
-└──────────┘    └─────┘
-```
-
-**⚙️ One line in tmux.conf**
-
-```
-┌──────────┐    ┌──────┐
-│ terminal │───▶│ tmux │───▶ rvtui
-└──────────┘    └──┬───┘
-                   └─ tmux.conf:
-                        set -g allow-passthrough on
-
-┌──────────┐    ┌─────┐    ┌──────┐
-│ terminal │───▶│ ssh │───▶│ tmux │───▶ rvtui
-└──────────┘    └─────┘    └──┬───┘
-                              └─ remote tmux.conf:
-                                   set -g allow-passthrough on
-```
-
-**⚙️ tmux, then ssh:** rvtui on the remote can't see the terminal through tmux, so tell
-it with `--graphics kitty`.
-
-```
-┌──────────┐    ┌──────┐    ┌─────┐
-│ terminal │───▶│ tmux │───▶│ ssh │───▶ rvtui --graphics kitty
-└──────────┘    └──┬───┘    └─────┘
-                   └─ local tmux.conf:
-                        set -g allow-passthrough on
-
-┌──────────┐    ┌──────┐    ┌─────┐    ┌──────┐
-│ terminal │───▶│ tmux │───▶│ ssh │───▶│ tmux │───▶ rvtui --graphics kitty
-└──────────┘    └──┬───┘    └─────┘    └──┬───┘
-                   │                      └─ remote tmux.conf:
-                   │                           set -g allow-passthrough on
-                   └─ local tmux.conf:
-                        set -g allow-passthrough on
-```
-
-**▦ Other**
-
-```
-┌──────────┐    ┌────────┐
-│ terminal │───▶│ zellij │───▶ rvtui     zellij can't show rvtui's images
-└──────────┘    └────────┘               (falls back to half-blocks)
-
-┌───────────────────────────┐
-│ iTerm2, WezTerm, Warp,    │
-│ Konsole, Alacritty, foot, │
-│ GNOME Terminal, xterm,    │───▶ rvtui     these terminals can't show
-│ Windows Terminal,         │               rvtui's full-resolution images
-│ Terminal.app, VS Code, …  │               (half-blocks only)
-└───────────────────────────┘
-```
-
-Whatever is missing, rvtui falls back to half-blocks, except with `--graphics kitty`,
-which trusts you: if a line above is missing, images stay blank. **`rvtui --doctor`**
-says which case you are in and what to add.
-
-### tmux.conf
-
-In every tmux between the terminal and rvtui:
-
-- `set -g allow-passthrough on`: needed for images
-- `set -as terminal-features ',xterm*:RGB'`: true colour (recommended)
-- `set -g set-clipboard on`: `y` copies reach the clipboard (recommended)
-
-## Colour
-
-With `$OCIO` set, rvtui shows images through that OpenColorIO config: pick the
-display, view and look, and override an image's input colour space (otherwise the
-config's file rules decide), in the colour pane (`6`). Without `$OCIO` it shows
-plain sRGB; the pane can switch to OCIO's built-in ACES configs, and remembers the
-choice. `s` toggles the view transform off (raw values).
+`rvtui --tutorial` walks you through sample images. The [user guide](https://elyg.github.io/rvtui) covers the
+[browser](https://elyg.github.io/rvtui/browser.html), the [viewer](https://elyg.github.io/rvtui/viewer/index.html), its
+[panes](https://elyg.github.io/rvtui/panes/index.html), [colour (OCIO)](https://elyg.github.io/rvtui/panes/colour.html),
+[annotations](https://elyg.github.io/rvtui/panes/annotations.html) and [every key](https://elyg.github.io/rvtui/reference/keys.html).
 
 ## Build from source
 

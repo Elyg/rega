@@ -63,6 +63,7 @@ add_library(rvtui_core STATIC
     src/app/Browser.cpp
     src/app/FileWatcher.cpp
     src/app/FilesPane.cpp
+    src/app/HelpKeys.cpp
     src/app/InspectorPane.cpp
     src/app/LayersPane.cpp
     src/app/LineEditor.cpp
@@ -120,6 +121,7 @@ if(RVTUI_BUILD_TESTS)
         tests/test_clipboard.cpp
         tests/test_colour.cpp
         tests/test_file_watcher.cpp
+        tests/test_help_keys.cpp
         tests/test_image.cpp
         tests/test_line_editor.cpp
         tests/test_log.cpp

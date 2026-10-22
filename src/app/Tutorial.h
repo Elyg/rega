@@ -24,8 +24,10 @@ using Progress = std::function<void(int done, int total)>;
 
 /// Render the tutorial set into `dir` (created when missing), overwriting:
 /// shot.####.exr, a multi-layer sequence (beauty, diffuse, specular, albedo,
-/// N, Z, mask); single-layer stills (colour chart, HDR sky, one-channel ramp,
-/// overscan); nan-inf.exr, a broken render; and README.txt, what to try.
+/// N, Z, mask); wip.####.exr, a render still being written (frames missing,
+/// the last one cut short); single-layer stills (colour chart and a changed
+/// version to diff, HDR sky, one-channel ramp, overscan); nan-inf.exr, a
+/// broken render; and README.txt, what to try.
 void write(const std::filesystem::path& dir,
            const Options& opts = {},
            const Progress& progress = {});
