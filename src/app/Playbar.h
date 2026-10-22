@@ -24,6 +24,12 @@ struct PlaybarState
 	FrameRange m_range; ///< in to out
 	bool m_hasIn = false, m_hasOut = false;
 	std::vector<bool> m_cached; ///< per frame: decoded (the green track)
+	/// Per frame: kept in the terminal (cyan: plays without sending any
+	/// pixels); empty when nothing is.
+	std::vector<bool> m_stored;
+	/// Per frame: kept in the terminal for some view (dim cyan where not for
+	/// this one: still there for a pan back); empty when nothing is.
+	std::vector<bool> m_storedElsewhere;
 	/// The number shown for a frame index (from the file name).
 	std::function<std::string(int)> m_label;
 	bool m_playing = false;
@@ -52,7 +58,8 @@ Rgba8Image paintPlaybar(const PlaybarState& s, int width, int height);
 /// The timeline under a sequence, after RV's, in two rows: the frame
 /// numbers (the current one over the playhead, the range's ends at theirs),
 /// then the frame count, the bar and the fps. The bar is half a cell high,
-/// green where frames are decoded, paler green at the current frame, and
+/// green where frames are decoded, cyan where the terminal keeps them (over
+/// ssh), paler green at the current frame, and
 /// thinner outside in / out. With kitty graphics it is a picture (see
 /// paintPlaybar); otherwise text, as wide as gives every cell the same
 /// number of frames (see evenTrackWidth).

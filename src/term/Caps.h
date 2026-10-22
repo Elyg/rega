@@ -1,7 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
+#include <unordered_map>
+#include <vector>
 
 namespace rv
 {
@@ -68,6 +72,43 @@ bool tmuxClientOverSsh();
 std::string tmuxClientPids();
 /// tmuxClientOverSsh() for these tmuxClientPids().
 bool tmuxClientOverSsh(const std::string& pids);
+/// One end of an ssh connection, as "address:port" (IPv6 unbracketed,
+/// IPv4-mapped as plain IPv4), so SSH_CONNECTION and `ss` compare.
+std::string sshEndpoint(std::string_view address, std::string_view port);
+/// An SSH_CONNECTION value ("client_ip client_port server_ip server_port"):
+/// the client's sshEndpoint and the server's port.
+struct SshPeer
+{
+	std::string m_client;
+	std::string m_serverPort;
+};
+std::optional<SshPeer> parseSshConnection(std::string_view value);
+/// The ssh connections the clients attached to this pane's tmux session came
+/// in over: SSH_CONNECTION from each client's environment (/proc: Linux
+/// only; none elsewhere, or for a client attached at the desk).
+std::vector<SshPeer> tmuxSshPeers();
+/// A TCP connection as `ss -ti` shows it: bytes the far end acknowledged,
+/// and the smoothed round trip in seconds (0 not shown).
+struct TcpCount
+{
+	uint64_t m_acked = 0;
+	double m_roundTrip = 0;
+};
+/// From `ss -tinH` output: per connection with bytes_acked, by the peer's
+/// sshEndpoint.
+std::unordered_map<std::string, TcpCount>
+parseBytesAcked(std::string_view ssOutput);
+/// What the far end of each of `peers`' connections has acknowledged so far:
+/// bytes that crossed the network, unlike what tmux counts as written to a
+/// client (#{client_written}: what it buffered, however far behind). By
+/// SshPeer::m_client; a connection `ss` doesn't show is left out.
+std::unordered_map<std::string, TcpCount>
+sshBytesAcked(const std::vector<SshPeer>& peers);
+/// What the slowest connection carried between two sshBytesAcked() (in
+/// m_acked), with its round trip now; nullopt when none is in both.
+std::optional<TcpCount>
+slowestDelivery(const std::unordered_map<std::string, TcpCount>& before,
+                const std::unordered_map<std::string, TcpCount>& now);
 /// What `--transfer auto` picks. `sshEnv`: SSH_CONNECTION / SSH_TTY set;
 /// `tmuxSshClient`: tmuxClientOverSsh(). In tmux only the clients count:
 /// direct with one over ssh, else temp files (each terminal attached reads

@@ -5,10 +5,12 @@
 #include "term/Kitty.h"
 
 #include <ftxui/screen/screen.hpp>
+#include <ftxui/screen/terminal.hpp>
 #include <gtest/gtest.h>
 #include <sys/mman.h>
 #include <sys/wait.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -16,6 +18,8 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <libdeflate.h>
+#include <map>
 #include <mutex>
 #include <string>
 #include <thread>
@@ -177,24 +181,133 @@ TEST(Kitty, CompactPlaceholdersKeepsDiacriticsOutOfTheLastColumn)
 	EXPECT_EQ(screen.PixelAt(3, 0).background_color, strip);
 }
 
-TEST(Kitty, CompressesOnlyWhenItPays)
+namespace
 {
-	const Rgba8Image grain = noise(512, 512); // 1 MiB that won't shrink
-	EXPECT_FALSE(
-	    kitty::worthCompressing(grain.m_pixels.data(), grain.m_pixels.size()));
-	const std::vector<uint8_t> flat(1 << 20, 7);
-	EXPECT_TRUE(kitty::worthCompressing(flat.data(), flat.size()));
-	EXPECT_TRUE(kitty::worthCompressing(grain.m_pixels.data(), 1000)); // small
+
+// A PNG's pixels, checked and decoded the long way: chunk CRCs, inflate,
+// then each row's filter undone. Channels as stored (1-4).
+struct DecodedPng
+{
+	uint32_t m_width = 0, m_height = 0;
+	int m_colourType = -1, m_channels = 0;
+	std::vector<uint8_t> m_pixels;
+};
+
+uint32_t be32(const std::string& s, size_t at)
+{
+	return static_cast<uint32_t>(static_cast<uint8_t>(s[at])) << 24 |
+	       static_cast<uint32_t>(static_cast<uint8_t>(s[at + 1])) << 16 |
+	       static_cast<uint32_t>(static_cast<uint8_t>(s[at + 2])) << 8 |
+	       static_cast<uint8_t>(s[at + 3]);
 }
 
-TEST(Kitty, TransmitSendsIncompressiblePixelsUncompressed)
+DecodedPng decodePng(const std::string& png)
+{
+	DecodedPng d;
+	EXPECT_EQ(png.substr(0, 8), "\x89PNG\r\n\x1a\n");
+	std::string idat;
+	for(size_t at = 8; at + 12 <= png.size();)
+	{
+		const uint32_t len = be32(png, at);
+		const std::string type = png.substr(at + 4, 4);
+		EXPECT_EQ(be32(png, at + 8 + len),
+		          libdeflate_crc32(0, png.data() + at + 4, 4 + len))
+		    << type;
+		const std::string data = png.substr(at + 8, len);
+		if(type == "IHDR")
+		{
+			d.m_width = be32(data, 0);
+			d.m_height = be32(data, 4);
+			d.m_colourType = data[9];
+			d.m_channels = std::map<int, int>{{0, 1},
+			                                  {2, 3},
+			                                  {4, 2},
+			                                  {6, 4}}[d.m_colourType];
+		}
+		else if(type == "IDAT")
+		{
+			idat += data;
+		}
+		at += 12 + len;
+	}
+	const size_t stride = d.m_width * d.m_channels;
+	std::vector<uint8_t> rows((stride + 1) * d.m_height);
+	libdeflate_decompressor* dec = libdeflate_alloc_decompressor();
+	EXPECT_EQ(libdeflate_zlib_decompress(dec,
+	                                     idat.data(),
+	                                     idat.size(),
+	                                     rows.data(),
+	                                     rows.size(),
+	                                     nullptr),
+	          LIBDEFLATE_SUCCESS);
+	libdeflate_free_decompressor(dec);
+	d.m_pixels.resize(stride * d.m_height);
+	for(size_t y = 0; y < d.m_height; ++y)
+	{
+		const uint8_t* in = &rows[y * (stride + 1)];
+		EXPECT_EQ(in[0], 2) << "Up filter"; // what encodePng uses by default
+		for(size_t i = 0; i < stride; ++i)
+		{
+			const uint8_t up = y > 0 ? d.m_pixels[(y - 1) * stride + i] : 0;
+			d.m_pixels[y * stride + i] = static_cast<uint8_t>(in[1 + i] + up);
+		}
+	}
+	return d;
+}
+
+} // namespace
+
+TEST(Kitty, PngKeepsOnlyTheChannelsNeeded)
+{
+	Rgba8Image img = noise(37, 11); // odd sizes: no row lines up
+	auto expect = [&](int colourType, std::initializer_list<int> keep)
+	{
+		const DecodedPng d = decodePng(kitty::encodePng(img));
+		EXPECT_EQ(d.m_width, 37u);
+		EXPECT_EQ(d.m_height, 11u);
+		ASSERT_EQ(d.m_colourType, colourType);
+		std::vector<uint8_t> want;
+		for(size_t i = 0; i < img.m_pixels.size(); i += 4)
+		{
+			for(int c : keep)
+			{
+				want.push_back(img.m_pixels[i + c]);
+			}
+		}
+		EXPECT_EQ(d.m_pixels, want);
+	};
+	expect(6, {0, 1, 2, 3}); // colour, some alpha
+	for(size_t i = 3; i < img.m_pixels.size(); i += 4)
+	{
+		img.m_pixels[i] = 255;
+	}
+	expect(2, {0, 1, 2}); // colour, opaque
+	for(size_t i = 0; i < img.m_pixels.size(); i += 4)
+	{
+		img.m_pixels[i + 1] = img.m_pixels[i + 2] = img.m_pixels[i];
+	}
+	expect(0, {0}); // grey (a channel, the alpha view), opaque
+	img.m_pixels[3] = 7;
+	expect(4, {0, 3}); // grey, some alpha
+}
+
+TEST(Kitty, TransmitSendsAPng)
 {
 	kitty::TransmitOptions opt;
 	opt.m_id = 9;
-	const std::string s = kitty::transmit(noise(512, 256), opt);
-	EXPECT_EQ(s.rfind("\x1b_Ga=T,f=32,q=2,s=512,v=256,i=9,U=1,p=1,m=1;", 0),
-	          0u);
-	EXPECT_EQ(s.find("o=z"), std::string::npos);
+	const Rgba8Image img = noise(512, 256);
+	const std::string s = kitty::transmit(img, opt);
+	// A PNG says its own size: no s= / v=, and no o=z (it is deflated).
+	EXPECT_EQ(s.rfind("\x1b_Ga=T,f=100,q=2,i=9,U=1,p=1,m=1;", 0), 0u);
+	std::string b64; // the payload, chunks joined
+	for(size_t at = 0; (at = s.find(';', at)) != std::string::npos; ++at)
+	{
+		b64.append(s, at + 1, s.find('\x1b', at) - at - 1);
+	}
+	const std::string png = kitty::encodePng(img);
+	EXPECT_EQ(b64,
+	          kitty::base64(reinterpret_cast<const uint8_t*>(png.data()),
+	                        png.size()));
 }
 
 TEST(Kitty, TransmitSharedSendsOnlyTheName)
@@ -358,6 +471,10 @@ struct KittySlot
 
 	KittySlot()
 	{
+		// As App sets it: with the 16 colours a bare environment (a build
+		// sandbox, no TERM) implies, FTXUI folds the palette colours that
+		// carry image ids together.
+		ftxui::Terminal::SetColorSupport(ftxui::Terminal::Color::TrueColor);
 		m_caps.m_graphics = GraphicsMode::KITTY;
 		m_caps.m_cellW = 2;
 		m_caps.m_cellH = 4;
@@ -379,6 +496,182 @@ struct KittySlot
 };
 
 } // namespace
+
+namespace
+{
+
+// A frame read from `origin` (as ImageService tags them).
+LayerImagePtr frame(float v, const std::string& origin)
+{
+	LayerImage img = *grey(v);
+	img.m_origin = origin;
+	return std::make_shared<const LayerImage>(std::move(img));
+}
+
+// Draw until `img` is on screen; what that wrote.
+std::vector<std::string> show(KittySlot& k,
+                              const LayerImagePtr& img,
+                              const DisplayParams& disp = {})
+{
+	const int was = k.m_ready;
+	k.m_slot->draw(k.m_screen, k.m_box, img, {}, disp);
+	if(k.m_slot->pending())
+	{
+		EXPECT_TRUE(waitFor([&] { return k.m_ready > was; }));
+		k.m_slot->draw(k.m_screen, k.m_box, img, {}, disp);
+	}
+	return k.m_cap.take();
+}
+
+size_t count(const std::vector<std::string>& writes, std::string_view what)
+{
+	return static_cast<size_t>(
+	    std::ranges::count_if(writes,
+	                          [&](const std::string& w)
+	                          { return w.find(what) != w.npos; }));
+}
+
+} // namespace
+
+TEST(ImageSlot, PlayedFramesStayInTheTerminalAndShowAgainByIdAlone)
+{
+	KittySlot k;
+	k.m_tx.setTerminalCache(1 << 20);
+	k.m_slot->setTerminalCache(true); // playing
+	const auto a = frame(0.2f, "L|a|rgba|1"), b = frame(0.6f, "L|b|rgba|1");
+	ASSERT_EQ(count(show(k, a), "a=T"), 1u);
+	const auto idA = k.m_screen.PixelAt(0, 0).foreground_color;
+	ASSERT_EQ(count(show(k, b), "a=T"), 1u);
+	const auto idB = k.m_screen.PixelAt(0, 0).foreground_color;
+	EXPECT_NE(idA, idB); // each under its own id
+	EXPECT_EQ(k.m_tx.cacheUse().m_frames, 2u);
+
+	// The loop comes round: nothing sent, the cells show the kept id. Also
+	// for the same frame read again (the decode cache let it go).
+	EXPECT_TRUE(show(k, a).empty());
+	EXPECT_EQ(k.m_screen.PixelAt(0, 0).foreground_color, idA);
+	EXPECT_TRUE(show(k, frame(0.6f, "L|b|rgba|1")).empty());
+	EXPECT_EQ(k.m_screen.PixelAt(0, 0).foreground_color, idB);
+
+	// Another exposure (or a pan, a zoom): a new picture. The kept ones stay
+	// while there is room, for when the view comes back.
+	DisplayParams brighter;
+	brighter.m_exposure = 1.0f;
+	const auto writes = show(k, a, brighter);
+	EXPECT_EQ(count(writes, "a=T"), 1u);
+	EXPECT_EQ(count(writes, "a=d,d=I"), 0u);
+	EXPECT_EQ(k.m_slot->cachedFrames(), 3u);
+	EXPECT_TRUE(show(k, b).empty()); // back: still there
+	EXPECT_EQ(k.m_screen.PixelAt(0, 0).foreground_color, idB);
+	// Kept in some view, by file (the playbar's dim cyan).
+	EXPECT_TRUE(k.m_slot->storedInAnyView("a|"));
+	EXPECT_FALSE(k.m_slot->storedInAnyView("c|"));
+
+	// Paused: drawn fresh (full resolution), not from what was kept.
+	k.m_slot->setTerminalCache(false);
+	EXPECT_EQ(count(show(k, b, brighter), "a=T"), 1u);
+}
+
+TEST(ImageSlot, ALoopLongerThanTheBudgetKeepsItsFirstFrames)
+{
+	KittySlot k;
+	// 10 x 4 cells of 2 x 4 px: 20 x 16 RGBA, 1280 bytes a frame.
+	k.m_tx.setTerminalCache(3000);
+	k.m_slot->setTerminalCache(true);
+	const std::vector<LayerImagePtr> loop{frame(0.1f, "L|a|rgba|1"),
+	                                      frame(0.4f, "L|b|rgba|1"),
+	                                      frame(0.7f, "L|c|rgba|1")};
+	for(const auto& f : loop)
+	{
+		const auto writes = show(k, f);
+		EXPECT_EQ(count(writes, "a=T"), 1u);
+		EXPECT_EQ(count(writes, "a=d,d=I"), 0u); // nothing dropped for it
+	}
+	EXPECT_EQ(k.m_slot->cachedFrames(), 2u);
+	EXPECT_LE(k.m_tx.cacheUse().m_bytes, 3000u);
+	// Every pass after: a and b shown by id, only c sent. Dropping the least
+	// recently shown instead sent all three, every pass.
+	for(int pass = 0; pass < 3; ++pass)
+	{
+		EXPECT_TRUE(show(k, loop[0]).empty());
+		EXPECT_TRUE(show(k, loop[1]).empty());
+		EXPECT_EQ(count(show(k, loop[2]), "a=T"), 1u);
+	}
+	EXPECT_EQ(k.m_tx.linkStats().m_keptShown, 6u);
+}
+
+TEST(ImageSlot, AnotherViewOrLayerMakesRoomOnlyWhenNeeded)
+{
+	KittySlot k;
+	// Room for two 1280-byte frames.
+	k.m_tx.setTerminalCache(3000);
+	k.m_slot->setTerminalCache(true);
+	const auto a = frame(0.1f, "L|shot.1001|rgba|2"),
+	           b = frame(0.4f, "L|shot.1002|rgba|2");
+	(void)show(k, a);
+	(void)show(k, b);
+	ASSERT_EQ(k.m_slot->cachedFrames(), 2u);
+	// The alpha AOV: no room left, so the least recently shown rgba frame
+	// makes it (one dropped, not both).
+	const auto writes = show(k, frame(0.9f, "L|shot.1001|alpha|2"));
+	EXPECT_EQ(count(writes, "a=T"), 1u);
+	EXPECT_EQ(count(writes, "a=d,d=I"), 1u);
+	EXPECT_EQ(k.m_slot->cachedFrames(), 2u);
+	EXPECT_TRUE(show(k, b).empty());         // back to rgba: b stayed
+	EXPECT_EQ(count(show(k, a), "a=T"), 1u); // a made the room
+}
+
+TEST(ImageSlot, FramesStoredWhilePausedPlayWithoutSendingAny)
+{
+	KittySlot k;
+	k.m_tx.setTerminalCache(1 << 20);
+	const std::vector<LayerImagePtr> loop{frame(0.1f, "L|a|rgba|1"),
+	                                      frame(0.4f, "L|b|rgba|1"),
+	                                      frame(0.7f, "L|c|rgba|1")};
+	(void)show(k, loop[0]); // paused on the first frame: drawn as ever
+	EXPECT_FALSE(k.m_slot->store(nullptr, 1000));
+	for(const auto& f : loop) // what fillTerminal does, frame by frame
+	{
+		const int was = k.m_ready;
+		ASSERT_TRUE(k.m_slot->store(f, 1000));
+		EXPECT_FALSE(k.m_slot->store(f, 1000)); // one at a time
+		ASSERT_TRUE(waitFor([&] { return k.m_ready > was; }));
+		ASSERT_TRUE(k.m_slot->flushStored());
+		EXPECT_TRUE(k.m_slot->stored(f->m_origin));
+		EXPECT_FALSE(k.m_slot->storing());
+	}
+	const auto sent = k.m_cap.take();
+	EXPECT_EQ(count(sent, "a=T"), 3u);
+	EXPECT_FALSE(k.m_slot->store(loop[1], 1000)); // already kept
+	// Not shown while storing: the cells still show the paused frame.
+	const auto paused = k.m_screen.PixelAt(0, 0).foreground_color;
+	k.m_slot->draw(k.m_screen, k.m_box, loop[0], {}, {});
+	EXPECT_EQ(k.m_screen.PixelAt(0, 0).foreground_color, paused);
+	// Play: every frame by its id alone, none sent.
+	k.m_slot->setTerminalCache(true);
+	for(int pass = 0; pass < 2; ++pass)
+	{
+		for(const auto& f : loop)
+		{
+			EXPECT_TRUE(show(k, f).empty());
+		}
+	}
+	// The first pass starts on the paused frame, on screen already.
+	EXPECT_EQ(k.m_tx.linkStats().m_keptShown, 5u);
+}
+
+TEST(ImageSlot, OnlyInlinePicturesWithAnOriginAreKept)
+{
+	KittySlot k;
+	k.m_tx.setTerminalCache(1 << 20);
+	k.m_slot->setTerminalCache(true);
+	const auto untagged = grey(0.3f); // a picture made, not read
+	(void)show(k, untagged);
+	EXPECT_EQ(k.m_slot->cachedFrames(), 0u);
+	k.m_tx.setTerminalCache(0); // --terminal-cache 0
+	(void)show(k, frame(0.5f, "a"));
+	EXPECT_EQ(k.m_slot->cachedFrames(), 0u);
+}
 
 TEST(ImageSlot, KittyPreparesInTheBackgroundThenSends)
 {
@@ -504,6 +797,29 @@ TEST(Transmitter, InlineWritesRunUpALinkBacklog)
 	local.write(std::string(5000, 'x'));
 	EXPECT_EQ(local.linkRate(), 0.0);
 	EXPECT_EQ(local.linkBacklog(), 0.0);
+}
+
+TEST(Transmitter, InlinePicturesMeasureWhatAPixelCosts)
+{
+	Capture cap;
+	kitty::Transmitter tx(false, Transfer::DIRECT, cap.fn());
+	EXPECT_EQ(tx.linkBytesPerPixel(),
+	          kitty::Transmitter::DEFAULT_BYTES_PER_PIXEL);
+	(void)tx.encode(noise(256, 256), {}); // noise: about 5.3 (RGBA, base64)
+	EXPECT_GT(tx.linkBytesPerPixel(), 5.0);
+	Rgba8Image flat = noise(256, 256);
+	std::fill(flat.m_pixels.begin(), flat.m_pixels.end(), uint8_t(255));
+	for(int i = 0; i < 20; ++i)
+	{
+		(void)tx.encode(flat, {}); // next to nothing, floored at 0.1
+	}
+	EXPECT_LT(tx.linkBytesPerPixel(), 0.2);
+	EXPECT_GE(tx.linkBytesPerPixel(), 0.1);
+	const double flatCost = tx.linkBytesPerPixel();
+	kitty::TransmitOptions playbar;
+	playbar.m_measureCost = false;
+	(void)tx.encode(noise(256, 256), playbar); // not the picture: not counted
+	EXPECT_EQ(tx.linkBytesPerPixel(), flatCost);
 }
 
 TEST(ImageSlot, ScrubShowsTheNewestPictureWhileTheNextIsPrepared)

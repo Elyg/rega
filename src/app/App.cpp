@@ -29,6 +29,9 @@ namespace
 constexpr auto POLL_INTERVAL = std::chrono::milliseconds(1000);
 // How often tmux's attached clients are checked (--transfer auto).
 constexpr auto CLIENT_CHECK_INTERVAL = std::chrono::seconds(3);
+// How often, sending inline through tmux, what it wrote to the clients over
+// ssh is read: what is still on its way to them is known this late.
+constexpr auto LINK_POLL_INTERVAL = std::chrono::milliseconds(100);
 } // namespace
 
 App::App(const AppOptions& opts, ScreenInteractive& screen)
@@ -71,6 +74,64 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
                 })
 {
 	m_kitty.setLinkRate(opts.m_linkRate);
+	m_kitty.setTerminalCache(static_cast<size_t>(opts.m_terminalCache));
+	// Measure the link rather than trust --link-rate. Through a tmux of ours
+	// the terminal's answers to probes stay in tmux, which answers them
+	// itself before the bytes went anywhere, and counts as written to a
+	// client whatever it buffered: count what the ssh connection's far end
+	// acknowledged instead. Paced at the rate until such a connection shows.
+	m_kitty.setLinkMode(m_caps.m_tmux ? kitty::LinkMeter::Mode::ESTIMATE
+	                                  : kitty::LinkMeter::Mode::ACK);
+	if(m_caps.m_tmux && m_caps.m_graphics == GraphicsMode::KITTY &&
+	   opts.m_linkRate > 0)
+	{
+		m_linkPoll = std::jthread(
+		    [this](std::stop_token stop)
+		    {
+			    std::vector<SshPeer> peers;
+			    auto peersAt = std::chrono::steady_clock::time_point{};
+			    std::unordered_map<std::string, TcpCount> before;
+			    std::mutex mu;
+			    std::condition_variable_any cv;
+			    std::unique_lock lock(mu);
+			    for(;;)
+			    {
+				    const bool inlined = m_kitty.transfer() == Transfer::DIRECT;
+				    cv.wait_for(lock,
+				                stop,
+				                inlined ? std::chrono::milliseconds(
+				                              LINK_POLL_INTERVAL)
+				                        : std::chrono::milliseconds(
+				                              CLIENT_CHECK_INTERVAL),
+				                [] { return false; });
+				    if(stop.stop_requested())
+				    {
+					    return;
+				    }
+				    if(m_kitty.transfer() != Transfer::DIRECT)
+				    {
+					    before.clear();
+					    continue;
+				    }
+				    // Clients come and go less often than this polls.
+				    const auto now = std::chrono::steady_clock::now();
+				    if(now - peersAt >= CLIENT_CHECK_INTERVAL)
+				    {
+					    peers = tmuxSshPeers();
+					    peersAt = now;
+				    }
+				    auto acked = sshBytesAcked(peers);
+				    m_kitty.setLinkMode(acked.empty()
+				                            ? kitty::LinkMeter::Mode::ESTIMATE
+				                            : kitty::LinkMeter::Mode::COUNTER);
+				    if(const auto sent = slowestDelivery(before, acked))
+				    {
+					    m_kitty.linkDelivered(sent->m_acked, sent->m_roundTrip);
+				    }
+				    before = std::move(acked);
+			    }
+		    });
+	}
 	// Who watches a tmux session changes while rvtui runs: a laptop attaches
 	// over ssh (it can't read our files), then leaves (files are faster).
 	if(opts.m_transfer == "auto" && m_caps.m_tmux &&
@@ -273,6 +334,18 @@ void App::filesChanged(const std::vector<fs::path>& changed)
 
 Element App::render()
 {
+	// One frame, one update (synchronized output, DEC mode 2026): the
+	// terminal draws nothing until the end marker, written once FTXUI has
+	// printed the frame (a task runs right after the draw). Without it a
+	// frame whose cells change image id (a kept picture shown again) arrived
+	// over ssh in pieces and the terminal drew in between: a row blank from
+	// where its cells still had the old id. FTXUI renders, then writes, so
+	// the start goes out first; pictures sent in between are in it too.
+	if(m_caps.m_graphics == GraphicsMode::KITTY)
+	{
+		term::writeRaw("\x1b[?2026h");
+		m_screen.Post([] { term::writeRaw("\x1b[?2026l", true); });
+	}
 	if(refreshCellSize(m_caps))
 	{
 		spdlog::info("cell size now {}x{}px", m_caps.m_cellW, m_caps.m_cellH);
@@ -290,6 +363,12 @@ Element App::render()
 		                   text(""),
 		                   text("")})});
 	}
+	if(m_stats)
+	{
+		body = dbox(
+		    {body,
+		     vbox({hbox({filler(), renderStats() | clear_under}), filler()})});
+	}
 	if(m_help)
 	{
 		body = dbox({body, renderHelp() | clear_under | center});
@@ -297,9 +376,99 @@ Element App::render()
 	updateWatch();
 	if(m_caps.m_graphics == GraphicsMode::KITTY)
 	{
-		body = drawAfter(body, compactPlaceholders);
+		body = drawAfter(body,
+		                 [this](Screen& screen)
+		                 {
+			                 compactPlaceholders(screen);
+			                 // After the pictures this draw sent.
+			                 m_kitty.probeLink();
+		                 });
 	}
 	return body;
+}
+
+Element App::renderStats()
+{
+	const auto s = m_kitty.linkStats();
+	const auto kept = m_kitty.cacheUse();
+	// MiB, as pv and --terminal-cache 256M count.
+	auto mb = [](double bytes) { return bytes / 1048576.0; };
+	auto row = [](const std::string& k, const std::string& v)
+	{ return hbox({text(k) | dim | size(WIDTH, EQUAL, 10), text(v)}); };
+	Elements rows;
+	if(m_caps.m_graphics != GraphicsMode::KITTY)
+	{
+		rows.push_back(row("link", "half-blocks: no pictures sent"));
+	}
+	else if(!s.m_inline)
+	{
+		rows.push_back(row("link",
+		                   fmt::format("{}: on this machine, no link",
+		                               transferName(m_caps.m_transfer))));
+	}
+	else if(s.m_rate <= 0)
+	{
+		rows.push_back(row("link", "inline, unpaced (--link-rate 0)"));
+	}
+	else
+	{
+		rows.push_back(
+		    row("link",
+		        fmt::format("{:.1f} MiB/s {}, {:.2f} s behind",
+		                    mb(s.m_rate),
+		                    s.m_measured ? "measured" : "assumed (--link-rate)",
+		                    s.m_backlog)));
+		const char* how = s.m_mode == kitty::LinkMeter::Mode::ACK
+		                      ? "the terminal's answers"
+		                  : s.m_mode == kitty::LinkMeter::Mode::COUNTER
+		                      ? "the ssh connection's acks (ss)"
+		                      : "nothing: paced at the rate";
+		rows.push_back(row("measured", how));
+		if(s.m_roundTrip > 0)
+		{
+			rows.push_back(
+			    row("rtt", fmt::format("{:.0f} ms", s.m_roundTrip * 1e3)));
+		}
+	}
+	if(s.m_sent > 0)
+	{
+		rows.push_back(row("picture",
+		                   fmt::format("{}x{}, {:.0f} KiB, {:.2f} B/px avg",
+		                               s.m_lastW,
+		                               s.m_lastH,
+		                               s.m_lastBytes / 1024.0,
+		                               s.m_bytesPerPixel)));
+	}
+	rows.push_back(row("playback",
+	                   m_viewer.playing() ? fmt::format("{:.1f} of {:g} fps",
+	                                                    m_viewer.shownFps(),
+	                                                    m_viewer.targetFps())
+	                                      : std::string("not playing")));
+	rows.push_back(row("decoded",
+	                   fmt::format("{:.0f} of {:.0f} MiB, here",
+	                               mb(static_cast<double>(m_svc.bytesUsed())),
+	                               mb(static_cast<double>(m_svc.budget())))));
+	if(m_kitty.terminalCache() > 0 && s.m_inline)
+	{
+		rows.push_back(
+		    row("terminal",
+		        fmt::format("{} frames, {:.0f} of {:.0f} MiB kept",
+		                    kept.m_frames,
+		                    mb(static_cast<double>(kept.m_bytes)),
+		                    mb(static_cast<double>(m_kitty.terminalCache())))));
+		rows.push_back(row("shown",
+		                   fmt::format("{} sent, {} from what it kept",
+		                               s.m_sent,
+		                               s.m_keptShown)));
+	}
+	else
+	{
+		rows.push_back(
+		    row("terminal",
+		        s.m_inline ? "keeps nothing (--terminal-cache 0)"
+		                   : "keeps nothing (only inline pictures are kept)"));
+	}
+	return window(text(" stats · S "), vbox(std::move(rows)));
 }
 
 Element App::renderHelp()
@@ -520,6 +689,18 @@ bool App::onEvent(Event e)
 		if(m_mode == Mode::VIEWER)
 		{
 			m_viewer.tick();
+			m_viewer.fillTerminal();
+		}
+		return true;
+	}
+	// The terminal answering a link probe (Transmitter::probeLink), not a
+	// key: the link may have room for the next frame now.
+	if(kitty::LinkMeter::isAnswer(e.input()))
+	{
+		m_kitty.linkAnswered();
+		if(m_mode == Mode::VIEWER)
+		{
+			m_viewer.tick();
 		}
 		return true;
 	}
@@ -536,6 +717,11 @@ bool App::onEvent(Event e)
 	if(e == Event::Character('Q') && !typing)
 	{
 		m_ctx.m_quit();
+		return true;
+	}
+	if(e == Event::Character('S') && !typing)
+	{
+		m_stats = !m_stats;
 		return true;
 	}
 	if(e == Event::Character('?') && !typing)

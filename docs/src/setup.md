@@ -72,8 +72,26 @@ falling back to half-blocks. (`--graphics halfblock` forces half-blocks.)
 
 ## Over ssh
 
-Images go through the ssh connection. While a sequence plays, rvtui paces them to
-`--link-rate` (4M a second); on a fast network, raise it: `--link-rate 20M`.
+Images go through the ssh connection. While a sequence plays, rvtui paces them to what
+the link carries, so a pause stops the picture at once instead of after a backlog
+drains. It measures the link as it plays: from the terminal's answers to a query sent
+after each frame, or, inside tmux on the remote host, from the bytes tmux sent your
+client. Until measured it assumes `--link-rate` (4M a second); `--link-rate 0` turns
+pacing off. Playback frames are sized to fit the link, so CG with flat areas plays
+sharper than grainy footage.
+
+Frames played over ssh stay in the terminal (up to `--terminal-cache`, 256M by
+default), so rvtui shows them again without sending any pixels. It stores them ahead
+too: paused on a sequence, it sends the play range's frames while the link is idle, so
+playback starts from the terminal; playing, it stays ahead of the playhead. On the
+playbar, frames the terminal keeps are cyan, frames only decoded (in rvtui) green; the
+status bar shows both caches, `cache remote … local …`.
+Playback frames are sized so the whole range fits in under half of it, when that is
+sharper than what the link carries in real time: the view before a pan or a zoom stays
+kept too (dim cyan on the playbar), and plays from the terminal again when you go back. Kitty and Ghostty keep 320 MB of images by
+default; to keep more frames, raise theirs (Ghostty: `image-storage-limit`, at most
+4 GiB) and `--terminal-cache` with it (e.g. `3.9G`). `S` shows the link, what a frame
+costs and what both caches hold.
 How the pixels travel (shared memory, temp files or inline) is chosen for you by the
 default, `--transfer auto`; set `--transfer` yourself only if images stay blank (see
 [Command line](reference/cli.md#options)).

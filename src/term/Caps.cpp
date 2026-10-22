@@ -3,11 +3,13 @@
 #include <sys/ioctl.h>
 #include <sys/select.h>
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <fcntl.h>
+#include <fstream>
 #include <sstream>
 #include <string_view>
 #include <termios.h>
@@ -140,6 +142,167 @@ bool tmuxClientOverSsh(const std::string& pids)
 		}
 	}
 	return false;
+}
+
+std::string sshEndpoint(std::string_view address, std::string_view port)
+{
+	if(address.size() >= 2 && address.front() == '[' && address.back() == ']')
+	{
+		address = address.substr(1, address.size() - 2);
+	}
+	if(const size_t scope = address.find('%'); scope != std::string_view::npos)
+	{
+		address = address.substr(0, scope); // fe80::1%eth0
+	}
+	if(address.starts_with("::ffff:") && address.find('.') != address.npos)
+	{
+		address.remove_prefix(7);
+	}
+	return std::string(address) + ":" + std::string(port);
+}
+
+std::optional<SshPeer> parseSshConnection(std::string_view value)
+{
+	std::istringstream in{std::string(value)};
+	std::string clientIp, clientPort, serverIp, serverPort;
+	if(!(in >> clientIp >> clientPort >> serverIp >> serverPort))
+	{
+		return std::nullopt;
+	}
+	return SshPeer{sshEndpoint(clientIp, clientPort), serverPort};
+}
+
+std::vector<SshPeer> tmuxSshPeers()
+{
+	std::vector<SshPeer> peers;
+	std::istringstream pids(tmuxClientPids());
+	std::string pid;
+	while(pids >> pid)
+	{
+		std::ifstream environ("/proc/" + pid + "/environ", std::ios::binary);
+		std::string var;
+		while(std::getline(environ, var, '\0'))
+		{
+			if(var.starts_with("SSH_CONNECTION="))
+			{
+				if(auto peer = parseSshConnection(std::string_view(var).substr(
+				       sizeof "SSH_CONNECTION=" - 1)))
+				{
+					peers.push_back(std::move(*peer));
+				}
+			}
+		}
+	}
+	return peers;
+}
+
+std::unordered_map<std::string, TcpCount>
+parseBytesAcked(std::string_view ssOutput)
+{
+	// A line per socket ("Recv-Q Send-Q local:port peer:port", maybe the
+	// state first), its tcp_info indented on the next.
+	std::unordered_map<std::string, TcpCount> acked;
+	std::string peer;
+	std::istringstream in{std::string(ssOutput)};
+	std::string line;
+	while(std::getline(in, line))
+	{
+		if(line.empty())
+		{
+			continue;
+		}
+		std::istringstream words(line);
+		std::string word;
+		if(line[0] != ' ' && line[0] != '\t')
+		{
+			std::string last, beforeLast;
+			while(words >> word)
+			{
+				beforeLast = std::move(last);
+				last = std::move(word);
+			}
+			const size_t colon = last.rfind(':');
+			peer = colon == std::string::npos || beforeLast.empty()
+			           ? std::string()
+			           : sshEndpoint(std::string_view(last).substr(0, colon),
+			                         std::string_view(last).substr(colon + 1));
+			continue;
+		}
+		TcpCount count;
+		bool hasAcked = false;
+		while(!peer.empty() && words >> word)
+		{
+			if(word.starts_with("bytes_acked:"))
+			{
+				count.m_acked =
+				    std::strtoull(word.c_str() + sizeof "bytes_acked:" - 1,
+				                  nullptr,
+				                  10);
+				hasAcked = true;
+			}
+			else if(word.starts_with("rtt:")) // rtt:<ms>/<deviation>
+			{
+				count.m_roundTrip =
+				    std::strtod(word.c_str() + sizeof "rtt:" - 1, nullptr) /
+				    1e3;
+			}
+		}
+		if(hasAcked)
+		{
+			acked[peer] = count;
+		}
+	}
+	return acked;
+}
+
+std::unordered_map<std::string, TcpCount>
+sshBytesAcked(const std::vector<SshPeer>& peers)
+{
+	std::unordered_map<std::string, TcpCount> acked;
+	if(peers.empty())
+	{
+		return acked;
+	}
+	std::string ports;
+	for(const SshPeer& p : peers)
+	{
+		const std::string term = "sport = :" + p.m_serverPort;
+		if(ports.find(term) == std::string::npos)
+		{
+			ports += (ports.empty() ? "" : " or ") + term;
+		}
+	}
+	const auto all = parseBytesAcked(run(
+	    ("ss -tinH state established '( " + ports + " )' 2>/dev/null").c_str()));
+	for(const SshPeer& p : peers)
+	{
+		if(const auto it = all.find(p.m_client); it != all.end())
+		{
+			acked.insert(*it);
+		}
+	}
+	return acked;
+}
+
+std::optional<TcpCount>
+slowestDelivery(const std::unordered_map<std::string, TcpCount>& before,
+                const std::unordered_map<std::string, TcpCount>& now)
+{
+	std::optional<TcpCount> least;
+	for(const auto& [peer, n] : now)
+	{
+		const auto b = before.find(peer);
+		if(b == before.end() || n.m_acked < b->second.m_acked)
+		{
+			continue; // attached since (or the port reused)
+		}
+		const uint64_t carried = n.m_acked - b->second.m_acked;
+		if(!least || carried < least->m_acked)
+		{
+			least = TcpCount{carried, n.m_roundTrip};
+		}
+	}
+	return least;
 }
 
 Transfer autoTransfer(bool tmux, bool sshEnv, bool tmuxSshClient)

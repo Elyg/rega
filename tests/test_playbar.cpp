@@ -276,6 +276,39 @@ TEST(Playbar, TheNumberGlidesWithThePlayhead)
 	EXPECT_TRUE(start);
 }
 
+TEST(Playbar, FramesKeptInTheTerminalAreCyanBesideDecodedGreen)
+{
+	// 10 frames, a cell each: 0..3 kept in the terminal (and decoded),
+	// 4..6 decoded only, the rest neither; the current frame is 9.
+	PlaybarState s = sequence(10, 9);
+	s.m_cached.assign(10, false);
+	s.m_stored.assign(10, false);
+	for(int f = 0; f <= 6; ++f)
+	{
+		s.m_cached[f] = true;
+		s.m_stored[f] = f <= 3;
+	}
+	Playbar bar;
+	ftxui::Screen screen(10, 2);
+	ftxui::Render(screen, bar.render(s, 10)); // narrow: the bar only
+	EXPECT_EQ(screen.PixelAt(1, 1).foreground_color,
+	          ftxui::Color::RGB(0x7d, 0xcf, 0xff)); // kept
+	EXPECT_EQ(screen.PixelAt(5, 1).foreground_color,
+	          ftxui::Color::RGB(0x9e, 0xcd, 0x6a)); // decoded
+	// The picture too (10 px a frame; the bar's row is 16..31).
+	const Rgba8Image img = paintPlaybar(s, 100, 32);
+	EXPECT_EQ(pixel(img, 15, 23), (std::array<uint8_t, 3>{0x7d, 0xcf, 0xff}));
+	EXPECT_EQ(pixel(img, 55, 23), (std::array<uint8_t, 3>{0x9e, 0xcd, 0x6a}));
+	// Kept for another view only (a pan away): dim cyan, still there.
+	s.m_storedElsewhere.assign(10, false);
+	s.m_storedElsewhere[5] = true;
+	ftxui::Render(screen, bar.render(s, 10));
+	EXPECT_EQ(screen.PixelAt(5, 1).foreground_color,
+	          ftxui::Color::RGB(0x3b, 0x6a, 0x82));
+	EXPECT_EQ(screen.PixelAt(6, 1).foreground_color,
+	          ftxui::Color::RGB(0x9e, 0xcd, 0x6a));
+}
+
 TEST(Playbar, ThePictureThinsOutsideInOutAndGreysWhatIsNotDecoded)
 {
 	PlaybarState s = sequence(10, 5);

@@ -2,6 +2,7 @@
 
 #include "image/Render.h"
 #include "term/Caps.h"
+#include "term/LinkMeter.h"
 
 #include <array>
 #include <atomic>
@@ -22,9 +23,6 @@ namespace rv::kitty
 std::string base64(const uint8_t* data, size_t n);
 /// One zlib stream (kitty o=z).
 std::string zlibCompress(const uint8_t* data, size_t n);
-/// Whether compressing [data, data + n) pays off: compresses a few samples and
-/// says no when they shrink by less than 10% (film grain, noise).
-bool worthCompressing(const uint8_t* data, size_t n);
 
 /// Wrap an escape sequence in tmux DCS passthrough (requires `allow-passthrough
 /// on`).
@@ -42,10 +40,29 @@ struct TransmitOptions
 	    true;              ///< U=1: displayed through Unicode placeholder cells
 	int m_tmux = 0;        ///< tmuxes in the way, see tmuxWrap()
 	size_t m_chunk = 4096; ///< base64 bytes per escape
+	/// Counts toward Transmitter::linkBytesPerPixel: the picture, not the
+	/// playbar (a strip of flat colour that would pull the average down).
+	bool m_measureCost = true;
 };
 
+/// Every alpha is 255.
+bool isOpaque(const Rgba8Image& img);
+/// Red, green and blue equal everywhere (a channel or alpha shown as grey).
+bool isGrey(const Rgba8Image& img);
+/// PNG row filters (see encodePng).
+enum class PngFilter
+{
+	NONE,
+	SUB,
+	UP,
+	PAETH
+};
+/// `img` as a PNG (kitty f=100) with no more channels than it needs: grey
+/// when isGrey, alpha only when not isOpaque. One zlib stream, like
+/// zlibCompress.
+std::string encodePng(const Rgba8Image& img, PngFilter filter = PngFilter::UP);
 /// Full escape sequence transmitting `img` in the escapes themselves (base64
-/// RGBA, zlib-compressed when worthCompressing) and creating a placement.
+/// encodePng) and creating a placement.
 std::string transmit(const Rgba8Image& img, const TransmitOptions& opt);
 /// The same, but the raw RGBA pixels are in the POSIX shared memory object
 /// `name` (t=s, see writeSharedMemory) or, with `file`, the file at path
@@ -109,6 +126,47 @@ public:
 	/// each other's bitmap. Give it back with releaseId when done.
 	[[nodiscard]] uint32_t allocId();
 	void releaseId(uint32_t id); ///< see allocId()
+	/// allocId() while more than `keepFree` ids stay free (for slots yet to
+	/// come), else 0. For pictures the terminal keeps (setTerminalCache).
+	[[nodiscard]] uint32_t tryAllocId(size_t keepFree);
+
+	/// Terminal image memory pictures kept there may take, in bytes (decoded
+	/// RGBA, as the terminal holds them); 0: none kept. Kitty and Ghostty
+	/// allow 320 MB by default and drop the oldest past that, so stay below.
+	void setTerminalCache(size_t bytes)
+	{
+		m_cacheBudget = bytes;
+	}
+	[[nodiscard]] size_t terminalCache() const noexcept
+	{
+		return m_cacheBudget;
+	}
+	/// What the slots keep there now: pictures and bytes (decoded).
+	struct CacheUse
+	{
+		size_t m_frames = 0, m_bytes = 0;
+	};
+	/// For the stats overlay (S): the link, the last picture sent, how
+	/// many went out and how many showed from what the terminal keeps.
+	struct LinkStats
+	{
+		LinkMeter::Mode m_mode = LinkMeter::Mode::ESTIMATE;
+		bool m_inline = false; ///< Transfer::DIRECT
+		double m_rate = 0;     ///< bytes a second; 0 unpaced
+		bool m_measured = false;
+		double m_roundTrip = 0, m_backlog = 0; ///< seconds
+		double m_bytesPerPixel = 0;
+		size_t m_lastBytes = 0;
+		int m_lastW = 0, m_lastH = 0;
+		size_t m_sent = 0, m_keptShown = 0;
+	};
+	[[nodiscard]] LinkStats linkStats() const;
+	void countKeptShown(); ///< a slot showed a kept picture again
+	/// Room for a picture of `bytes` to keep, taken if there is: false past
+	/// the budget.
+	[[nodiscard]] bool reserveCache(size_t bytes);
+	void cacheDropped(size_t bytes); ///< a reserved or kept picture goes
+	[[nodiscard]] CacheUse cacheUse() const;
 
 	/// Escapes transmitting `img` (opt.m_tmux is set from this transmitter),
 	/// through shared memory or a file when that is the transfer mode, else
@@ -120,11 +178,30 @@ public:
 	void write(std::string_view bytes, bool flush = false);
 
 	/// Transfer::DIRECT: what the link to the terminal carries, in bytes a
-	/// second (0: unpaced). Nothing pushes back from inside tmux: it buffers
-	/// everything a client over ssh can't take yet (a minute of playback at
-	/// 1 MB/s, still playing out after pause), so the writer paces itself.
+	/// second, until measured (0: unpaced, nothing measured). Nothing pushes
+	/// back from inside tmux: it buffers everything a client over ssh can't
+	/// take yet (a minute of playback at 1 MB/s, still playing out after
+	/// pause), so the writer paces itself. See LinkMeter.
 	void setLinkRate(double bytesPerSecond);
+	/// How the link is measured (LinkMeter::Mode); ESTIMATE until set.
+	void setLinkMode(LinkMeter::Mode mode);
+	/// Transfer::DIRECT: bytes a second, measured or else the guess; 0
+	/// unpaced or not inline.
 	[[nodiscard]] double linkRate() const;
+	/// LinkMeter::Mode::ACK: after a draw's writes, a probe the terminal
+	/// answers once they are through (see linkAnswered). On the UI thread,
+	/// after the draw wrote its pictures.
+	void probeLink();
+	/// The terminal answered the oldest probe (LinkMeter::isAnswer).
+	void linkAnswered();
+	/// LinkMeter::Mode::COUNTER: bytes the slowest ssh connection carried
+	/// since the last call, and its round trip in seconds.
+	void linkDelivered(uint64_t bytes, double roundTrip = 0);
+	/// What an inline picture costs on the link per pixel, escapes and all:
+	/// averaged over the last few sent (DEFAULT_BYTES_PER_PIXEL until one
+	/// is). Film grain runs about 3, CG a tenth of that.
+	[[nodiscard]] double linkBytesPerPixel() const;
+	static constexpr double DEFAULT_BYTES_PER_PIXEL = 3.0;
 	/// Seconds the link still needs for what was written (0 unpaced).
 	[[nodiscard]] double linkBacklog() const;
 	static constexpr double DEFAULT_LINK_RATE = 4e6;
@@ -148,9 +225,12 @@ private:
 	std::atomic<Transfer> m_transfer;
 	const WriteFn m_write;
 	mutable std::mutex m_mutex;
-	double m_linkRate = 0;
-	std::chrono::steady_clock::time_point
-	    m_linkFree; ///< when the link is through what was written
+	LinkMeter m_link;
+	std::atomic<size_t> m_cacheBudget = 0;
+	CacheUse m_cacheUse;
+	double m_bytesPerPixel = 0; ///< inline pictures, averaged; 0: none yet
+	size_t m_lastBytes = 0, m_sent = 0, m_keptShown = 0; ///< see LinkStats
+	int m_lastW = 0, m_lastH = 0;
 	std::array<bool, 256> m_used{};
 	uint32_t m_next;
 	std::string m_deletes;

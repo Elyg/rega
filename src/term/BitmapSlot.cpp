@@ -87,6 +87,7 @@ void BitmapSlot::draw(ftxui::Screen& screen,
 		opt.m_id = m_id;
 		opt.m_cols = cols;
 		opt.m_rows = rows;
+		opt.m_measureCost = false; // drawn shapes cost nothing like a picture
 		m_tx.write(m_tx.encode(bmp, opt));
 		m_transmitted = true;
 		m_cols = cols;

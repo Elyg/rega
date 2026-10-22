@@ -90,6 +90,7 @@ add_library(rvtui_core STATIC
     src/term/Doctor.cpp
     src/term/ImageView.cpp
     src/term/Kitty.cpp
+    src/term/LinkMeter.cpp
     src/term/Output.cpp
     src/util/Clipboard.cpp
     src/util/Fuzzy.cpp
@@ -124,6 +125,7 @@ if(RVTUI_BUILD_TESTS)
         tests/test_help_keys.cpp
         tests/test_image.cpp
         tests/test_line_editor.cpp
+        tests/test_link_meter.cpp
         tests/test_log.cpp
         tests/test_panes.cpp
         tests/test_playbar.cpp

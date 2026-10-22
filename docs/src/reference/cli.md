@@ -29,7 +29,8 @@ Quote patterns with `#` so the shell leaves them alone. A plain frame path
 | `--tutorial` | render the sample images into `~/.cache/rvtui/tutorial` (first run) and open them with a guide. See [tutorial](../tutorial.md) |
 | `--graphics MODE` | `auto` (default), `kitty` or `halfblock`. See [setup](../setup.md) |
 | `--transfer MODE` | how kitty images reach the terminal: `auto` (default) picks `shm` (shared memory) locally outside tmux, `file` (temp files) in tmux, `direct` (inline) over ssh. Change it only if images stay blank |
-| `--link-rate SIZE` | bytes a second the ssh link carries, e.g. `20M`; playback sending images inline is paced to it (default `4M`, `0`: unpaced) |
+| `--link-rate SIZE` | bytes a second the ssh link is assumed to carry until measured, e.g. `20M`; playback sending images inline is paced to the link (default `4M`, `0`: unpaced, unmeasured) |
+| `--terminal-cache SIZE` | terminal image memory frames played over ssh may keep there, e.g. `512M`: a loop's second pass sends no pixels (default `256M`, under kitty's and Ghostty's 320 MB; `0`: off) |
 | `--cache SIZE` | memory for decoded images, e.g. `8G` or `512M` (default `4G`, at least `64M`) |
 | `--chooser-file FILE` | `o` in the browser writes the chosen paths to FILE and exits. See [picking files](../browser.md#picking-files-for-other-tools) |
 | `--cwd-file FILE` | on exit, write the last folder to FILE |

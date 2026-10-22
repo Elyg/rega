@@ -47,13 +47,15 @@ namespace
 enum class Look
 {
 	BLANK,
-	LABEL,    ///< the sequence's first / last frame: dim
-	IN_OUT,   ///< an in / out point: yellow
-	CURRENT,  ///< the current frame's number: bold, pale green
-	PLAYHEAD, ///< the current frame on the bar
-	CACHED,   ///< decoded, inside in / out
-	EMPTY,    ///< not decoded yet, inside in / out
-	OUTSIDE   ///< outside in / out
+	LABEL,     ///< the sequence's first / last frame: dim
+	IN_OUT,    ///< an in / out point: yellow
+	CURRENT,   ///< the current frame's number: bold, pale green
+	PLAYHEAD,  ///< the current frame on the bar
+	CACHED,    ///< decoded, inside in / out
+	STORED,    ///< kept in the terminal, inside in / out
+	ELSEWHERE, ///< kept in the terminal for another view only
+	EMPTY,     ///< not decoded yet, inside in / out
+	OUTSIDE    ///< outside in / out
 };
 
 // Fixed colours, the same as text and as pixels (a picture can't use the
@@ -61,6 +63,11 @@ enum class Look
 // theme's bright green is the same as its green in many themes.
 using Rgb = std::array<uint8_t, 3>;
 constexpr Rgb DECODED = {0x9e, 0xcd, 0x6a};
+// Kept in the terminal (local, over ssh): cyan, a hue of its own beside the
+// decoded green (remote) and the current frame's pale green.
+constexpr Rgb STORED = {0x7d, 0xcf, 0xff};
+// Kept for another view (a pan or a zoom away): the same cyan, dimmed.
+constexpr Rgb ELSEWHERE = {0x3b, 0x6a, 0x82};
 constexpr Rgb CURRENT = {0xd4, 0xf7, 0xcc};
 constexpr Rgb NOT_DECODED = {0x58, 0x5b, 0x70};
 constexpr Rgb OUT_OF_RANGE = {0x45, 0x47, 0x5a};
@@ -84,6 +91,10 @@ Decorator styleOf(Look l)
 			return color(rgb(CURRENT));
 		case Look::CACHED:
 			return color(rgb(DECODED));
+		case Look::STORED:
+			return color(rgb(STORED));
+		case Look::ELSEWHERE:
+			return color(rgb(ELSEWHERE));
 		case Look::EMPTY:
 			return color(rgb(NOT_DECODED));
 		case Look::OUTSIDE:
@@ -147,11 +158,13 @@ std::pair<int, int> framesOf(int c, int w, int n)
 	return {lo, hi};
 }
 
-// Whether every frame of [lo, hi] that playback reaches (inside the range)
-// is decoded. A cell across in / out counts only its frames inside.
-bool decoded(const PlaybarState& s, int n, int lo, int hi)
+// Whether `per` (one flag a frame) holds for every frame of [lo, hi] that
+// playback reaches (inside the range). A cell across in / out counts only
+// its frames inside.
+bool allOf(
+    const std::vector<bool>& per, const PlaybarState& s, int n, int lo, int hi)
 {
-	if(static_cast<int>(s.m_cached.size()) != n)
+	if(static_cast<int>(per.size()) != n)
 	{
 		return false;
 	}
@@ -159,12 +172,27 @@ bool decoded(const PlaybarState& s, int n, int lo, int hi)
 	    f <= std::min(hi, s.m_range.m_last);
 	    ++f)
 	{
-		if(!s.m_cached[f])
+		if(!per[f])
 		{
 			return false;
 		}
 	}
 	return true;
+}
+
+bool decoded(const PlaybarState& s, int n, int lo, int hi)
+{
+	return allOf(s.m_cached, s, n, lo, hi);
+}
+
+bool stored(const PlaybarState& s, int n, int lo, int hi)
+{
+	return allOf(s.m_stored, s, n, lo, hi);
+}
+
+bool storedElsewhere(const PlaybarState& s, int n, int lo, int hi)
+{
+	return allOf(s.m_storedElsewhere, s, n, lo, hi);
 }
 
 bool inRange(const PlaybarState& s, int lo, int hi)
@@ -305,7 +333,10 @@ Rgba8Image paintPlaybar(const PlaybarState& s, int width, int height)
 			        x + 1,
 			        row,
 			        row + band,
-			        decoded(s, n, lo, hi) ? DECODED : NOT_DECODED);
+			        stored(s, n, lo, hi)            ? STORED
+			        : storedElsewhere(s, n, lo, hi) ? ELSEWHERE
+			        : decoded(s, n, lo, hi)         ? DECODED
+			                                        : NOT_DECODED);
 		}
 	}
 	// The current frame's share of the bar, at least a few pixels wide.
@@ -457,16 +488,20 @@ Element Playbar::render(const PlaybarState& s, int width)
 	}
 	Element bar;
 	{
-		// A half-height bar: green where decoded, grey where not yet, the
-		// current frame a paler green; thinner still outside in / out.
+		// A half-height bar: cyan where the terminal keeps the frames, green
+		// where decoded, grey where not yet, the current frame a paler green;
+		// thinner still outside in / out.
 		Row cells(w);
 		for(int c = 0; c < w; ++c)
 		{
 			const bool in = inRange(s, lo[c], hi[c]);
 			const bool current = s.m_frame >= lo[c] && s.m_frame <= hi[c];
 			cells.m_glyphs[c] = current || in ? "▀" : "▔";
-			cells.m_looks[c] = current                       ? Look::PLAYHEAD
-			                   : !in                         ? Look::OUTSIDE
+			cells.m_looks[c] = current                      ? Look::PLAYHEAD
+			                   : !in                        ? Look::OUTSIDE
+			                   : stored(s, n, lo[c], hi[c]) ? Look::STORED
+			                   : storedElsewhere(s, n, lo[c], hi[c])
+			                       ? Look::ELSEWHERE
 			                   : decoded(s, n, lo[c], hi[c]) ? Look::CACHED
 			                                                 : Look::EMPTY;
 		}

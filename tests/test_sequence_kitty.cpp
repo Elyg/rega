@@ -80,10 +80,7 @@ TEST(Kitty, TransmitChunks)
 	opt.m_rows = 5;
 	opt.m_chunk = 1024;
 	std::string s = rv::kitty::transmit(img, opt);
-	EXPECT_EQ(
-	    s.rfind("\x1b_Ga=T,f=32,o=z,q=2,s=64,v=64,i=42,U=1,p=1,c=10,r=5,m=1;",
-	            0),
-	    0u);
+	EXPECT_EQ(s.rfind("\x1b_Ga=T,f=100,q=2,i=42,U=1,p=1,c=10,r=5,m=1;", 0), 0u);
 	// Every chunk terminated; last chunk has m=0.
 	EXPECT_NE(s.find("\x1b_Gm=0;"), std::string::npos);
 	EXPECT_EQ(s.substr(s.size() - 2), "\x1b\\");

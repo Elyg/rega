@@ -71,5 +71,5 @@ an [incomplete image](image.md#incomplete-images) until it's done. Point rvtui a
 render's output folder and leave it open.
 
 > [!NOTE]
-> Over ssh, playback is paced to `--link-rate` so the link doesn't back up. See
+> Over ssh, playback is paced to the link, measured as it plays, so it doesn't back up. See
 > [Over ssh](../setup.md#over-ssh).

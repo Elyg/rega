@@ -222,6 +222,10 @@ struct ChannelStats
 struct LayerImage
 {
 	LayerInfo m_info;
+	/// Which file (as it was on disk), layer and reduction it was read as:
+	/// the same after a reload, different once the file changes. Empty for
+	/// pictures made otherwise. Lets the terminal keep it (ImageSlot).
+	std::string m_origin;
 	Box2i m_dataWindow;
 	Box2i m_displayWindow;
 	int m_reduce = 1;

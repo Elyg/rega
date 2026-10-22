@@ -60,6 +60,16 @@ public:
 	{
 		return m_player.playing();
 	}
+	/// Frames a second playback shows (averaged; 0 when not playing) and
+	/// aims for.
+	double shownFps() const noexcept
+	{
+		return m_player.playing() ? m_shownFps : 0.0;
+	}
+	double targetFps() const noexcept
+	{
+		return m_player.targetFps(std::nullopt);
+	}
 	/// An annotation line or a `:` frame number is being typed (keys are
 	/// text, not commands).
 	bool typing() const noexcept
@@ -127,6 +137,12 @@ public:
 	int pixelCap() const;
 	/// The whole pixel budget while playing with the cap on (tiles share it).
 	int cappedBudget() const;
+	/// Over ssh, send the play range's frames for the terminal to keep
+	/// (ImageSlot::store), one at a time while the link is idle, from the
+	/// current frame on: paused, so the first pass already plays from the
+	/// terminal; playing, ahead of the playhead. UI thread; cheap when all
+	/// are kept. Re-runs itself (a wake every 100 ms) until they are.
+	void fillTerminal();
 
 private:
 	/// `q`: leave the viewer (playback stops).
@@ -134,6 +150,19 @@ private:
 
 	// --- view ---
 	int reduceFor(const ImageInfo& info, const ImageSlot& slot) const;
+	/// What playback draws a slot at: its pixel cap and decode reduction,
+	/// whether playing now or not (fillTerminal stores for later).
+	int playbackPixelCap() const;
+	int playbackReduce(const ImageInfo& info, const ImageSlot& slot) const;
+	/// Whether fillTerminal applies: inline, a terminal budget, one sequence
+	/// shown alone (no tiles, no diff).
+	bool fillsTerminal() const;
+	/// Per frame of the shown sequence: kept in the terminal at playback
+	/// size (the playbar's cyan); empty when nothing is kept.
+	std::vector<bool> storedFrames(const ImageInfo& info);
+	/// Per frame: kept in the terminal for some view, this one or another
+	/// (the playbar's dim cyan: a pan back plays them from there).
+	std::vector<bool> storedElsewhere();
 	/// The slot playback decodes for: the first tile, or the main view.
 	const ImageSlot& playbackSlot() const;
 	/// Whether source `i` is on screen (every source when tiled).
@@ -281,6 +310,9 @@ private:
 	bool m_names = false; ///< `T`: the layer (a tile of images: file) name
 	bool m_fitBesidePanel = false; ///< `f` with a pane open: keep re-fitting
 	bool m_playbackCap = true;     ///< `P`: lower resolution while playing
+	/// Pixels a frame period of the link carries, as cappedBudget() last
+	/// settled on (0: not yet).
+	mutable double m_linkFit = 0;
 	int m_mouseX = -1, m_mouseY = -1;
 	std::optional<LineEditor> m_goto; ///< `:` frame number being typed
 	Playbar m_playbar;
@@ -341,7 +373,11 @@ private:
 	};
 	std::optional<HiddenPanes> m_hiddenPanes;
 
-	Player m_player; ///< last: its ticker stops before the rest goes
+	double m_shownFps = 0; ///< see shownFps()
+	std::chrono::steady_clock::time_point m_lastAdvance;
+	std::atomic<bool> m_fillWanted{false}; ///< fillTerminal has more to do
+	std::jthread m_fillWake; ///< posts fillTerminal while m_fillWanted
+	Player m_player;         ///< last: its ticker stops before the rest goes
 };
 
 } // namespace rv

@@ -75,6 +75,11 @@ public:
 	bool hasLayer(const std::filesystem::path& p,
 	              const std::string& layerLabel,
 	              int reduce);
+	/// The LayerImage::m_origin layer() gives for these, without decoding:
+	/// whether the terminal already keeps that frame (ImageSlot::stored).
+	std::string originOf(const std::filesystem::path& p,
+	                     const std::string& layerLabel,
+	                     int reduce);
 
 	/// For each of `paths`, whether `layerLabel` is decoded at any
 	/// resolution (the playbar's cached frames). One pass over the cache;

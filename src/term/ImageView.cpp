@@ -120,6 +120,17 @@ private:
 	std::vector<ftxui::Box> m_boxes;
 };
 
+// "L|<ident>|<layer>|<reduce>" (ImageService::layerKey): the layer and
+// reduction, whichever file. Frames of one playback share it.
+std::string originSet(const std::string& origin)
+{
+	const size_t last = origin.rfind('|');
+	const size_t layer = last == std::string::npos || last == 0
+	                         ? std::string::npos
+	                         : origin.rfind('|', last - 1);
+	return layer == std::string::npos ? origin : origin.substr(layer);
+}
+
 // Per cell, the average RGB of `bmp` laid over cols x rows cells.
 std::vector<uint8_t> cellColors(const Rgba8Image& bmp, int cols, int rows)
 {
@@ -170,7 +181,8 @@ std::vector<uint8_t> cellColors(const Rgba8Image& bmp, int cols, int rows)
 ImageSlot::ImageSlot(const TermCaps& caps,
                      kitty::Transmitter& tx,
                      std::function<void()> ready)
-    : m_caps(caps), m_tx(tx), m_ready(std::move(ready)), m_id(tx.allocId())
+    : m_caps(caps), m_tx(tx), m_ready(std::move(ready)), m_id(tx.allocId()),
+      m_shownId(m_id)
 {
 }
 
@@ -180,6 +192,25 @@ ImageSlot::~ImageSlot()
 	{
 		m_worker.request_stop();
 		m_worker.join();
+	}
+	for(const Prepared& p : m_done)
+	{
+		releaseUnsent(p);
+	}
+	for(const auto* r : {&m_request, &m_store})
+	{
+		if(*r && (*r)->m_cache)
+		{
+			m_tx.cacheDropped((*r)->m_bytes);
+		}
+	}
+	for(const Prepared& p : m_stored)
+	{
+		releaseUnsent(p);
+	}
+	while(!m_cache.empty())
+	{
+		drop(m_cache.begin());
 	}
 	if(m_transmitted)
 	{
@@ -363,20 +394,28 @@ std::optional<std::pair<double, double>> ImageSlot::imageCoordAt(int cx,
 	return std::make_pair(m_mapping.imageX(ox), m_mapping.imageY(oy));
 }
 
+std::tuple<int, int, double> ImageSlot::pictureSize(const Key& key)
+{
+	const bool kittyMode = key.m_mode == GraphicsMode::KITTY;
+	int pw = key.m_cols * (kittyMode ? key.m_cellW : 1);
+	int ph = key.m_rows * (kittyMode ? key.m_cellH : 2);
+	double quality = 1.0;
+	if(kittyMode && static_cast<double>(pw) * ph > key.m_maxPixels)
+	{
+		quality = std::sqrt(key.m_maxPixels / (static_cast<double>(pw) * ph));
+		pw = std::max(1, static_cast<int>(pw * quality));
+		ph = std::max(1, static_cast<int>(ph * quality));
+	}
+	return {pw, ph, quality};
+}
+
 ImageSlot::Prepared ImageSlot::prepare(Request req) const
 {
 	const Key& key = req.m_key;
 	const bool kittyMode = key.m_mode == GraphicsMode::KITTY;
 	Prepared p;
-	int pw = key.m_cols * (kittyMode ? key.m_cellW : 1);
-	int ph = key.m_rows * (kittyMode ? key.m_cellH : 2);
-	if(kittyMode && static_cast<double>(pw) * ph > key.m_maxPixels)
-	{
-		p.m_quality =
-		    std::sqrt(key.m_maxPixels / (static_cast<double>(pw) * ph));
-		pw = std::max(1, static_cast<int>(pw * p.m_quality));
-		ph = std::max(1, static_cast<int>(ph * p.m_quality));
-	}
+	const auto [pw, ph, quality] = pictureSize(key);
+	p.m_quality = quality;
 	ViewParams scaled = key.m_view;
 	scaled.m_zoom *= p.m_quality;
 	const LayerImage& img = *req.m_img;
@@ -408,6 +447,20 @@ ImageSlot::Prepared ImageSlot::prepare(Request req) const
 	{
 		kitty::TransmitOptions opt;
 		opt.m_id = m_id;
+		// Keep 32 ids for slots to come (tiles, the playbar).
+		constexpr size_t KEEP_FREE_IDS = 32;
+		if(req.m_cache)
+		{
+			if(const uint32_t id = m_tx.tryAllocId(KEEP_FREE_IDS))
+			{
+				opt.m_id = p.m_cacheId = id;
+				p.m_bytes = req.m_bytes;
+			}
+			else
+			{
+				m_tx.cacheDropped(req.m_bytes); // no id left: sent as ever
+			}
+		}
 		opt.m_cols = key.m_cols;
 		opt.m_rows = key.m_rows;
 		p.m_escapes = m_tx.encode(bmp, opt);
@@ -418,6 +471,7 @@ ImageSlot::Prepared ImageSlot::prepare(Request req) const
 	}
 	p.m_key = key;
 	p.m_fromDraw = req.m_fromDraw;
+	p.m_storeOnly = req.m_storeOnly;
 	p.m_img = std::move(req.m_img);
 	return p;
 }
@@ -437,6 +491,11 @@ void ImageSlot::apply(Prepared p)
 		}
 		m_tx.write(p.m_escapes);
 		m_transmitted = true;
+		m_shownId = p.m_cacheId ? p.m_cacheId : m_id;
+		if(p.m_cacheId)
+		{
+			keep(p);
+		}
 	}
 	else
 	{
@@ -458,6 +517,211 @@ bool ImageSlot::sameView(Key a, const Key& b)
 	return a == b;
 }
 
+bool ImageSlot::sameCachedView(Key a, const Key& b)
+{
+	a.m_img = b.m_img;
+	a.m_maxPixels = b.m_maxPixels;
+	return a == b;
+}
+
+bool ImageSlot::canKeep(const Key& key, const LayerImage& img) const
+{
+	return key.m_mode == GraphicsMode::KITTY &&
+	       key.m_transfer == Transfer::DIRECT && m_tx.terminalCache() > 0 &&
+	       !img.m_origin.empty();
+}
+
+bool ImageSlot::cacheable(const Key& key, const LayerImage& img) const
+{
+	return m_cacheOn && canKeep(key, img);
+}
+
+std::list<ImageSlot::Cached>::iterator
+ImageSlot::findKept(const Key& key, const std::string& origin)
+{
+	return std::ranges::find_if(m_cache,
+	                            [&](const Cached& c)
+	                            {
+		                            return c.m_origin == origin &&
+		                                   sameCachedView(c.m_key, key);
+	                            });
+}
+
+std::list<ImageSlot::Cached>::iterator
+ImageSlot::findCached(const Key& key, const LayerImage& img)
+{
+	return cacheable(key, img) ? findKept(key, img.m_origin) : m_cache.end();
+}
+
+bool ImageSlot::store(LayerImagePtr img, int maxPixels)
+{
+	if(!m_ready || !m_lastDrawn || !img)
+	{
+		return false;
+	}
+	Key key = *m_lastDrawn;
+	key.m_img = img.get();
+	key.m_maxPixels = maxPixels;
+	if(!canKeep(key, *img) || findKept(key, img->m_origin) != m_cache.end())
+	{
+		return false;
+	}
+	std::lock_guard lk(m_jobMu);
+	if(m_store || (m_busy && m_busy->m_storeOnly) || !m_stored.empty())
+	{
+		return false; // one at a time: the link paces them
+	}
+	const auto [pw, ph, quality] = pictureSize(key);
+	const size_t bytes = static_cast<size_t>(pw) * ph * 4;
+	if(!makeRoom(key, *img, bytes))
+	{
+		return false;
+	}
+	m_store = Request{key, std::move(img), false, true, bytes, true};
+	if(!m_worker.joinable())
+	{
+		m_worker = std::jthread([this](std::stop_token st) { encodeLoop(st); });
+	}
+	m_jobCv.notify_one();
+	return true;
+}
+
+bool ImageSlot::flushStored()
+{
+	std::deque<Prepared> stored;
+	{
+		std::lock_guard lk(m_jobMu);
+		stored.swap(m_stored);
+	}
+	bool wrote = false;
+	for(Prepared& p : stored)
+	{
+		// Without an id of its own it was encoded under m_id: writing it
+		// would replace what is on screen. And a draw may have sent the
+		// same frame meanwhile.
+		if(!p.m_cacheId ||
+		   findKept(p.m_key, p.m_img->m_origin) != m_cache.end())
+		{
+			releaseUnsent(p);
+			continue;
+		}
+		m_tx.write(p.m_escapes);
+		keep(p);
+		wrote = true;
+	}
+	return wrote;
+}
+
+bool ImageSlot::storing() const
+{
+	std::lock_guard lk(m_jobMu);
+	return m_store || (m_busy && m_busy->m_storeOnly) || !m_stored.empty();
+}
+
+bool ImageSlot::stored(const std::string& origin) const
+{
+	return m_lastDrawn &&
+	       std::ranges::any_of(m_cache,
+	                           [&](const Cached& c)
+	                           {
+		                           return c.m_origin == origin &&
+		                                  sameCachedView(c.m_key, *m_lastDrawn);
+	                           });
+}
+
+bool ImageSlot::storedInAnyView(const std::string& pathPrefix) const
+{
+	return std::ranges::any_of(m_cache,
+	                           [&](const Cached& c)
+	                           {
+		                           return c.m_origin.compare(2,
+		                                                     pathPrefix.size(),
+		                                                     pathPrefix) == 0;
+	                           });
+}
+
+void ImageSlot::showCached(std::list<Cached>::iterator it,
+                           const Key& key,
+                           LayerImagePtr img)
+{
+	m_cache.splice(m_cache.begin(), m_cache, it); // most recently shown
+	m_tx.countKeptShown();
+	const Cached& c = m_cache.front();
+	m_shownId = c.m_id;
+	m_mapping = c.m_mapping;
+	m_quality = c.m_quality;
+	m_cellRgb = c.m_cellRgb;
+	m_cols = key.m_cols;
+	m_rows = key.m_rows;
+	m_frame = c.m_frame;
+	m_last = key;
+	m_keepAlive = std::move(img);
+}
+
+bool ImageSlot::makeRoom(const Key& key, const LayerImage& img, size_t bytes)
+{
+	// Kept frames of another view, layer or reduction go only for room, the
+	// least recently shown first: a pan away and back (or another AOV and
+	// back) finds them still there. Dropping them at the first step of a pan
+	// emptied the terminal each time.
+	const std::string set = originSet(img.m_origin);
+	while(!m_tx.reserveCache(bytes))
+	{
+		const auto other =
+		    std::find_if(m_cache.rbegin(),
+		                 m_cache.rend(),
+		                 [&](const Cached& c)
+		                 {
+			                 return !sameCachedView(c.m_key, key) ||
+			                        c.m_set != set;
+		                 });
+		if(other == m_cache.rend())
+		{
+			return false; // all of this view: they stay, this one goes as ever
+		}
+		drop(std::prev(other.base()));
+	}
+	return true;
+}
+
+void ImageSlot::keep(const Prepared& p)
+{
+	// Stored (store()) while a draw prepared it too: the one shown stays.
+	if(const auto twin = findKept(p.m_key, p.m_img->m_origin);
+	   twin != m_cache.end())
+	{
+		drop(twin);
+	}
+	Key key = p.m_key;
+	key.m_img = nullptr;
+	m_cache.push_front(Cached{p.m_img->m_origin,
+	                          originSet(p.m_img->m_origin),
+	                          key,
+	                          p.m_cacheId,
+	                          p.m_bytes,
+	                          p.m_mapping,
+	                          p.m_quality,
+	                          p.m_cellRgb,
+	                          p.m_img->m_displayWindow});
+}
+
+void ImageSlot::drop(std::list<Cached>::iterator it)
+{
+	m_tx.write(kitty::deleteImage(it->m_id, m_tx.tmux()));
+	m_tx.releaseId(it->m_id);
+	m_tx.cacheDropped(it->m_bytes);
+	m_cache.erase(it);
+}
+
+void ImageSlot::releaseUnsent(const Prepared& p) const
+{
+	if(p.m_cacheId)
+	{
+		m_tx.releaseId(p.m_cacheId);
+		m_tx.cacheDropped(p.m_bytes);
+	}
+}
+
 void ImageSlot::requestLocked(const Key& key, LayerImagePtr img, bool fromDraw)
 {
 	const bool done =
@@ -468,7 +732,19 @@ void ImageSlot::requestLocked(const Key& key, LayerImagePtr img, bool fromDraw)
 	{
 		return; // on its way, or done and waiting for its draw
 	}
-	m_request = Request{key, std::move(img), fromDraw};
+	bool cache = false;
+	size_t bytes = 0;
+	if(img && cacheable(key, *img))
+	{
+		const auto [pw, ph, quality] = pictureSize(key);
+		bytes = static_cast<size_t>(pw) * ph * 4; // RGBA, as kept
+		cache = makeRoom(key, *img, bytes);
+	}
+	if(m_request && m_request->m_cache)
+	{
+		m_tx.cacheDropped(m_request->m_bytes); // replaced before it went
+	}
+	m_request = Request{key, std::move(img), fromDraw, cache, bytes};
 	if(!m_worker.joinable())
 	{
 		m_worker = std::jthread([this](std::stop_token st) { encodeLoop(st); });
@@ -485,9 +761,9 @@ void ImageSlot::prepareAhead(LayerImagePtr img)
 	}
 	Key key = *m_lastDrawn;
 	key.m_img = img.get();
-	if(m_last && *m_last == key)
+	if((m_last && *m_last == key) || findCached(key, *img) != m_cache.end())
 	{
-		return;
+		return; // on screen, or kept in the terminal
 	}
 	std::lock_guard lk(m_jobMu);
 	requestLocked(key, std::move(img));
@@ -506,15 +782,29 @@ void ImageSlot::encodeLoop(std::stop_token stop)
 		Request req;
 		{
 			std::unique_lock lk(m_jobMu);
-			if(!m_jobCv.wait(lk, stop, [&] { return m_request.has_value(); }))
+			if(!m_jobCv.wait(lk,
+			                 stop,
+			                 [&] { return m_request.has_value() || m_store; }))
 			{
 				return; // stop requested
 			}
-			req = std::move(*m_request);
-			m_request.reset();
+			std::optional<Request>& next = m_request ? m_request : m_store;
+			req = std::move(*next);
+			next.reset();
 			m_busy = Request{req.m_key, nullptr};
+			m_busy->m_storeOnly = req.m_storeOnly;
 		}
 		Prepared p = prepare(std::move(req));
+		if(p.m_storeOnly)
+		{
+			{
+				std::lock_guard lk(m_jobMu);
+				m_stored.push_back(std::move(p));
+				m_busy.reset();
+			}
+			m_ready(); // for the UI to write it, and store the next
+			continue;
+		}
 		bool notify;
 		{
 			std::lock_guard lk(m_jobMu);
@@ -525,6 +815,7 @@ void ImageSlot::encodeLoop(std::stop_token stop)
 			m_done.push_back(std::move(p));
 			if(m_done.size() > MAX_DONE)
 			{
+				releaseUnsent(m_done.front());
 				m_done.pop_front();
 			}
 			m_busy.reset();
@@ -568,7 +859,23 @@ void ImageSlot::draw(ftxui::Screen& screen,
 	        m_caps.m_resend};
 	m_areaW = cols * pxPerCellX();
 	m_areaH = rows * pxPerCellY();
-	if(kittyMode && m_ready)
+	if(!m_lastDrawn || !sameCachedView(*m_lastDrawn, key))
+	{
+		m_viewSince = std::chrono::steady_clock::now();
+	}
+	if(const auto kept = kittyMode ? findCached(key, *img) : m_cache.end();
+	   kept != m_cache.end())
+	{
+		// Kept in the terminal: show it by its id, send nothing.
+		if(!m_last || !(*m_last == key))
+		{
+			showCached(kept, key, img);
+		}
+		m_lastDrawn = key;
+		std::lock_guard lk(m_jobMu);
+		m_waitFor.reset();
+	}
+	else if(kittyMode && m_ready)
 	{
 		m_lastDrawn = key;
 		// One lock from "is it done?" to "wake me when it is", or the
@@ -630,7 +937,7 @@ void ImageSlot::draw(ftxui::Screen& screen,
 		cols = std::min(cols, m_cols); // until a resized picture is out
 		rows = std::min(rows, m_rows);
 		const ftxui::Color fg =
-		    ftxui::Color::Palette256(static_cast<uint8_t>(m_id));
+		    ftxui::Color::Palette256(static_cast<uint8_t>(m_shownId));
 		for(int r = 0; r < rows; ++r)
 		{
 			for(int c = 0; c < cols; ++c)

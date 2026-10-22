@@ -8,14 +8,17 @@
 #include <ftxui/screen/box.hpp>
 
 #include <array>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <functional>
+#include <list>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
+#include <tuple>
 #include <vector>
 
 namespace rv
@@ -119,6 +122,44 @@ public:
 	{
 		return m_maxPixels;
 	}
+	/// Keep the pictures sent in the terminal, each under its own id, and
+	/// show one again by its id alone: on while playing or scrubbing, inline
+	/// (over ssh) only, within Transmitter::terminalCache(). A second loop
+	/// then sends no pixels at all. Off, every picture goes as before.
+	void setTerminalCache(bool on)
+	{
+		m_cacheOn = on;
+	}
+	/// Pictures this slot keeps in the terminal.
+	[[nodiscard]] size_t cachedFrames() const noexcept
+	{
+		return m_cache.size();
+	}
+	/// Send `img`, drawn like the last draw but at most `maxPixels`, for the
+	/// terminal to keep without showing it: a playback range stored before
+	/// it plays (or ahead of the playhead), so its frames then show by id
+	/// alone. On the slot's thread, after anything a draw asks for; the
+	/// next flushStored() writes it. False when it can't be kept (not inline,
+	/// no budget left, nothing drawn yet) or one is already on its way.
+	bool store(LayerImagePtr img, int maxPixels);
+	/// Write the pictures store() prepared (UI thread). True if any went.
+	bool flushStored();
+	/// A store() on its way, or prepared and not yet written.
+	[[nodiscard]] bool storing() const;
+	/// Whether the terminal keeps the picture of `origin`
+	/// (LayerImage::m_origin) drawn as the last draw, at any pixel cap.
+	[[nodiscard]] bool stored(const std::string& origin) const;
+	/// Whether the terminal keeps a picture of the file `pathPrefix` names
+	/// (its path and "|": LayerImage::m_origin is "L|<path>|<stamp>|..."),
+	/// in any view, layer or reduction.
+	[[nodiscard]] bool storedInAnyView(const std::string& pathPrefix) const;
+	/// Since when draws have been of the same view (zoom, pan, display,
+	/// size; any image): a fill waits for it to settle, or it would send
+	/// frames for each step of a pan, to drop them at the next.
+	[[nodiscard]] std::chrono::steady_clock::time_point viewSince() const
+	{
+		return m_viewSince;
+	}
 	/// True while a picture is being prepared on the slot's thread (or is
 	/// ready and waiting for a draw).
 	[[nodiscard]] bool pending() const;
@@ -158,6 +199,9 @@ private:
 		Key m_key;
 		LayerImagePtr m_img;
 		bool m_fromDraw = false; ///< a draw wanted it (not prepareAhead)
+		bool m_cache = false;    ///< to be kept: room reserved (m_bytes)
+		size_t m_bytes = 0;
+		bool m_storeOnly = false; ///< store(): kept, not shown
 	};
 	struct Prepared
 	{
@@ -169,7 +213,55 @@ private:
 		std::string m_escapes; ///< kitty
 		Rgba8Image m_bitmap;   ///< half-block
 		bool m_fromDraw = false;
+		uint32_t m_cacheId = 0; ///< sent under its own id, to keep (0: m_id)
+		size_t m_bytes = 0;     ///< as the terminal holds it (RGBA)
+		bool m_storeOnly = false;
 	};
+	/// A picture kept in the terminal under its own id.
+	struct Cached
+	{
+		std::string m_origin; ///< LayerImage::m_origin
+		std::string m_set;    ///< its layer and reduction (originSet)
+		Key m_key;            ///< m_img unset: the image may be long gone
+		uint32_t m_id = 0;
+		size_t m_bytes = 0;
+		ViewMapping m_mapping;
+		double m_quality = 1.0;
+		std::vector<uint8_t> m_cellRgb;
+		Box2i m_frame{};
+	};
+	/// Whether `a` and `b` draw the same way, image and pixel cap aside: a
+	/// kept picture shows for a key it was not quite made for when only the
+	/// cap moved (the link measured otherwise), rather than going again.
+	static bool sameCachedView(Key a, const Key& b);
+	/// Whether a picture of `img` drawn as `key` can be kept at all; while
+	/// playing (m_cacheOn) also shown from what is kept: cacheable().
+	[[nodiscard]] bool canKeep(const Key& key, const LayerImage& img) const;
+	[[nodiscard]] bool cacheable(const Key& key, const LayerImage& img) const;
+	/// findCached() whether or not playing.
+	std::list<Cached>::iterator findKept(const Key& key,
+	                                     const std::string& origin);
+	/// The kept picture of `img` drawn as `key`, or end.
+	std::list<Cached>::iterator findCached(const Key& key,
+	                                       const LayerImage& img);
+	void showCached(std::list<Cached>::iterator it,
+	                const Key& key,
+	                LayerImagePtr img);
+	/// Output pixels of the picture for `key`, and the quality (output px per
+	/// terminal px) it is drawn at.
+	static std::tuple<int, int, double> pictureSize(const Key& key);
+	/// Room in the terminal for a picture of `img` drawn as `key`: reserves
+	/// `bytes`, dropping kept ones of another view, layer or reduction (least
+	/// recently shown first) while they don't fit, never this view's own. A
+	/// loop longer than the budget then keeps its first frames and sends the
+	/// rest each time: dropping the least recently shown of it instead
+	/// dropped each just before it came round.
+	bool makeRoom(const Key& key, const LayerImage& img, size_t bytes);
+	/// Keep the picture `p` just sent (its room was reserved).
+	void keep(const Prepared& p);
+	void drop(std::list<Cached>::iterator it);
+	/// An id taken for a picture that never went out.
+	void releaseUnsent(const Prepared& p) const;
 	/// Whether `a` and `b` differ in the image only.
 	static bool sameView(Key a, const Key& b);
 
@@ -196,6 +288,9 @@ private:
 	/// blank or stale.
 	const uint32_t m_id;
 	bool m_transmitted = false;
+	uint32_t m_shownId; ///< the id the cells show: m_id or a kept picture's
+	bool m_cacheOn = false;
+	std::list<Cached> m_cache; ///< most recently shown first
 	LayerImagePtr
 	    m_keepAlive; ///< the key compares raw pointers; keep the image alive
 	std::optional<Key> m_last;
@@ -213,6 +308,7 @@ private:
 	/// The slot's encode thread (kitty with `ready` only; started on first
 	/// use). Newest request wins: one waiting, one being prepared, one done.
 	std::optional<Key> m_lastDrawn; ///< the key the last draw wanted
+	std::chrono::steady_clock::time_point m_viewSince; ///< see viewSince()
 	mutable std::mutex m_jobMu;
 	std::optional<Key> m_waitFor; ///< what a draw waits for: `ready` when done
 	std::condition_variable_any m_jobCv;
@@ -220,8 +316,10 @@ private:
 	/// Finished, newest last: the frame about to be drawn and the one ahead.
 	std::deque<Prepared> m_done;
 	static constexpr size_t MAX_DONE = 2;
-	std::optional<Request> m_busy; ///< being prepared (m_img unset)
-	std::jthread m_worker;         ///< last: stops before the rest goes
+	std::optional<Request> m_busy;  ///< being prepared (m_img unset)
+	std::optional<Request> m_store; ///< store(): after m_request
+	std::deque<Prepared> m_stored;  ///< store() prepared, to write
+	std::jthread m_worker;          ///< last: stops before the rest goes
 };
 
 /// One owner per slot; on the heap because ImageNode keeps a raw ImageSlot*.

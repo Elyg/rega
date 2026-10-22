@@ -43,6 +43,9 @@ struct AppOptions
 	bool m_tutorial = false; ///< show the tutorial tour (see Tour)
 	/// Inline transfer: bytes a second the link carries (0: unpaced).
 	double m_linkRate = kitty::Transmitter::DEFAULT_LINK_RATE;
+	/// Terminal image memory played frames may keep (inline only; 0 none).
+	std::uint64_t m_terminalCache = DEFAULT_TERMINAL_CACHE;
+	static constexpr std::uint64_t DEFAULT_TERMINAL_CACHE = 256ull << 20;
 };
 
 /// Run the TUI until quit; returns the exit code.
@@ -71,6 +74,8 @@ private:
 	};
 
 	[[nodiscard]] ftxui::Element renderHelp();
+	/// `S`: what the link carries, what a picture costs, what is cached.
+	[[nodiscard]] ftxui::Element renderStats();
 	bool helpEvent(ftxui::Event e);
 	/// On the UI thread: files changed on disk (see FileWatcher). Re-list,
 	/// re-scan the open sequences, drop stale decodes, redraw.
@@ -94,6 +99,7 @@ private:
 	AppContext m_ctx;
 	Mode m_mode = Mode::BROWSER;
 	bool m_help = false;
+	bool m_stats = false;    ///< `S`: the link and cache overlay
 	int m_helpScroll = 0;    ///< first help line shown (short terminals)
 	std::string m_helpQuery; ///< typed while the help is open: shows matches
 
@@ -103,7 +109,8 @@ private:
 	std::vector<std::filesystem::path> m_watched;
 	/// --transfer auto in tmux: re-checks the clients attached.
 	std::jthread m_clientCheck;
-	FileWatcher m_watcher; ///< last: stops before the rest goes
+	std::jthread m_linkPoll; ///< in tmux: what it sent clients over ssh
+	FileWatcher m_watcher;   ///< last: stops before the rest goes
 };
 
 } // namespace rv

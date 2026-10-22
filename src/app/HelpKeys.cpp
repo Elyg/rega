@@ -73,6 +73,7 @@ const std::vector<Section>& viewer()
 	             {"playbar", "click: go to frame, wheel: step"},
 	             {"F", "cycle playback fps"},
 	             {"P", "playback: capped resolution (keeps up) / full res"},
+	             {"S", "stats: link, picture cost, caches (anywhere)"},
 	         }},
 	    {.m_id = "viewer-display",
 	     .m_title = "Display",

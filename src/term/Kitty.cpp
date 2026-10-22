@@ -11,6 +11,7 @@
 #include <chrono>
 #include <csignal>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fcntl.h>
 #include <filesystem>
@@ -120,26 +121,6 @@ std::string zlibCompress(const uint8_t* data, size_t n)
 	return out;
 }
 
-bool worthCompressing(const uint8_t* data, size_t n)
-{
-	// Four 64 KiB samples spread over the data: enough to tell film grain
-	// (barely shrinks) from CG or flat areas, at a few % of a full compress.
-	constexpr size_t SAMPLE = 64 * 1024;
-	constexpr int SAMPLES = 4;
-	if(n < SAMPLE * SAMPLES)
-	{
-		return true; // small: compressing costs next to nothing
-	}
-	size_t in = 0, out = 0;
-	for(int i = 0; i < SAMPLES; ++i)
-	{
-		const size_t at = (n - SAMPLE) / (SAMPLES - 1) * i;
-		in += SAMPLE;
-		out += zlibCompress(data + at, SAMPLE).size();
-	}
-	return out < in * 9 / 10;
-}
-
 std::string tmuxWrap(std::string_view seq)
 {
 	// Double every ESC; copy the runs between them whole.
@@ -171,11 +152,15 @@ namespace
 {
 
 // Control keys shared by both transfer modes (no medium, no compression).
-std::string placementKeys(const Rgba8Image& img, const TransmitOptions& opt)
+std::string placementKeys(const Rgba8Image& img,
+                          const TransmitOptions& opt,
+                          bool png = false)
 {
-	std::string keys = "a=T,f=32,q=2,s=" + std::to_string(img.m_width) +
-	                   ",v=" + std::to_string(img.m_height) +
-	                   ",i=" + std::to_string(opt.m_id);
+	// A PNG says its own size.
+	std::string keys = png ? "a=T,f=100,q=2"
+	                       : "a=T,f=32,q=2,s=" + std::to_string(img.m_width) +
+	                             ",v=" + std::to_string(img.m_height);
+	keys += ",i=" + std::to_string(opt.m_id);
 	if(opt.m_virtualPlacement)
 	{
 		keys += ",U=1,p=" + std::to_string(PLACEMENT_ID);
@@ -193,22 +178,159 @@ std::string placementKeys(const Rgba8Image& img, const TransmitOptions& opt)
 
 } // namespace
 
+bool isOpaque(const Rgba8Image& img)
+{
+	const std::vector<uint8_t>& px = img.m_pixels;
+	for(size_t i = 3; i < px.size(); i += 4)
+	{
+		if(px[i] != 255)
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+bool isGrey(const Rgba8Image& img)
+{
+	const std::vector<uint8_t>& px = img.m_pixels;
+	for(size_t i = 0; i < px.size(); i += 4)
+	{
+		if(px[i] != px[i + 1] || px[i] != px[i + 2])
+		{
+			return false;
+		}
+	}
+	return true;
+}
+
+namespace
+{
+
+void putBe32(std::string& out, uint32_t v)
+{
+	for(int shift = 24; shift >= 0; shift -= 8)
+	{
+		out += static_cast<char>((v >> shift) & 0xff);
+	}
+}
+
+void pngChunk(std::string& out, const char* type, std::string_view data)
+{
+	putBe32(out, static_cast<uint32_t>(data.size()));
+	const size_t at = out.size();
+	out.append(type, 4);
+	out.append(data);
+	putBe32(out, libdeflate_crc32(0, out.data() + at, out.size() - at));
+}
+
+uint8_t paeth(int a, int b, int c)
+{
+	const int p = a + b - c;
+	const int pa = std::abs(p - a), pb = std::abs(p - b), pc = std::abs(p - c);
+	return static_cast<uint8_t>(pa <= pb && pa <= pc ? a : pb <= pc ? b : c);
+}
+
+} // namespace
+
+std::string encodePng(const Rgba8Image& img, PngFilter filter)
+{
+	const bool grey = isGrey(img), opaque = isOpaque(img);
+	const int ch = (grey ? 1 : 3) + (opaque ? 0 : 1);
+	const uint8_t colourType = grey ? (opaque ? 0 : 4) : (opaque ? 2 : 6);
+	const size_t w = static_cast<size_t>(img.m_width);
+	const size_t h = static_cast<size_t>(img.m_height);
+	const size_t stride = w * ch;
+	// The channels kept, row by row, then each row filtered against the one
+	// above behind its filter-type byte.
+	std::vector<uint8_t> packed(stride * h);
+	std::vector<uint8_t> rows((stride + 1) * h);
+	parallelFor(img.m_height,
+	            16,
+	            [&](int b, int e)
+	            {
+		            for(size_t y = b; y < static_cast<size_t>(e); ++y)
+		            {
+			            const uint8_t* src = &img.m_pixels[y * w * 4];
+			            uint8_t* dst = &packed[y * stride];
+			            for(size_t x = 0; x < w; ++x, src += 4)
+			            {
+				            if(grey)
+				            {
+					            *dst++ = src[0];
+				            }
+				            else
+				            {
+					            *dst++ = src[0];
+					            *dst++ = src[1];
+					            *dst++ = src[2];
+				            }
+				            if(!opaque)
+				            {
+					            *dst++ = src[3];
+				            }
+			            }
+		            }
+	            });
+	parallelFor(img.m_height,
+	            16,
+	            [&](int b, int e)
+	            {
+		            for(size_t y = b; y < static_cast<size_t>(e); ++y)
+		            {
+			            const uint8_t* cur = &packed[y * stride];
+			            const uint8_t* up = y > 0 ? cur - stride : nullptr;
+			            uint8_t* out = &rows[y * (stride + 1)];
+			            *out++ = static_cast<uint8_t>(filter);
+			            for(size_t i = 0; i < stride; ++i)
+			            {
+				            const int a =
+				                i >= static_cast<size_t>(ch) ? cur[i - ch] : 0;
+				            const int u = up ? up[i] : 0;
+				            const int c = up && i >= static_cast<size_t>(ch)
+				                              ? up[i - ch]
+				                              : 0;
+				            switch(filter)
+				            {
+					            case PngFilter::NONE:
+						            out[i] = cur[i];
+						            break;
+					            case PngFilter::SUB:
+						            out[i] = static_cast<uint8_t>(cur[i] - a);
+						            break;
+					            case PngFilter::UP:
+						            out[i] = static_cast<uint8_t>(cur[i] - u);
+						            break;
+					            case PngFilter::PAETH:
+						            out[i] = static_cast<uint8_t>(
+						                cur[i] - paeth(a, u, c));
+						            break;
+				            }
+			            }
+		            }
+	            });
+	std::string ihdr;
+	putBe32(ihdr, static_cast<uint32_t>(w));
+	putBe32(ihdr, static_cast<uint32_t>(h));
+	ihdr += '\x08'; // bits per channel
+	ihdr += static_cast<char>(colourType);
+	ihdr.append(3, '\0'); // deflate, adaptive filtering, no interlace
+	std::string png = "\x89PNG\r\n\x1a\n";
+	pngChunk(png, "IHDR", ihdr);
+	pngChunk(png, "IDAT", zlibCompress(rows.data(), rows.size()));
+	pngChunk(png, "IEND", {});
+	return png;
+}
+
 std::string transmit(const Rgba8Image& img, const TransmitOptions& opt)
 {
-	const uint8_t* px = img.m_pixels.data();
-	const size_t n = img.m_pixels.size();
-	std::string keys = placementKeys(img, opt);
-	std::string payload;
-	if(worthCompressing(px, n))
-	{
-		const std::string z = zlibCompress(px, n);
-		payload = base64(reinterpret_cast<const uint8_t*>(z.data()), z.size());
-		keys.insert(keys.find(",q="), ",o=z");
-	}
-	else
-	{
-		payload = base64(px, n);
-	}
+	// PNG, not zlib'd pixels: its row filters take a third or more off, and
+	// it keeps only the channels needed (one for a channel or alpha shown as
+	// grey, none for an alpha that is all opaque).
+	const std::string png = encodePng(img);
+	const std::string keys = placementKeys(img, opt, true);
+	const std::string payload =
+	    base64(reinterpret_cast<const uint8_t*>(png.data()), png.size());
 
 	std::string out;
 	out.reserve(payload.size() + payload.size() / opt.m_chunk * 32 + 128);
@@ -406,6 +528,70 @@ uint32_t Transmitter::allocId()
 	return m_next++ % 255u + 1u; // all 255 live: nothing better to do
 }
 
+uint32_t Transmitter::tryAllocId(size_t keepFree)
+{
+	{
+		std::lock_guard lock(m_mutex);
+		const auto used = static_cast<size_t>(
+		    std::count(m_used.begin() + 1, m_used.end(), true));
+		if(255 - used <= keepFree)
+		{
+			return 0;
+		}
+	}
+	return allocId();
+}
+
+bool Transmitter::reserveCache(size_t bytes)
+{
+	std::lock_guard lock(m_mutex);
+	if(m_cacheUse.m_bytes + bytes > m_cacheBudget)
+	{
+		return false;
+	}
+	++m_cacheUse.m_frames;
+	m_cacheUse.m_bytes += bytes;
+	return true;
+}
+
+void Transmitter::cacheDropped(size_t bytes)
+{
+	std::lock_guard lock(m_mutex);
+	m_cacheUse.m_frames -= std::min<size_t>(1, m_cacheUse.m_frames);
+	m_cacheUse.m_bytes -= std::min(bytes, m_cacheUse.m_bytes);
+}
+
+Transmitter::LinkStats Transmitter::linkStats() const
+{
+	std::lock_guard lock(m_mutex);
+	LinkStats s;
+	s.m_mode = m_link.mode();
+	s.m_inline = m_transfer == Transfer::DIRECT;
+	s.m_rate = m_link.rate();
+	s.m_measured = m_link.measured();
+	s.m_roundTrip = m_link.roundTrip();
+	s.m_backlog = m_link.backlog(std::chrono::steady_clock::now());
+	s.m_bytesPerPixel = m_bytesPerPixel;
+	s.m_lastBytes = m_lastBytes;
+	s.m_lastW = m_lastW;
+	s.m_lastH = m_lastH;
+	s.m_sent = m_sent;
+	s.m_keptShown = m_keptShown;
+	return s;
+}
+
+void Transmitter::countKeptShown()
+{
+	std::lock_guard lock(m_mutex);
+	++m_keptShown;
+}
+
+Transmitter::CacheUse Transmitter::cacheUse() const
+{
+	std::lock_guard lock(m_mutex);
+	return m_cacheUse;
+}
+
 void Transmitter::releaseId(uint32_t id)
 {
 	std::lock_guard lock(m_mutex);
@@ -444,42 +630,129 @@ std::string Transmitter::encode(const Rgba8Image& img, TransmitOptions opt)
 		             name,
 		             std::strerror(errno));
 	}
-	return transmit(img, opt);
+	std::string out = transmit(img, opt);
+	const double pixels = static_cast<double>(img.m_width) * img.m_height;
+	if(pixels > 0 && opt.m_measureCost)
+	{
+		// A black slate costs next to nothing: floor it, or the frame after
+		// it would be sized for a link many times faster.
+		constexpr double MIN_BYTES_PER_PIXEL = 0.1;
+		const double bpp = std::max(MIN_BYTES_PER_PIXEL,
+		                            static_cast<double>(out.size()) / pixels);
+		std::lock_guard lock(m_mutex);
+		m_bytesPerPixel =
+		    m_bytesPerPixel > 0 ? 0.7 * m_bytesPerPixel + 0.3 * bpp : bpp;
+		m_lastBytes = out.size();
+		m_lastW = img.m_width;
+		m_lastH = img.m_height;
+		++m_sent;
+		spdlog::debug("inline {}x{}: {} bytes, {:.3f} B/px (avg {:.3f})",
+		              img.m_width,
+		              img.m_height,
+		              out.size(),
+		              bpp,
+		              m_bytesPerPixel);
+	}
+	return out;
 }
 
 void Transmitter::write(std::string_view bytes, bool flush)
 {
 	m_write(bytes, flush);
-	std::lock_guard lock(m_mutex);
-	if(m_transfer == Transfer::DIRECT && m_linkRate > 0)
+	if(m_transfer == Transfer::DIRECT)
 	{
-		const auto now = std::chrono::steady_clock::now();
-		m_linkFree =
-		    std::max(now, m_linkFree) +
-		    std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-		        std::chrono::duration<double>(
-		            static_cast<double>(bytes.size()) / m_linkRate));
+		std::lock_guard lock(m_mutex);
+		m_link.wrote(bytes.size(), std::chrono::steady_clock::now());
 	}
 }
 
 void Transmitter::setLinkRate(double bytesPerSecond)
 {
 	std::lock_guard lock(m_mutex);
-	m_linkRate = std::max(0.0, bytesPerSecond);
+	m_link.setGuess(bytesPerSecond);
+}
+
+void Transmitter::setLinkMode(LinkMeter::Mode mode)
+{
+	std::lock_guard lock(m_mutex);
+	m_link.setMode(mode);
 }
 
 double Transmitter::linkRate() const
 {
 	std::lock_guard lock(m_mutex);
-	return m_transfer == Transfer::DIRECT ? m_linkRate : 0.0;
+	return m_transfer == Transfer::DIRECT ? m_link.rate() : 0.0;
+}
+
+void Transmitter::probeLink()
+{
+	if(m_transfer != Transfer::DIRECT)
+	{
+		return;
+	}
+	{
+		std::lock_guard lock(m_mutex);
+		if(!m_link.wantsProbe(std::chrono::steady_clock::now()))
+		{
+			return;
+		}
+	}
+	// DA1: every terminal answers it, in order with what came before, and
+	// FTXUI hands the answer on as an event (it keeps the quieter ones).
+	m_write("\x1b[c", false);
+	std::lock_guard lock(m_mutex);
+	m_link.probed(std::chrono::steady_clock::now());
+}
+
+void Transmitter::linkAnswered()
+{
+	std::lock_guard lock(m_mutex);
+	const bool was = m_link.measured();
+	const double before = m_link.rate();
+	m_link.answered(std::chrono::steady_clock::now());
+	if(m_link.rate() != before)
+	{
+		spdlog::debug("link: {:.2f} MB/s measured, round trip {:.0f} ms",
+		              m_link.rate() / 1e6,
+		              m_link.roundTrip() * 1e3);
+	}
+	if(!was && m_link.measured())
+	{
+		spdlog::info("link: {:.1f} MB/s, first measured", m_link.rate() / 1e6);
+	}
+}
+
+void Transmitter::linkDelivered(uint64_t bytes, double roundTrip)
+{
+	std::lock_guard lock(m_mutex);
+	const bool was = m_link.measured();
+	const double before = m_link.rate();
+	m_link.delivered(bytes, std::chrono::steady_clock::now(), roundTrip);
+	if(m_link.rate() != before)
+	{
+		spdlog::debug("link: {:.2f} MB/s measured on the ssh connection, "
+		              "{:.0f} bytes behind",
+		              m_link.rate() / 1e6,
+		              m_link.backlog(std::chrono::steady_clock::now()) *
+		                  m_link.rate());
+	}
+	if(!was && m_link.measured())
+	{
+		spdlog::info("link: {:.1f} MB/s, first measured", m_link.rate() / 1e6);
+	}
+}
+
+double Transmitter::linkBytesPerPixel() const
+{
+	std::lock_guard lock(m_mutex);
+	return m_bytesPerPixel > 0 ? m_bytesPerPixel : DEFAULT_BYTES_PER_PIXEL;
 }
 
 double Transmitter::linkBacklog() const
 {
 	std::lock_guard lock(m_mutex);
-	const auto now = std::chrono::steady_clock::now();
-	return m_linkFree > now
-	           ? std::chrono::duration<double>(m_linkFree - now).count()
+	return m_transfer == Transfer::DIRECT
+	           ? m_link.backlog(std::chrono::steady_clock::now())
 	           : 0.0;
 }
 

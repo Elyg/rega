@@ -215,6 +215,139 @@ int Viewer::reduceFor(const ImageInfo& info, const ImageSlot& slot) const
 	                           : 1.0);
 }
 
+int Viewer::playbackPixelCap() const
+{
+	return m_playbackCap ? cappedBudget() : TOTAL_PIXEL_BUDGET;
+}
+
+int Viewer::playbackReduce(const ImageInfo& info, const ImageSlot& slot) const
+{
+	constexpr double PLAYBACK_SLACK = 1.25; // see reduceFor
+	return m_ctx.reduceFor(slot,
+	                       info.fitBounds(m_state.m_layerLabel),
+	                       zoomOf(slot),
+	                       playbackPixelCap(),
+	                       m_playbackCap ? PLAYBACK_SLACK : 1.0);
+}
+
+bool Viewer::fillsTerminal() const
+{
+	const auto& caps = m_ctx.m_caps;
+	return !m_tile && m_state.frameCount() > 1 &&
+	       m_state.m_sources.size() == 1 && !m_state.m_sources[0].m_diffA &&
+	       caps.m_graphics == GraphicsMode::KITTY &&
+	       caps.m_transfer == Transfer::DIRECT &&
+	       m_ctx.m_kitty.terminalCache() > 0 && m_viewSlot->drawn();
+}
+
+void Viewer::fillTerminal()
+{
+	ImageSlot& slot = *m_viewSlot;
+	if(!fillsTerminal())
+	{
+		m_fillWanted = false;
+		return;
+	}
+	if(slot.flushStored())
+	{
+		m_ctx.m_kitty.probeLink(); // written outside a draw: ask anyway
+	}
+	m_fillWanted = true;
+	if(!m_fillWake.joinable())
+	{
+		m_fillWake = std::jthread(
+		    [this](std::stop_token stop)
+		    {
+			    std::mutex mu;
+			    std::condition_variable_any cv;
+			    std::unique_lock lock(mu);
+			    while(!stop.stop_requested())
+			    {
+				    cv.wait_for(lock,
+				                stop,
+				                std::chrono::milliseconds(100),
+				                [] { return false; });
+				    if(m_fillWanted && !stop.stop_requested())
+				    {
+					    m_ctx.m_post([this] { fillTerminal(); });
+				    }
+			    }
+		    });
+	}
+	// Behind the link a moment ago: what plays now goes first. And a view
+	// still moving (a pan, a zoom) would drop what was stored for it.
+	constexpr double FILL_BACKLOG = 0.05; // seconds
+	constexpr auto SETTLED = std::chrono::seconds(1);
+	if(slot.storing() || m_ctx.m_kitty.linkBacklog() > FILL_BACKLOG ||
+	   std::chrono::steady_clock::now() - slot.viewSince() < SETTLED)
+	{
+		return;
+	}
+	auto& svc = m_ctx.m_svc;
+	const Source& src = m_state.m_sources[0];
+	const FrameRange range = m_state.playRange();
+	const int start =
+	    range.contains(m_state.m_frame) ? m_state.m_frame : range.m_first;
+	auto info = svc.info(src.frame(start), ImageService::Priority::PREFETCH);
+	if(!info)
+	{
+		return;
+	}
+	const int reduce = playbackReduce(*info, slot);
+	for(int i = 0, f = start; i < range.count(); ++i, f = range.next(f))
+	{
+		const fs::path path = src.frame(f);
+		if(slot.stored(svc.originOf(path, m_state.m_layerLabel, reduce)))
+		{
+			continue;
+		}
+		// One at a time: the next once this one is written (or decoded:
+		// the decode wakes the UI, and the wake retries).
+		if(auto img = svc.layer(path,
+		                        m_state.m_layerLabel,
+		                        reduce,
+		                        ImageService::Priority::PREFETCH))
+		{
+			slot.store(std::move(img), playbackPixelCap());
+		}
+		return;
+	}
+	m_fillWanted = false; // all kept
+}
+
+std::vector<bool> Viewer::storedFrames(const ImageInfo& info)
+{
+	if(!fillsTerminal() || m_viewSlot->cachedFrames() == 0)
+	{
+		return {};
+	}
+	auto& svc = m_ctx.m_svc;
+	const Source& src = m_state.m_sources[0];
+	const int reduce = playbackReduce(info, *m_viewSlot);
+	std::vector<bool> stored(static_cast<size_t>(m_state.frameCount()));
+	for(int f = 0; f < m_state.frameCount(); ++f)
+	{
+		stored[f] = m_viewSlot->stored(
+		    svc.originOf(src.frame(f), m_state.m_layerLabel, reduce));
+	}
+	return stored;
+}
+
+std::vector<bool> Viewer::storedElsewhere()
+{
+	if(!fillsTerminal() || m_viewSlot->cachedFrames() == 0)
+	{
+		return {};
+	}
+	const Source& src = m_state.m_sources[0];
+	std::vector<bool> kept(static_cast<size_t>(m_state.frameCount()));
+	for(int f = 0; f < m_state.frameCount(); ++f)
+	{
+		kept[f] = m_viewSlot->storedInAnyView(src.frame(f).string() + "|");
+	}
+	return kept;
+}
+
 int Viewer::cappedBudget() const
 {
 	int cap = TOTAL_PIXEL_BUDGET;
@@ -223,21 +356,53 @@ int Viewer::cappedBudget() const
 		cap /= 2;
 	}
 	// Inline transfer (ssh): every pixel crosses the link, compressed but
-	// base64'd; halve it again to keep playback near frame rate.
+	// base64'd. Fit a frame period of the link (tick() waits for it), at what
+	// the last pictures cost a pixel: film grain about 3 bytes, CG a tenth,
+	// so a fixed guess blurs CG for nothing. Below a floor the picture is
+	// too small to see; the frame rate gives instead. Unpaced, nothing is
+	// known of the link: halve it to keep playback near frame rate.
 	if(m_ctx.m_caps.m_transfer == Transfer::DIRECT)
 	{
-		cap /= 2;
-		// And fit a frame period of the link (tick() waits for it): zlib'd
-		// RGBA in base64 runs about 3 bytes a pixel. Below a floor the
-		// picture is too small to see; the frame rate gives instead.
-		constexpr double LINK_BYTES_PER_PIXEL = 3.0;
 		constexpr int MIN_LINK_PIXELS = 100'000;
 		if(const double rate = m_ctx.m_kitty.linkRate(); rate > 0)
 		{
 			const double fps = m_player.targetFps(std::nullopt);
-			const double fit = rate / fps / LINK_BYTES_PER_PIXEL;
-			cap =
-			    std::max(MIN_LINK_PIXELS, std::min(cap, static_cast<int>(fit)));
+			const double fit = rate / fps / m_ctx.m_kitty.linkBytesPerPixel();
+			// Frames kept in the terminal: they were made at this size and
+			// show again only at its decode reduction. The link moving it
+			// let them all go and filled again, loop after loop.
+			const bool kept = m_viewSlot->cachedFrames() > 0;
+			// Both measures move a little every frame: followed closely,
+			// every frame came out a new size, prepared again (and decoded
+			// again at another reduction). Move only on a real change.
+			constexpr double HYSTERESIS = 1.25;
+			if(m_linkFit <= 0 || (!kept && (fit > m_linkFit * HYSTERESIS ||
+			                                fit < m_linkFit / HYSTERESIS)))
+			{
+				m_linkFit = fit;
+			}
+			// Kept in the terminal, a loop crosses the link once: size it
+			// so the whole range fits there, when that's sharper than what
+			// the link carries in real time (the first pass plays slower,
+			// unless fillTerminal stored it while paused).
+			double best = m_linkFit;
+			if(const size_t keep = m_ctx.m_kitty.terminalCache();
+			   keep > 0 && !m_tile)
+			{
+				// Under half: the view before stays kept too, so a pan or a
+				// zoom and back plays from the terminal again. The whole
+				// budget for one view pushed the last one out at every step.
+				constexpr double KEEP_SHARE = 0.45;
+				best = std::max(best,
+				                KEEP_SHARE * static_cast<double>(keep) / 4.0 /
+				                    m_state.playRange().count());
+			}
+			cap = std::max(MIN_LINK_PIXELS,
+			               static_cast<int>(std::min<double>(cap, best)));
+		}
+		else
+		{
+			cap /= 2;
 		}
 	}
 	return cap;
@@ -797,6 +962,14 @@ bool Viewer::tick()
 	}
 	m_state.m_frame = *next;
 	prepareAhead(range.next(*next));
+	const auto now = std::chrono::steady_clock::now();
+	if(const double dt =
+	       std::chrono::duration<double>(now - m_lastAdvance).count();
+	   dt > 0 && dt < 2.0)
+	{
+		m_shownFps = m_shownFps > 0 ? 0.8 * m_shownFps + 0.2 / dt : 1.0 / dt;
+	}
+	m_lastAdvance = now;
 	return true;
 }
 
@@ -1986,6 +2159,7 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 		Tile& t = m_tiles.at(i);
 		ImageSlot& slot = *t.m_slot;
 		slot.setMaxPixels(pixelCap());
+		slot.setTerminalCache(m_player.playing() || scrubbing());
 		const TileRef& ref = m_tileRefs[i];
 		const ImageInfoPtr& ti = infos[i];
 		// All of it on a fitted sheet: fit, as ever. Otherwise the zoom
@@ -2137,6 +2311,12 @@ Element Viewer::render()
 	{
 		return text("");
 	}
+	// Each draw may make fillTerminal apply (the first one drawn, a new
+	// view): start it after this draw; its wake keeps it going from there.
+	if(!m_fillWanted)
+	{
+		m_ctx.m_post([this] { fillTerminal(); });
+	}
 	fs::path path = m_state.currentFramePath();
 	ImageInfoPtr info = m_ctx.m_svc.info(path);
 	if(info)
@@ -2172,6 +2352,7 @@ Element Viewer::render()
 			fitView(info); // follow terminal resizes and pane changes
 		}
 		m_viewSlot->setMaxPixels(pixelCap());
+		m_viewSlot->setTerminalCache(m_player.playing() || scrubbing());
 		int reduce = reduceFor(*info, *m_viewSlot);
 		LayerImagePtr img =
 		    layerOf(m_state.m_current, path, m_state.m_layerLabel, reduce);
@@ -2353,6 +2534,8 @@ Element Viewer::renderPlaybar(const ImageInfoPtr& info)
 	     .m_hasIn = m_state.m_in.has_value(),
 	     .m_hasOut = m_state.m_out.has_value(),
 	     .m_cached = m_ctx.m_svc.cachedLayers(frames, m_state.m_layerLabel),
+	     .m_stored = info ? storedFrames(*info) : std::vector<bool>{},
+	     .m_storedElsewhere = storedElsewhere(),
 	     .m_label = [&src](int f) { return src.frameLabel(f); },
 	     .m_playing = m_player.playing(),
 	     .m_fps = m_player.targetFps(info ? info->m_fps : std::nullopt),
@@ -2424,6 +2607,18 @@ Element Viewer::renderStatus(const ImageInfoPtr& info)
 		cache = fmt::format("cache {}/{}",
 		                    humanSize(m_ctx.m_svc.bytesUsed()),
 		                    humanSize(m_ctx.m_svc.budget()));
+		// Over ssh both ends hold frames: decoded here (remote, where rvtui
+		// runs) and kept by the terminal (local, where it shows them).
+		if(m_ctx.m_caps.m_graphics == GraphicsMode::KITTY &&
+		   m_ctx.m_caps.m_transfer == Transfer::DIRECT &&
+		   m_ctx.m_kitty.terminalCache() > 0)
+		{
+			cache = fmt::format("cache remote {}/{} local {}/{}",
+			                    humanSize(m_ctx.m_svc.bytesUsed()),
+			                    humanSize(m_ctx.m_svc.budget()),
+			                    humanSize(m_ctx.m_kitty.cacheUse().m_bytes),
+			                    humanSize(m_ctx.m_kitty.terminalCache()));
+		}
 	}
 	return m_ctx.statusLine(right, std::move(playback), cache);
 }

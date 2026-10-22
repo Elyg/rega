@@ -14,9 +14,13 @@
 #include <CLI/CLI.hpp>
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -136,7 +140,93 @@ int bench(const fs::path& path, int outW, int outH)
 	out.info("  zlib RGB     {:8.2f} ms → {:.1f} MB (f=24, no alpha)",
 	         median(tRgb),
 	         mb(zRgb.size()));
+	// PNG (f=100) per row filter, on the picture and on its alpha view (grey:
+	// one channel instead of three).
+	rv::DisplayParams alphaView;
+	alphaView.m_mode = rv::ChannelMode::ALPHA;
+	const rv::Rgba8Image alpha =
+	    rv::renderLayer(rv::loadLayer(rv::probeImage(path), 0),
+	                    outW,
+	                    outH,
+	                    {},
+	                    alphaView);
+	const std::pair<const char*, rv::kitty::PngFilter> filters[] =
+	    {{"none", rv::kitty::PngFilter::NONE},
+	     {"sub", rv::kitty::PngFilter::SUB},
+	     {"up", rv::kitty::PngFilter::UP},
+	     {"paeth", rv::kitty::PngFilter::PAETH}};
+	for(const auto& [what, pic] :
+	    {std::pair<const char*, const rv::Rgba8Image*>{"picture", &bmp},
+	     {"alpha view", &alpha}})
+	{
+		const size_t was = pic == &bmp
+		                       ? z.size()
+		                       : rv::kitty::zlibCompress(pic->m_pixels.data(),
+		                                                 pic->m_pixels.size())
+		                             .size();
+		out.info("  {}: zlib RGBA {:.2f} MB", what, mb(was));
+		for(const auto& [name, f] : filters)
+		{
+			std::vector<double> t;
+			std::string png;
+			for(int run = 0; run < 3; ++run)
+			{
+				auto t0 = Clock::now();
+				png = rv::kitty::encodePng(*pic, f);
+				t.push_back(ms(t0, Clock::now()));
+			}
+			out.info("    png {:6} {:8.2f} ms → {:.2f} MB",
+			         name,
+			         median(t),
+			         mb(png.size()));
+		}
+	}
 	return 0;
+}
+
+// A size in bytes: "3.9G", "512M", "20000"; K/M/G/T count 1024s, with or
+// without "i" / "B", any case. CLI::AsSizeValue reads the number as an
+// integer: "3.9G" could not be converted.
+CLI::Validator sizeValue()
+{
+	return CLI::Validator(
+	    [](std::string& in) -> std::string
+	    {
+		    char* end = nullptr;
+		    const double n = std::strtod(in.c_str(), &end);
+		    std::string unit;
+		    for(const char* c = end; *c; ++c)
+		    {
+			    if(*c != ' ')
+			    {
+				    unit += static_cast<char>(
+				        std::tolower(static_cast<unsigned char>(*c)));
+			    }
+		    }
+		    if(unit.ends_with('b'))
+		    {
+			    unit.pop_back();
+		    }
+		    if(unit.ends_with('i'))
+		    {
+			    unit.pop_back();
+		    }
+		    static const std::map<std::string, double>
+		        SCALE{{"", 1.0},
+		              {"k", 1024.0},
+		              {"m", 1024.0 * 1024},
+		              {"g", 1024.0 * 1024 * 1024},
+		              {"t", 1024.0 * 1024 * 1024 * 1024}};
+		    const auto scale = SCALE.find(unit);
+		    if(end == in.c_str() || scale == SCALE.end() || !(n >= 0))
+		    {
+			    return "not a size: " + in + " (e.g. 512M, 3.9G)";
+		    }
+		    in = std::to_string(
+		        static_cast<std::uint64_t>(std::llround(n * scale->second)));
+		    return {};
+	    },
+	    "SIZE");
 }
 
 } // namespace
@@ -192,7 +282,7 @@ int main(int argc, char** argv)
 	cli.add_option("--cache",
 	               cacheBytes,
 	               "Memory for decoded images, e.g. 8G or 512M (default 4G)")
-	    ->transform(CLI::AsSizeValue(false))
+	    ->transform(sizeValue())
 	    ->check(CLI::Validator(
 	        [](const std::string& bytes)
 	        {
@@ -205,10 +295,18 @@ int main(int argc, char** argv)
 	    static_cast<std::uint64_t>(rv::kitty::Transmitter::DEFAULT_LINK_RATE);
 	cli.add_option("--link-rate",
 	               linkRate,
-	               "Bytes a second the ssh link carries, e.g. 20M; playback "
-	               "sending images inline is paced to it (default 4M, 0: "
-	               "unpaced)")
-	    ->transform(CLI::AsSizeValue(false));
+	               "Bytes a second the ssh link is assumed to carry until "
+	               "measured, e.g. 20M; playback sending images inline is "
+	               "paced to the link (default 4M, 0: unpaced, unmeasured)")
+	    ->transform(sizeValue());
+	std::uint64_t terminalCache = rv::AppOptions::DEFAULT_TERMINAL_CACHE;
+	cli.add_option("--terminal-cache",
+	               terminalCache,
+	               "Terminal image memory frames played over ssh may keep "
+	               "there, e.g. 512M: a loop's second pass sends no pixels "
+	               "(default 256M, under kitty's and Ghostty's 320M; 3.9G with "
+	               "Ghostty's image-storage-limit at its 4G maximum; 0: off)")
+	    ->transform(sizeValue());
 	bool doctor = false;
 	cli.add_flag("--doctor",
 	             doctor,
@@ -308,6 +406,7 @@ int main(int argc, char** argv)
 		opts.m_cacheBytes = cacheBytes;
 		opts.m_tutorial = tutorial;
 		opts.m_linkRate = static_cast<double>(linkRate);
+		opts.m_terminalCache = terminalCache;
 		return rv::runApp(opts);
 	}
 	catch(const std::exception& e)

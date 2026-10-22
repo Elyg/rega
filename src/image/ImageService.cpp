@@ -255,6 +255,14 @@ std::optional<std::string> ImageService::diffError(
 	return it->second;
 }
 
+std::string ImageService::originOf(const std::filesystem::path& p,
+                                   const std::string& label,
+                                   int reduce)
+{
+	std::lock_guard lk(m_mu);
+	return layerKey(identLocked(p), label, std::max(1, reduce));
+}
+
 bool ImageService::hasLayer(const std::filesystem::path& p,
                             const std::string& label,
                             int reduce)
@@ -447,6 +455,7 @@ LayerImagePtr ImageService::layerCached(const std::filesystem::path& p,
 	{
 		img = downsample(img, reduce);
 	}
+	img.m_origin = key;
 	auto ptr = std::make_shared<const LayerImage>(std::move(img));
 	std::lock_guard lk(m_mu);
 	put(key, CacheEntry{ptr, ptr->bytes(), {}});
@@ -482,6 +491,7 @@ void ImageService::run()
 				{
 					img = downsample(img, job.m_reduce);
 				}
+				img.m_origin = job.m_key;
 				auto ptr = std::make_shared<const LayerImage>(std::move(img));
 				std::lock_guard lk(m_mu);
 				put(job.m_key, CacheEntry{ptr, ptr->bytes(), {}});
