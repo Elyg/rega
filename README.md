@@ -4,7 +4,7 @@ Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG a
 Draws images with the kitty graphics protocol, or half-blocks on any terminal.
 
 <h2 align="center"><a href="https://elyg.github.io/rvtui">📖 User guide</a></h2>
-<p align="center">Every feature with a short clip · terminal and tmux setup · colour (OCIO, ACES) · every key</p>
+<p align="center">Features with a short clip · terminal and tmux setup · colour (OCIO, ACES) · keybinds</p>
 
 ## Demo
 
