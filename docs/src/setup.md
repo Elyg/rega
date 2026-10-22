@@ -74,5 +74,6 @@ falling back to half-blocks. (`--graphics halfblock` forces half-blocks.)
 
 Images go through the ssh connection. While a sequence plays, rvtui paces them to
 `--link-rate` (4M a second); on a fast network, raise it: `--link-rate 20M`.
-`--transfer` picks how pixels reach the terminal; `auto` gets it right (see
+How the pixels travel (shared memory, temp files or inline) is chosen for you by the
+default, `--transfer auto`; set `--transfer` yourself only if images stay blank (see
 [Command line](reference/cli.md#options)).
