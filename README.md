@@ -8,30 +8,7 @@ Draws images with the kitty graphics protocol, or half-blocks on any terminal.
 
 ## Demo
 
-### **Overview** ###
-Browsing with live previews, opening and playing a sequence, its layers one by one and
-all tiled, the metadata. The images are from `rvtui --tutorial`.
-
-![rvtui overview](docs/src/media/intro.mp4)
-
-### **Viewer** ###
-Playing a multi-layer EXR sequence, switching layers (AOVs), every layer
-side by side (`t`), metadata, the pixel inspector, exposure and single channels.
-
-https://github.com/user-attachments/assets/ba04978b-8df7-4eb1-9357-f6db4f5c5835
-
-
-
-### **Browser** ###
-Live previews while moving through a folder, then marked images opened
-together in the tile view.
-
-https://github.com/user-attachments/assets/bd076e40-9d24-4ed3-b529-719efcaca671
-
-
-
-Recorded in Ghostty through tmux. The sample images are the
-[OpenEXR test images](https://github.com/AcademySoftwareFoundation/openexr-images)
+https://github.com/user-attachments/assets/e3305c5d-d0ce-436d-8682-f4f18394bde8
 
 ## Usage
 
