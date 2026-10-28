@@ -11,7 +11,7 @@
 #include <thread>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Polls paths on its own thread (once per `interval`) and reports what changed
@@ -63,4 +63,4 @@ private:
 	std::jthread m_thread; ///< last: stops before the rest goes
 };
 
-} // namespace rv
+} // namespace rega

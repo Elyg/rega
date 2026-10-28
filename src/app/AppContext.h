@@ -14,7 +14,7 @@
 #include <string>
 #include <string_view>
 
-namespace rv
+namespace rega
 {
 
 class ImageSlot;
@@ -42,7 +42,7 @@ struct AppContext
 	/// Run `task` on the UI thread, without a redraw of its own. Safe from
 	/// any thread.
 	std::function<void(std::function<void()> task)> m_post;
-	/// Leave the event loop (quit rvtui).
+	/// Leave the event loop (quit rega).
 	std::function<void()> m_quit;
 	/// One line in the bottom bar; cleared by the next key.
 	std::string m_message;
@@ -68,4 +68,4 @@ struct AppContext
 	                            double slack = 1.0) const;
 };
 
-} // namespace rv
+} // namespace rega

@@ -7,9 +7,9 @@
 
 TEST(HelpKeys, SectionIdsAreUniqueAndAnchored)
 {
-	const std::string md = rv::help::markdown();
+	const std::string md = rega::help::markdown();
 	std::set<std::string> ids;
-	for(const auto* sections : {&rv::help::browser(), &rv::help::viewer()})
+	for(const auto* sections : {&rega::help::browser(), &rega::help::viewer()})
 	{
 		for(const auto& s : *sections)
 		{
@@ -27,7 +27,7 @@ TEST(HelpKeys, SectionIdsAreUniqueAndAnchored)
 
 TEST(HelpKeys, MarkdownEscapesPipesAndJoinsContinuations)
 {
-	const std::string md = rv::help::markdown();
+	const std::string md = rega::help::markdown();
 	// "|A - B|" would end the cell; the continuation joins "n / p (N)".
 	EXPECT_NE(md.find("| `n / p (N)` | next / previous image (marked files)"
 	                  "<br>diff: next / previous pair (A, B, \\|A - B\\|) |"),

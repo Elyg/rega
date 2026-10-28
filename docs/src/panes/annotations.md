@@ -3,7 +3,7 @@
 <video src="../media/pane-annotations.mp4" autoplay loop muted playsinline></video>
 
 > [!TIP]
-> **TL;DR** Burn-in text over the image, RV style. Press `3`, move to **global** (every
+> **TL;DR** Burn-in text over the image. Press `3`, move to **global** (every
 > image) or a source, press `l`. On a slot, `a` adds a line: type it, `Enter` keeps it.
 > `[#@frame]` and `[#owner]` fill in per frame. `A` in the viewer hides them all.
 
@@ -72,7 +72,7 @@ dimmed (`[#ownr]`), so a typo shows.
 ## Kept between sessions
 
 Annotations are saved when you quit and come back next time, with the recall history,
-in `~/.local/state/rvtui/annotations`.
+in `~/.local/state/rega/annotations`.
 
 ## Labels from the command line
 
@@ -80,8 +80,8 @@ A `:label=` on an image path puts a line on that image for this run, with the sa
 and placeholders:
 
 ```bash
-rvtui 'shot.####.exr:label=tl:[#@frame]'  'v2.exr:label=bottom:client notes'
-rvtui --diff v1.exr:label=bl:old v2.exr:label=bl:new
+rega 'shot.####.exr:label=tl:[#@frame]'  'v2.exr:label=bottom:client notes'
+rega --diff v1.exr:label=bl:old v2.exr:label=bl:new
 ```
 
 The slot is one of `tl tc tr bl bc br`, or `top` / `bottom` for the centre ones. Labels

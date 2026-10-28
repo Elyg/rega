@@ -4,7 +4,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Contact-sheet geometry, in terminal cells: tiles of one size in a grid,
@@ -109,4 +109,4 @@ placeTile(const SheetLayout& l, const SheetView& v, SheetArea a, int i);
 std::pair<double, double>
 sheetPointAt(const SheetView& v, SheetArea a, double ax, double ay);
 
-} // namespace rv
+} // namespace rega

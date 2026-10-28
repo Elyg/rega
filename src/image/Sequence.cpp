@@ -13,7 +13,7 @@
 
 namespace fs = std::filesystem;
 
-namespace rv
+namespace rega
 {
 
 bool Entry::isImage() const
@@ -406,4 +406,4 @@ std::string humanSize(std::uintmax_t b)
 	              : fmt::format("{:.1f}{}", v, units[u]);
 }
 
-} // namespace rv
+} // namespace rega

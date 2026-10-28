@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// [2] metadata column: the current frame's header (parts, attributes,
@@ -151,4 +151,4 @@ private:
 	ftxui::Box m_box{}; ///< where it was drawn (wheel scrolling, page size)
 };
 
-} // namespace rv
+} // namespace rega

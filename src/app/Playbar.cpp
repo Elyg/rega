@@ -12,7 +12,7 @@
 
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 int trackFrameAt(int cell, int width, int frames)
@@ -570,4 +570,4 @@ int Playbar::frameAt(int x) const
 	return trackFrameAt(std::max(0, cell), m_trackWidth, m_frames);
 }
 
-} // namespace rv
+} // namespace rega

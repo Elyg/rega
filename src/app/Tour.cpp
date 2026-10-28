@@ -11,7 +11,7 @@
 
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -74,7 +74,7 @@ const std::array<Step, 15> STEPS = {{
      [](const TourView& n) { return n.m_viewer; }},
     {"Back to the browser",
      "{q} goes back to the browser (from the tiles, twice). The sequence "
-     "keeps its place. {Shift+q} quits rvtui from anywhere.",
+     "keeps its place. {Shift+q} quits rega from anywhere.",
      [](const TourView& n) { return !n.m_viewer; }},
     {"Brighter than white",
      "Open hdr-sky.exr: its sun is about 50 times brighter than white. {E} "
@@ -336,4 +336,4 @@ Element Tour::render() const
 	       clear_under;
 }
 
-} // namespace rv
+} // namespace rega

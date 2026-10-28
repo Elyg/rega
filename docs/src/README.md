@@ -1,23 +1,23 @@
-# rvtui
+# rega
 
 <video src="media/intro.mp4" autoplay loop muted playsinline></video>
 
-rvtui is an image browser and viewer that runs in the terminal. It is made for renders:
-multi-layer OpenEXR files and sequences, plus TIFF, PNG and JPEG.
+rega is an image browser and viewer that runs in the terminal; the name means sights. It is
+made for renders: multi-layer OpenEXR files and sequences, plus TIFF, PNG and JPEG.
 
 Use it on your own machine, or on one you reach through a terminal, such as a farm node
-or a remote workstation: log in there with ssh from Ghostty or kitty, run rvtui on that
+or a remote workstation: log in there with ssh from Ghostty or kitty, run rega on that
 machine, and the images show in your terminal.
 
 ## Where to start
 
-1. **[Install](install.md)** rvtui on your machine, and on any remote machine whose
+1. **[Install](install.md)** rega on your machine, and on any remote machine whose
    renders you want to look at.
 2. **[Terminal setup](setup.md)**: check your terminal (and tmux, if you use it) with
-   `rvtui --doctor`.
-3. **[The tutorial](tutorial.md)**: `rvtui --tutorial` walks you through sample images.
+   `rega --doctor`.
+3. **[The tutorial](tutorial.md)**: `rega --tutorial` walks you through sample images.
 
-After that, `rvtui` browses the current folder and `rvtui render.exr` opens one image.
+After that, `rega` browses the current folder and `rega render.exr` opens one image.
 `?` lists every key.
 
 Then the guide follows the screen, in the same order as the `?` list: the
@@ -25,7 +25,7 @@ Then the guide follows the screen, in the same order as the `?` list: the
 Each page starts with a clip of the feature, a TL;DR and its keys. The
 [reference](reference/cli.md) lists every command-line option and every key.
 
-The clips use the tutorial's images, so you can follow along: run `rvtui --tutorial` and
+The clips use the tutorial's images, so you can follow along: run `rega --tutorial` and
 press the keys shown in the corner of each clip.
 
 ## What it does
@@ -54,7 +54,7 @@ press the keys shown in the corner of each clip.
 - `Ctrl+d` and `Ctrl+click` mean hold Ctrl.
 - `?` lists every key for the screen you're on. Type to search it (a pane's name finds
   that pane's keys); `?` or `Esc` closes the list.
-- `q` goes back one screen. `Q` quits rvtui from anywhere.
+- `q` goes back one screen. `Q` quits rega from anywhere.
 
 ## How images are drawn
 

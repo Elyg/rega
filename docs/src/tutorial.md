@@ -3,16 +3,16 @@
 <video src="media/tutorial.mp4" autoplay loop muted playsinline></video>
 
 > [!TIP]
-> **TL;DR** `rvtui --tutorial` renders sample images into `~/.cache/rvtui/tutorial` and
+> **TL;DR** `rega --tutorial` renders sample images into `~/.cache/rega/tutorial` and
 > opens them with a guide card in the corner. `F1` hides the card, `F2` skips a step,
 > `F3` goes back one. `Q` quits.
 
 ```bash
-rvtui --tutorial
+rega --tutorial
 ```
 
 The first run renders the images (a few seconds); later runs open them straight away.
-rvtui opens in the [browser](browser.md), on the tutorial folder. A card in the
+rega opens in the [browser](browser.md), on the tutorial folder. A card in the
 bottom-right corner gives one step at a time. Each step names its keys; they turn green
 as you press them, and the step ticks off when all of them are done.
 
@@ -26,7 +26,7 @@ images at once.
 | `F1` | hide / show the card |
 | `F2` | skip a step |
 | `F3` | back one step |
-| `Q` | quit rvtui |
+| `Q` | quit rega |
 
 On a Mac keyboard, the F keys may need `Fn`. The card starts from the first step each
 time.

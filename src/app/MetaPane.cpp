@@ -16,7 +16,7 @@
 namespace fs = std::filesystem;
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 MetaPane::MetaPane(ViewerState& state, AppContext& ctx)
@@ -760,4 +760,4 @@ bool MetaPane::event(const Event& e, const ImageInfoPtr& info)
 	return true;
 }
 
-} // namespace rv
+} // namespace rega

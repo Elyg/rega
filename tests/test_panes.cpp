@@ -18,8 +18,8 @@
 #include <memory>
 #include <sstream>
 
-using namespace rv;
-using namespace rvtest;
+using namespace rega;
+using namespace regatest;
 using ftxui::Event;
 
 namespace
@@ -202,8 +202,8 @@ TEST_F(Panes, InspectorFlagsNanAndInf)
 	EXPECT_EQ(title, "─[4]─Inspector─ NaN ─");
 
 	// The whole layer's count, under the title.
-	EXPECT_EQ(nonFiniteSummary(rv::LayerImage{}), "");
-	rv::LayerImage layer;
+	EXPECT_EQ(nonFiniteSummary(rega::LayerImage{}), "");
+	rega::LayerImage layer;
 	layer.m_nanPixels = 12;
 	EXPECT_EQ(nonFiniteSummary(layer), "12 NaN px");
 	layer.m_infPixels = 3;

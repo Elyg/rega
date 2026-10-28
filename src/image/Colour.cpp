@@ -14,7 +14,7 @@
 namespace fs = std::filesystem;
 namespace OCIO = OCIO_NAMESPACE;
 
-namespace rv
+namespace rega
 {
 
 // --- ColourTransform ---
@@ -168,7 +168,7 @@ fs::path ColourManager::defaultStatePath()
 	{
 		return {};
 	}
-	return base / "rvtui" / "colour";
+	return base / "rega" / "colour";
 }
 
 void ColourManager::loadState()
@@ -574,4 +574,4 @@ ColourTransformPtr ColourManager::transformFor(const fs::path& path,
 	return t;
 }
 
-} // namespace rv
+} // namespace rega

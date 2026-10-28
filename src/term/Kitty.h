@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace rv::kitty
+namespace rega::kitty
 {
 
 std::string base64(const uint8_t* data, size_t n);
@@ -254,4 +254,4 @@ std::optional<std::pair<int, int>> placeholderRowCol(std::string_view cell);
 
 std::string utf8(char32_t cp); ///< one code point as UTF-8
 
-} // namespace rv::kitty
+} // namespace rega::kitty

@@ -9,7 +9,7 @@
 
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -330,4 +330,4 @@ bool InspectorPane::event(const Event& e)
 	return true;
 }
 
-} // namespace rv
+} // namespace rega

@@ -1,5 +1,5 @@
 # Display: stopping an HDR sky down, gamma, reset.
-Run rvtui hdr-sky.exr
+Run rega hdr-sky.exr
 Sleep 1
 Key E x6 0.6
 Sleep 1

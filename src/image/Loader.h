@@ -5,7 +5,7 @@
 #include <filesystem>
 #include <stdexcept>
 
-namespace rv
+namespace rega
 {
 
 /// Probe or decode failure; what() says why.
@@ -36,4 +36,4 @@ LayerImage loadTiffLayer(const ImageInfo& info, int layerIndex);
 /// decoded, so the default sRGB view round-trips them.
 float srgbToLinear(float v);
 
-} // namespace rv
+} // namespace rega

@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -53,4 +53,4 @@ std::optional<std::vector<size_t>> fuzzyMatch(const std::string& name,
 	return pos;
 }
 
-} // namespace rv
+} // namespace rega

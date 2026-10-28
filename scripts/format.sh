@@ -8,7 +8,7 @@
 # differently enough to fail a check for no real reason.
 set -uo pipefail
 
-root="${RVTUI_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+root="${REGA_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$root"
 
 check=0

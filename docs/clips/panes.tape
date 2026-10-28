@@ -1,5 +1,5 @@
 # Panes: open each, focus the image, hide them all.
-Run rvtui 'shot.####.exr'
+Run rega 'shot.####.exr'
 Wait 3
 Key 2
 Sleep 0.8

@@ -5,7 +5,7 @@
 #include <iostream>
 #include <sstream>
 
-using namespace rv;
+using namespace rega;
 
 TEST(Clipboard, Osc52CarriesTheTextInBase64)
 {

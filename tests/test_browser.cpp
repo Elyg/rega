@@ -10,8 +10,8 @@
 #include <optional>
 #include <utility>
 
-using namespace rv;
-using namespace rvtest;
+using namespace rega;
+using namespace regatest;
 using ftxui::Event;
 
 namespace
@@ -257,7 +257,7 @@ TEST_F(BrowserTest, LongNamesAreCutSoTheColumnStaysPut)
 
 TEST_F(BrowserTest, MarkTakesImagesOnceInOrder)
 {
-	// What rvtui was started with comes in marked.
+	// What rega was started with comes in marked.
 	const Entry* seq = nullptr;
 	const Entry* png = nullptr;
 	const Entry* dir = nullptr;
@@ -405,25 +405,25 @@ TEST_F(BrowserTest, DDiffsTheMarkedOrOneMarkedWithTheOneHere)
 
 TEST(Browser, CopyTextOfAFileAndASequence)
 {
-	rv::Entry file;
+	rega::Entry file;
 	file.m_path = "/renders/v2/chart.exr";
 	file.m_name = "chart.exr";
-	EXPECT_EQ(rv::entryCopyText(file, 'c'), "/renders/v2/chart.exr");
-	EXPECT_EQ(rv::entryCopyText(file, 'd'), "/renders/v2");
-	EXPECT_EQ(rv::entryCopyText(file, 'f'), "chart.exr");
-	EXPECT_EQ(rv::entryCopyText(file, 'n'), "chart");
+	EXPECT_EQ(rega::entryCopyText(file, 'c'), "/renders/v2/chart.exr");
+	EXPECT_EQ(rega::entryCopyText(file, 'd'), "/renders/v2");
+	EXPECT_EQ(rega::entryCopyText(file, 'f'), "chart.exr");
+	EXPECT_EQ(rega::entryCopyText(file, 'n'), "chart");
 
-	rv::Entry seq;
-	seq.m_kind = rv::Entry::Kind::SEQUENCE;
+	rega::Entry seq;
+	seq.m_kind = rega::Entry::Kind::SEQUENCE;
 	seq.m_path = "/renders/v2/shot.1001.exr";
 	seq.m_name = "shot.####.exr [1001-1100]";
-	EXPECT_EQ(rv::entryCopyText(seq, 'c'), "/renders/v2/shot.####.exr");
-	EXPECT_EQ(rv::entryCopyText(seq, 'f'), "shot.####.exr");
-	EXPECT_EQ(rv::entryCopyText(seq, 'n'), "shot.####");
+	EXPECT_EQ(rega::entryCopyText(seq, 'c'), "/renders/v2/shot.####.exr");
+	EXPECT_EQ(rega::entryCopyText(seq, 'f'), "shot.####.exr");
+	EXPECT_EQ(rega::entryCopyText(seq, 'n'), "shot.####");
 
-	rv::Entry dir;
-	dir.m_kind = rv::Entry::Kind::DIR;
+	rega::Entry dir;
+	dir.m_kind = rega::Entry::Kind::DIR;
 	dir.m_path = "/renders/v2.1";
 	dir.m_name = "v2.1";
-	EXPECT_EQ(rv::entryCopyText(dir, 'n'), "v2.1"); // a folder keeps its dots
+	EXPECT_EQ(rega::entryCopyText(dir, 'n'), "v2.1"); // a folder keeps its dots
 }

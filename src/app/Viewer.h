@@ -27,7 +27,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// The image viewer: one image (or a contact sheet of tiles), display
@@ -380,4 +380,4 @@ private:
 	Player m_player;         ///< last: its ticker stops before the rest goes
 };
 
-} // namespace rv
+} // namespace rega

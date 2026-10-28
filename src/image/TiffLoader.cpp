@@ -12,7 +12,7 @@
 #include <set>
 #include <tiffio.h>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -628,4 +628,4 @@ LayerImage loadTiffLayer(const ImageInfo& info, int layerIndex)
 	return img;
 }
 
-} // namespace rv
+} // namespace rega

@@ -11,7 +11,7 @@
 #include <cstdlib>
 #include <unistd.h>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -269,7 +269,7 @@ int runDoctor(const std::string& forced)
 	const bool color = isatty(STDOUT_FILENO);
 	auto paint = [&](const char* code, const std::string& s)
 	{ return color ? fmt::format("\x1b[{}m{}\x1b[0m", code, s) : s; };
-	out.info("rvtui doctor");
+	out.info("rega doctor");
 	bool failed = false;
 	for(const auto& c : doctorChecks(forced))
 	{
@@ -299,4 +299,4 @@ int runDoctor(const std::string& forced)
 	return failed ? 1 : 0;
 }
 
-} // namespace rv
+} // namespace rega

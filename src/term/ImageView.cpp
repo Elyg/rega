@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -978,4 +978,4 @@ void ImageSlot::draw(ftxui::Screen& screen,
 	}
 }
 
-} // namespace rv
+} // namespace rega

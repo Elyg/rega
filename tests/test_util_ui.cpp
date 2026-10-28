@@ -9,7 +9,7 @@
 #include <vector>
 
 using namespace ftxui;
-using namespace rv;
+using namespace rega;
 
 namespace
 {

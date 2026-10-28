@@ -8,8 +8,8 @@
 #include <ftxui/screen/terminal.hpp>
 #include <gtest/gtest.h>
 
-using namespace rv;
-using namespace rvtest;
+using namespace rega;
+using namespace regatest;
 using ftxui::Event;
 
 namespace

@@ -3,10 +3,10 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
-/// One line of `rvtui --doctor`: what was checked, what was found, and how to
+/// One line of `rega --doctor`: what was checked, what was found, and how to
 /// fix it when something is off.
 struct DoctorCheck
 {
@@ -31,4 +31,4 @@ std::vector<DoctorCheck> doctorChecks(const std::string& forced);
 /// Print the checks to stdout. Returns 1 if any check failed, else 0.
 int runDoctor(const std::string& forced);
 
-} // namespace rv
+} // namespace rega

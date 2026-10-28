@@ -3,8 +3,8 @@
 
     python3 exr-chunks.py FILE.exr [--pixel X Y]
 
-Stdlib only, so it also runs in Nuke (nuke -t exr-chunks.py ...) or RV's
-Python. Prints no pixel values: the headers, the chunk (bucket / strip)
+Stdlib only, so it also runs in Nuke (nuke -t exr-chunks.py ...) or any other
+embedded Python. Prints no pixel values: the headers, the chunk (bucket / strip)
 table, a scan of the chunks in file order, and a map of each tiled part's
 buckets:
 
@@ -15,7 +15,7 @@ buckets:
     2  on disk more than once (the first copy is what OpenEXR reads)
     .  not on disk
 
---pixel X Y (EXR coordinates, y down from the top; RV's inspector counts y
+--pixel X Y (EXR coordinates, y down from the top; some inspectors count y
 up from the bottom) also details the bucket holding that pixel.
 """
 

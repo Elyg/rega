@@ -24,14 +24,14 @@ header), else 24. `F` cycles the rate through 12, 23.976, 24, 25, 30, 48 and 60 
 playbar shows the target rate and, while playing, the rate actually reached.
 
 Frames are never dropped: when the next one isn't decoded yet, playback waits for it and
-the measured rate drops. While playing, rvtui reads ahead as many frames as fit in 60% of
+the measured rate drops. While playing, rega reads ahead as many frames as fit in 60% of
 the cache (`--cache`, 4G by default), shared between the open sources, 2 to 96 frames
 each.
 
 `P` switches how playback renders:
 
 - **default**: below full resolution, so playback keeps up. Pausing sharpens the frame.
-- **full**: every frame at full resolution, as fast as rvtui can.
+- **full**: every frame at full resolution, as fast as rega can.
 
 ## Moving through frames
 
@@ -65,9 +65,9 @@ switches between them:
 - **hold**: a frame for every number from first to last; a missing one shows the
   nearest that exists, so the timing stays right.
 
-rvtui watches the folders it shows. New frames join an open sequence as they're written,
+rega watches the folders it shows. New frames join an open sequence as they're written,
 and a frame that changes on disk is decoded again. A frame still being written shows as
-an [incomplete image](image.md#incomplete-images) until it's done. Point rvtui at a
+an [incomplete image](image.md#incomplete-images) until it's done. Point rega at a
 render's output folder and leave it open.
 
 > [!NOTE]

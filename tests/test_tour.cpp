@@ -8,8 +8,8 @@
 #include <string>
 #include <utility>
 
-using rv::Tour;
-using rv::TourView;
+using rega::Tour;
+using rega::TourView;
 
 namespace
 {

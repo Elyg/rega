@@ -6,7 +6,7 @@
 
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 LayersPane::LayersPane(ViewerState& state) : m_state(state)
@@ -132,4 +132,4 @@ bool LayersPane::event(const Event& e, const ImageInfoPtr& info)
 	return true;
 }
 
-} // namespace rv
+} // namespace rega

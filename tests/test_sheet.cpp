@@ -4,7 +4,7 @@
 
 #include <vector>
 
-using namespace rv;
+using namespace rega;
 
 namespace
 {

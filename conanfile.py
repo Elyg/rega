@@ -1,7 +1,7 @@
 from conan import ConanFile
 
 
-class RvtuiConan(ConanFile):
+class RegaConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "CMakeDeps", "CMakeToolchain"
 

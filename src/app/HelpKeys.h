@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-namespace rv::help
+namespace rega::help
 {
 
 /// A key and what it does. An empty key continues the row above.
@@ -13,7 +13,7 @@ struct Row
 };
 
 /// A block of rows in the `?` overlay, and a table in the user guide's keys
-/// reference (docs/src/reference/keys.md, from `rvtui --help-keys`).
+/// reference (docs/src/reference/keys.md, from `rega --help-keys`).
 struct Section
 {
 	std::string m_id;      ///< guide anchor, e.g. "viewer-image"
@@ -32,4 +32,4 @@ const std::vector<Section>& viewer();
 /// `ANCHOR: <id>` / `ANCHOR_END: <id>` comments for `{{#include}}`.
 std::string markdown();
 
-} // namespace rv::help
+} // namespace rega::help

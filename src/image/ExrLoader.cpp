@@ -37,7 +37,7 @@
 #include <openexr.h>
 #include <thread>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -327,7 +327,7 @@ void collectLayers(const Imf::Header& h,
 
 /// A ZIP / ZIPS chunk inflated without checking its Adler-32. A bit flipped
 /// after writing (a disk, a network copy) fails that check, and OpenEXR 3.4
-/// drops the whole chunk where older readers (RV's) show it. The deflate
+/// drops the whole chunk where older readers show it. The deflate
 /// stream must still give exactly the chunk's bytes. Then undoes what the
 /// writer did before deflating, as OpenEXR's internal_exr_undo_zip: bytes
 /// delta-coded, then split into two halves.
@@ -796,4 +796,4 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 	}
 }
 
-} // namespace rv
+} // namespace rega

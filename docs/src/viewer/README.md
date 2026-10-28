@@ -1,17 +1,17 @@
 # Viewer
 
 > [!TIP]
-> **TL;DR** `Enter` on an image in the browser, or `rvtui render.exr`, opens the viewer.
+> **TL;DR** `Enter` on an image in the browser, or `rega render.exr`, opens the viewer.
 > Its keys come in groups: [Image](image.md) (zoom, layers, several images),
 > [Compare](compare.md), [Sequence](sequence.md) (playback) and [Display](display.md)
 > (channels, exposure). `2`-`6` open the [panes](../panes/README.md). `?` lists every
 > key, `q` goes back to the browser, `Q` quits.
 
 ```bash
-rvtui render.exr                 # one image
-rvtui 'shot.####.exr'            # a sequence (quote the #s)
-rvtui a.exr b.exr c.exr          # several: n / p step between them
-rvtui --diff v1.exr v2.exr       # A, B and |A − B|
+rega render.exr                 # one image
+rega 'shot.####.exr'            # a sequence (quote the #s)
+rega a.exr b.exr c.exr          # several: n / p step between them
+rega --diff v1.exr v2.exr       # A, B and |A − B|
 ```
 
 ## The screen
@@ -37,13 +37,13 @@ rvtui --diff v1.exr v2.exr       # A, B and |A − B|
 ## Sequences on the command line
 
 To open a sequence, give a pattern instead of one frame. Put it in single quotes so the
-shell passes it to rvtui unchanged:
+shell passes it to rega unchanged:
 
 | Pattern | Matches |
 |---------|---------|
 | `'shot.####.exr'` | `shot.1001.exr` … (each `#` one digit) |
 | `'shot.#.exr'` | any padding: a lone `#` finds it |
-| `shot.*.exr` | `*` works too, unquoted: the shell lists the frames for rvtui |
+| `shot.*.exr` | `*` works too, unquoted: the shell lists the frames for rega |
 
 A plain frame path (`shot.1001.exr`) opens just that frame.
 

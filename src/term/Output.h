@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-namespace rv::term
+namespace rega::term
 {
 
 /// Raw terminal protocol bytes (kitty graphics escapes). Not logging: these
@@ -10,4 +10,4 @@ namespace rv::term
 /// the terminal in order, ahead of the frame being drawn.
 void writeRaw(std::string_view bytes, bool flush = false);
 
-} // namespace rv::term
+} // namespace rega::term

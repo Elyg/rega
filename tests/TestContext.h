@@ -24,7 +24,7 @@
 #include <thread>
 #include <vector>
 
-namespace rvtest
+namespace regatest
 {
 
 namespace fs = std::filesystem;
@@ -33,23 +33,23 @@ namespace fs = std::filesystem;
 // redraws are ignored.
 struct Context
 {
-	rv::TermCaps m_caps;
-	rv::kitty::Transmitter m_kitty{false,
-	                               rv::Transfer::DIRECT,
-	                               [](std::string_view, bool) {}};
-	rv::ImageService m_svc{nullptr, size_t(64) << 20, 1};
-	rv::Annotations m_ann;
-	rv::ColourManager m_colour; // no config, nothing saved
+	rega::TermCaps m_caps;
+	rega::kitty::Transmitter m_kitty{false,
+	                                 rega::Transfer::DIRECT,
+	                                 [](std::string_view, bool) {}};
+	rega::ImageService m_svc{nullptr, size_t(64) << 20, 1};
+	rega::Annotations m_ann;
+	rega::ColourManager m_colour; // no config, nothing saved
 	std::atomic<int> m_quits{0};
-	rv::AppContext m_ctx{.m_svc = m_svc,
-	                     .m_caps = m_caps,
-	                     .m_kitty = m_kitty,
-	                     .m_ann = m_ann,
-	                     .m_colour = m_colour,
-	                     .m_redraw = [] {},
-	                     .m_post = [](const std::function<void()>&) {},
-	                     .m_quit = [this] { ++m_quits; },
-	                     .m_message = {}};
+	rega::AppContext m_ctx{.m_svc = m_svc,
+	                       .m_caps = m_caps,
+	                       .m_kitty = m_kitty,
+	                       .m_ann = m_ann,
+	                       .m_colour = m_colour,
+	                       .m_redraw = [] {},
+	                       .m_post = [](const std::function<void()>&) {},
+	                       .m_quit = [this] { ++m_quits; },
+	                       .m_message = {}};
 };
 
 // An empty directory of its own under the system temp dir. Keyed by the running
@@ -62,7 +62,7 @@ inline fs::path freshDir(std::string_view name)
 	{
 		leaf += std::string("-") + test->test_suite_name() + "." + test->name();
 	}
-	const fs::path d = fs::temp_directory_path() / "rvtui-tests" / leaf;
+	const fs::path d = fs::temp_directory_path() / "rega-tests" / leaf;
 	fs::remove_all(d);
 	fs::create_directories(d);
 	return d;
@@ -123,4 +123,4 @@ inline ftxui::Event key(std::string_view c)
 	return ftxui::Event::Character(std::string(c));
 }
 
-} // namespace rvtest
+} // namespace regatest

@@ -13,7 +13,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// What the playbar shows.
@@ -55,7 +55,7 @@ int evenTrackWidth(int frames, int cells);
 /// over it, so both glide a few pixels a frame instead of jumping a cell.
 Rgba8Image paintPlaybar(const PlaybarState& s, int width, int height);
 
-/// The timeline under a sequence, after RV's, in two rows: the frame
+/// The timeline under a sequence, in two rows: the frame
 /// numbers (the current one over the playhead, the range's ends at theirs),
 /// then the frame count, the bar and the fps. The bar is half a cell high,
 /// green where frames are decoded, cyan where the terminal keeps them (over
@@ -96,4 +96,4 @@ private:
 	std::unique_ptr<BitmapSlot> m_picture; ///< kitty: the bar as pixels
 };
 
-} // namespace rv
+} // namespace rega

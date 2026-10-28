@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Burn-in style text slots around a frame (no middle row).
@@ -56,4 +56,4 @@ struct OverlayCell
 std::vector<OverlayCell>
 layoutOverlay(int x0, int y0, int w, int h, const OverlayText& text);
 
-} // namespace rv
+} // namespace rega

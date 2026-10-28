@@ -13,7 +13,7 @@
 
 ## The panes
 
-The viewer's panes, numbered as in RV:
+The viewer's panes, by number:
 
 | Key | Also | Pane | Shows | Where |
 |-----|------|------|-------|-------|

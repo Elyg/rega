@@ -31,8 +31,8 @@ namespace
 
 int dump(const fs::path& path)
 {
-	auto& out = rv::log::out();
-	rv::ImageInfo info = rv::probeImage(path);
+	auto& out = rega::log::out();
+	rega::ImageInfo info = rega::probeImage(path);
 	out.info("{}  [{}]", info.m_path, info.m_format);
 	if(info.m_fps)
 	{
@@ -58,7 +58,7 @@ int dump(const fs::path& path)
 		for(size_t c = 0; c < l.m_channels.size(); ++c)
 		{
 			chans += fmt::format(" {}({})",
-			                     rv::LayerInfo::shortName(l.m_channels[c]),
+			                     rega::LayerInfo::shortName(l.m_channels[c]),
 			                     l.m_types[c]);
 		}
 		out.info("  {}:{}", l.label(), chans);
@@ -71,7 +71,7 @@ int dump(const fs::path& path)
 int bench(const fs::path& path, int outW, int outH)
 {
 	using Clock = std::chrono::steady_clock;
-	auto& out = rv::log::out();
+	auto& out = rega::log::out();
 	auto ms = [](Clock::time_point a, Clock::time_point b)
 	{ return std::chrono::duration<double, std::milli>(b - a).count(); };
 	auto median = [](std::vector<double> v)
@@ -80,24 +80,24 @@ int bench(const fs::path& path, int outW, int outH)
 		return v[v.size() / 2];
 	};
 	std::vector<double> tProbe, tDecode, tDown, tRender, tZlib, tB64;
-	rv::Rgba8Image bmp;
+	rega::Rgba8Image bmp;
 	for(int run = 0; run < 5; ++run)
 	{
 		auto t0 = Clock::now();
-		rv::ImageInfo info = rv::probeImage(path);
+		rega::ImageInfo info = rega::probeImage(path);
 		auto t1 = Clock::now();
-		rv::LayerImage img = rv::loadLayer(info, 0);
+		rega::LayerImage img = rega::loadLayer(info, 0);
 		auto t2 = Clock::now();
-		rv::LayerImage half = rv::downsample(img, 4);
+		rega::LayerImage half = rega::downsample(img, 4);
 		auto t3 = Clock::now();
-		bmp = rv::renderLayer(img, outW, outH, {}, {});
+		bmp = rega::renderLayer(img, outW, outH, {}, {});
 		auto t4 = Clock::now();
 		std::string z =
-		    rv::kitty::zlibCompress(bmp.m_pixels.data(), bmp.m_pixels.size());
+		    rega::kitty::zlibCompress(bmp.m_pixels.data(), bmp.m_pixels.size());
 		auto t5 = Clock::now();
 		std::string b =
-		    rv::kitty::base64(reinterpret_cast<const uint8_t*>(z.data()),
-		                      z.size());
+		    rega::kitty::base64(reinterpret_cast<const uint8_t*>(z.data()),
+		                        z.size());
 		auto t6 = Clock::now();
 		tProbe.push_back(ms(t0, t1));
 		tDecode.push_back(ms(t1, t2));
@@ -116,7 +116,7 @@ int bench(const fs::path& path, int outW, int outH)
 	// What goes down the pipe, and the cheaper variants worth comparing.
 	const size_t raw = bmp.m_pixels.size();
 	const std::string z =
-	    rv::kitty::zlibCompress(bmp.m_pixels.data(), bmp.m_pixels.size());
+	    rega::kitty::zlibCompress(bmp.m_pixels.data(), bmp.m_pixels.size());
 	std::vector<uint8_t> rgb;
 	rgb.reserve(raw / 4 * 3);
 	for(size_t i = 0; i < raw; i += 4)
@@ -128,7 +128,7 @@ int bench(const fs::path& path, int outW, int outH)
 	for(int run = 0; run < 5; ++run)
 	{
 		auto t0 = Clock::now();
-		zRgb = rv::kitty::zlibCompress(rgb.data(), rgb.size());
+		zRgb = rega::kitty::zlibCompress(rgb.data(), rgb.size());
 		tRgb.push_back(ms(t0, Clock::now()));
 	}
 	auto mb = [](size_t b) { return b / (1024.0 * 1024.0); };
@@ -142,27 +142,27 @@ int bench(const fs::path& path, int outW, int outH)
 	         mb(zRgb.size()));
 	// PNG (f=100) per row filter, on the picture and on its alpha view (grey:
 	// one channel instead of three).
-	rv::DisplayParams alphaView;
-	alphaView.m_mode = rv::ChannelMode::ALPHA;
-	const rv::Rgba8Image alpha =
-	    rv::renderLayer(rv::loadLayer(rv::probeImage(path), 0),
-	                    outW,
-	                    outH,
-	                    {},
-	                    alphaView);
-	const std::pair<const char*, rv::kitty::PngFilter> filters[] =
-	    {{"none", rv::kitty::PngFilter::NONE},
-	     {"sub", rv::kitty::PngFilter::SUB},
-	     {"up", rv::kitty::PngFilter::UP},
-	     {"paeth", rv::kitty::PngFilter::PAETH}};
+	rega::DisplayParams alphaView;
+	alphaView.m_mode = rega::ChannelMode::ALPHA;
+	const rega::Rgba8Image alpha =
+	    rega::renderLayer(rega::loadLayer(rega::probeImage(path), 0),
+	                      outW,
+	                      outH,
+	                      {},
+	                      alphaView);
+	const std::pair<const char*, rega::kitty::PngFilter> filters[] =
+	    {{"none", rega::kitty::PngFilter::NONE},
+	     {"sub", rega::kitty::PngFilter::SUB},
+	     {"up", rega::kitty::PngFilter::UP},
+	     {"paeth", rega::kitty::PngFilter::PAETH}};
 	for(const auto& [what, pic] :
-	    {std::pair<const char*, const rv::Rgba8Image*>{"picture", &bmp},
+	    {std::pair<const char*, const rega::Rgba8Image*>{"picture", &bmp},
 	     {"alpha view", &alpha}})
 	{
 		const size_t was = pic == &bmp
 		                       ? z.size()
-		                       : rv::kitty::zlibCompress(pic->m_pixels.data(),
-		                                                 pic->m_pixels.size())
+		                       : rega::kitty::zlibCompress(pic->m_pixels.data(),
+		                                                   pic->m_pixels.size())
 		                             .size();
 		out.info("  {}: zlib RGBA {:.2f} MB", what, mb(was));
 		for(const auto& [name, f] : filters)
@@ -172,7 +172,7 @@ int bench(const fs::path& path, int outW, int outH)
 			for(int run = 0; run < 3; ++run)
 			{
 				auto t0 = Clock::now();
-				png = rv::kitty::encodePng(*pic, f);
+				png = rega::kitty::encodePng(*pic, f);
 				t.push_back(ms(t0, Clock::now()));
 			}
 			out.info("    png {:6} {:8.2f} ms → {:.2f} MB",
@@ -234,8 +234,8 @@ CLI::Validator sizeValue()
 int main(int argc, char** argv)
 {
 	CLI::App cli{
-	    "rvtui — terminal image browser/viewer for EXR, TIFF, PNG and JPEG"};
-	cli.set_version_flag("--version", RVTUI_VERSION);
+	    "rega — terminal image browser/viewer for EXR, TIFF, PNG and JPEG"};
+	cli.set_version_flag("--version", REGA_VERSION);
 
 	std::vector<std::string> paths;
 	std::string benchPath;
@@ -278,7 +278,7 @@ int main(int argc, char** argv)
 	               chooserFile,
 	               "Browser: o writes the marked paths (else the selected one) "
 	               "here and exits");
-	std::uint64_t cacheBytes = rv::ImageService::DEFAULT_BUDGET;
+	std::uint64_t cacheBytes = rega::ImageService::DEFAULT_BUDGET;
 	cli.add_option("--cache",
 	               cacheBytes,
 	               "Memory for decoded images, e.g. 8G or 512M (default 4G)")
@@ -292,14 +292,14 @@ int main(int argc, char** argv)
 	        },
 	        ""));
 	auto linkRate =
-	    static_cast<std::uint64_t>(rv::kitty::Transmitter::DEFAULT_LINK_RATE);
+	    static_cast<std::uint64_t>(rega::kitty::Transmitter::DEFAULT_LINK_RATE);
 	cli.add_option("--link-rate",
 	               linkRate,
 	               "Bytes a second the ssh link is assumed to carry until "
 	               "measured, e.g. 20M; playback sending images inline is "
 	               "paced to the link (default 4M, 0: unpaced, unmeasured)")
 	    ->transform(sizeValue());
-	std::uint64_t terminalCache = rv::AppOptions::DEFAULT_TERMINAL_CACHE;
+	std::uint64_t terminalCache = rega::AppOptions::DEFAULT_TERMINAL_CACHE;
 	cli.add_option("--terminal-cache",
 	               terminalCache,
 	               "Terminal image memory frames played over ssh may keep "
@@ -316,18 +316,18 @@ int main(int argc, char** argv)
 	cli.add_flag("--tutorial",
 	             tutorial,
 	             "A guided tour on sample images (rendered into "
-	             "~/.cache/rvtui/tutorial on first use)");
+	             "~/.cache/rega/tutorial on first use)");
 	cli.add_option("--cwd-file",
 	               cwdFile,
 	               "On exit, write the last directory here");
 	CLI11_PARSE(cli, argc, argv);
-	rv::log::initConsole();
+	rega::log::initConsole();
 
 	try
 	{
 		if(doctor)
 		{
-			return rv::runDoctor(graphics);
+			return rega::runDoctor(graphics);
 		}
 		if(!dumpPath.empty())
 		{
@@ -337,20 +337,20 @@ int main(int argc, char** argv)
 		{
 			// For scripts (the guide's recorder): the set as --tutorial
 			// opens it, rendered only when missing or out of date.
-			rv::tutorial::ensure(rv::tutorial::defaultDir());
-			fmt::print("{}\n", rv::tutorial::defaultDir().string());
+			rega::tutorial::ensure(rega::tutorial::defaultDir());
+			fmt::print("{}\n", rega::tutorial::defaultDir().string());
 			return 0;
 		}
 		if(helpKeys)
 		{
-			fmt::print("{}\n", rv::help::markdown());
+			fmt::print("{}\n", rega::help::markdown());
 			return 0;
 		}
 		if(!benchPath.empty())
 		{
 			return bench(benchPath, 2560, 1440);
 		}
-		rv::AppOptions opts;
+		rega::AppOptions opts;
 		opts.m_paths = paths;
 		if(!diffs.empty())
 		{
@@ -381,22 +381,23 @@ int main(int argc, char** argv)
 		}
 		if(tutorial)
 		{
-			const auto dir = rv::tutorial::defaultDir();
-			rv::tutorial::ensure(dir,
-			                     {},
-			                     [&dir](int done, int total)
-			                     {
-				                     fmt::print(stderr,
-				                                "\rrendering the tutorial into "
-				                                "{}: {}/{}",
-				                                dir.string(),
-				                                done,
-				                                total);
-				                     if(done == total)
-				                     {
-					                     fmt::print(stderr, "\n");
-				                     }
-			                     });
+			const auto dir = rega::tutorial::defaultDir();
+			rega::tutorial::ensure(dir,
+			                       {},
+			                       [&dir](int done, int total)
+			                       {
+				                       fmt::print(
+				                           stderr,
+				                           "\rrendering the tutorial into "
+				                           "{}: {}/{}",
+				                           dir.string(),
+				                           done,
+				                           total);
+				                       if(done == total)
+				                       {
+					                       fmt::print(stderr, "\n");
+				                       }
+			                       });
 			opts.m_paths = {dir.string()};
 		}
 		opts.m_graphics = graphics;
@@ -407,7 +408,7 @@ int main(int argc, char** argv)
 		opts.m_tutorial = tutorial;
 		opts.m_linkRate = static_cast<double>(linkRate);
 		opts.m_terminalCache = terminalCache;
-		return rv::runApp(opts);
+		return rega::runApp(opts);
 	}
 	catch(const std::exception& e)
 	{

@@ -8,7 +8,7 @@
 - [Terminal setup](setup.md)
 - [First run: the tutorial](tutorial.md)
 
-# Using rvtui
+# Using rega
 
 - [Browser](browser.md)
 - [Viewer](viewer/README.md)

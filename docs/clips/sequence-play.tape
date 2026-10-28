@@ -1,5 +1,5 @@
 # Sequence: play, step, jump, go to a frame, change the rate.
-Run rvtui 'shot.####.exr'
+Run rega 'shot.####.exr'
 Wait 3
 Key Space
 Sleep 3

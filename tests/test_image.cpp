@@ -32,7 +32,7 @@ namespace
 
 fs::path tmpDir()
 {
-	auto d = fs::temp_directory_path() / "rvtui-tests";
+	auto d = fs::temp_directory_path() / "rega-tests";
 	fs::create_directories(d);
 	return d;
 }
@@ -109,7 +109,7 @@ TEST(ExrLoader, GroupsLayersRootFirst)
 	                   "N.Z"},
 	                  16,
 	                  8);
-	auto info = rv::probeImage(p);
+	auto info = rega::probeImage(p);
 	ASSERT_EQ(info.m_layers.size(), 4u);
 	EXPECT_EQ(info.m_layers[0].m_layer, "");
 	EXPECT_EQ(info.m_layers[0].label(), "rgba");
@@ -127,10 +127,10 @@ TEST(ExrLoader, ReadsLayerPixelsExactly)
 	                  {"R", "G", "B", "spec.R", "spec.G", "spec.B"},
 	                  12,
 	                  6);
-	auto info = rv::probeImage(p);
+	auto info = rega::probeImage(p);
 	int li = info.findLayer("spec");
 	ASSERT_GE(li, 0);
-	auto img = rv::loadLayer(info, li);
+	auto img = rega::loadLayer(info, li);
 	ASSERT_EQ(img.m_width, 12);
 	ASSERT_EQ(img.m_height, 6);
 	ASSERT_EQ(img.m_channelNames, (std::vector<std::string>{"R", "G", "B"}));
@@ -144,9 +144,9 @@ TEST(ExrLoader, ReadsLayerPixelsExactly)
 TEST(ExrLoader, ReadsTiled)
 {
 	auto p = writeExr("tiled.exr", {"R", "G", "B"}, 20, 13, /*tiled=*/true);
-	auto info = rv::probeImage(p);
+	auto info = rega::probeImage(p);
 	EXPECT_TRUE(info.m_parts[0].m_tiled);
-	auto img = rv::loadLayer(info, 0);
+	auto img = rega::loadLayer(info, 0);
 	EXPECT_FLOAT_EQ(*img.at(1, 19, 12), pattern(1, 19, 12));
 }
 
@@ -188,7 +188,7 @@ TEST(ExrLoader, ReadsWhatACutShortCopyHas)
 	auto p = writeExr("cut.exr", {"R", "G", "B"}, 8, 40);
 	std::string bytes = readBytes(p);
 	writeBytes(p, bytes.substr(0, bytes.size() - 10));
-	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	auto img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_TRUE(img.incomplete());
 	EXPECT_EQ(img.m_chunksRead, 2);
 	EXPECT_EQ(img.m_chunks, 3);
@@ -205,13 +205,13 @@ TEST(ExrLoader, ReadsARenderStillBeingWritten)
 	ASSERT_GT(table, 0u);
 	std::fill_n(bytes.begin() + table, 8 * 3, '\0');
 	writeBytes(p, bytes.substr(0, bytes.size() - 10));
-	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	auto img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_EQ(img.m_chunksRead, 2);
 	EXPECT_FLOAT_EQ(*img.at(2, 7, 20), pattern(2, 7, 20));
 
 	// Only just opened: no chunks at all is an empty frame, not an error.
 	writeBytes(p, bytes.substr(0, table + 8 * 3));
-	img = rv::loadLayer(rv::probeImage(p), 0);
+	img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_EQ(img.m_chunksRead, 0);
 	EXPECT_EQ(img.m_chunks, 3);
 	EXPECT_FLOAT_EQ(*img.at(0, 0, 0), 0.0f);
@@ -224,7 +224,7 @@ TEST(ExrLoader, ReadsTheTilesACutShortTiledFileHas)
 	auto p = writeExr("cut-tiled.exr", {"R", "G", "B"}, 20, 13, /*tiled=*/true);
 	std::string bytes = readBytes(p);
 	writeBytes(p, bytes.substr(0, bytes.size() - 10));
-	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	auto img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_EQ(img.m_chunksRead, 5);
 	EXPECT_EQ(img.m_chunks, 6);
 	EXPECT_FLOAT_EQ(*img.at(1, 19, 7), pattern(1, 19, 7));
@@ -244,7 +244,7 @@ TEST(ExrLoader, ReadsTheBucketsOfARenderStillGoing)
 	std::memcpy(&fourth, bytes.data() + table + 3 * 8, 8);
 	std::fill_n(bytes.begin() + table, 6 * 8, '\0');
 	writeBytes(p, bytes.substr(0, fourth));
-	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	auto img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_EQ(img.m_chunksRead, 3);
 	EXPECT_EQ(img.m_chunks, 6);
 	EXPECT_FLOAT_EQ(*img.at(2, 19, 0), pattern(2, 19, 0));
@@ -266,7 +266,7 @@ TEST(ExrLoader, ShowsABucketWhoseChecksumFails)
 	ASSERT_LT(size, 4 * 5 * 3 * 4); // zipped, not stored
 	bytes[tile + 20 + size - 1] ^= 1;
 	writeBytes(p, bytes);
-	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	auto img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_FALSE(img.incomplete());
 	EXPECT_TRUE(img.damaged());
 	EXPECT_EQ(img.m_chunksDamaged, 1);
@@ -290,7 +290,7 @@ TEST(ExrLoader, ShowsAStripWhoseChecksumFails)
 	ASSERT_LT(size, 8 * 16 * 3 * 4);
 	bytes[chunk + 8 + size - 1] ^= 1;
 	writeBytes(p, bytes);
-	auto img = rv::loadLayer(rv::probeImage(p), 0);
+	auto img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_FALSE(img.incomplete());
 	EXPECT_EQ(img.m_chunksDamaged, 1);
 	EXPECT_FLOAT_EQ(*img.at(2, 7, 16), pattern(2, 7, 16));
@@ -332,26 +332,26 @@ TEST(ExrLoader, MultiPart)
 			op.writePixels(h);
 		}
 	}
-	auto info = rv::probeImage(p);
+	auto info = rega::probeImage(p);
 	ASSERT_EQ(info.m_parts.size(), 2u);
 	ASSERT_EQ(info.m_layers.size(), 2u);
 	EXPECT_EQ(info.m_layers[0].label(), "beauty");
 	EXPECT_EQ(info.m_layers[1].label(), "aovs/emission");
-	auto img = rv::loadLayer(info, 1);
+	auto img = rega::loadLayer(info, 1);
 	EXPECT_FLOAT_EQ(*img.at(1, 2, 2), 7.0f);
 }
 
 TEST(ChannelMap, Mapping)
 {
-	auto m = rv::mapChannels({"R", "G", "B", "A"});
+	auto m = rega::mapChannels({"R", "G", "B", "A"});
 	EXPECT_EQ(m.m_r, 0);
 	EXPECT_EQ(m.m_b, 2);
 	EXPECT_EQ(m.m_a, 3);
-	auto z = rv::mapChannels({"Z"});
+	auto z = rega::mapChannels({"Z"});
 	EXPECT_EQ(z.m_r, 0);
 	EXPECT_EQ(z.m_g, 0);
 	EXPECT_EQ(z.m_b, 0);
-	auto xy = rv::mapChannels({"X", "Y", "Z"});
+	auto xy = rega::mapChannels({"X", "Y", "Z"});
 	EXPECT_EQ(xy.m_r, 0);
 	EXPECT_EQ(xy.m_g, 1);
 	EXPECT_EQ(xy.m_b, 2);
@@ -359,43 +359,43 @@ TEST(ChannelMap, Mapping)
 
 TEST(Display, ExposureAndSrgb)
 {
-	rv::DisplayParams p;
+	rega::DisplayParams p;
 	p.m_srgb = false;
-	EXPECT_FLOAT_EQ(rv::applyDisplay(0.25f, p), 0.25f);
+	EXPECT_FLOAT_EQ(rega::applyDisplay(0.25f, p), 0.25f);
 	p.m_exposure = 1;
-	EXPECT_FLOAT_EQ(rv::applyDisplay(0.25f, p), 0.5f);
+	EXPECT_FLOAT_EQ(rega::applyDisplay(0.25f, p), 0.5f);
 	p.m_exposure = 0;
 	p.m_srgb = true;
-	EXPECT_NEAR(rv::applyDisplay(0.18f, p), 0.4613f, 1e-3);
-	EXPECT_FLOAT_EQ(rv::applyDisplay(5.0f, p), 1.0f);
-	EXPECT_FLOAT_EQ(rv::applyDisplay(-1.0f, p), 0.0f);
-	EXPECT_FLOAT_EQ(rv::applyDisplay(NAN, p), 0.0f);
+	EXPECT_NEAR(rega::applyDisplay(0.18f, p), 0.4613f, 1e-3);
+	EXPECT_FLOAT_EQ(rega::applyDisplay(5.0f, p), 1.0f);
+	EXPECT_FLOAT_EQ(rega::applyDisplay(-1.0f, p), 0.0f);
+	EXPECT_FLOAT_EQ(rega::applyDisplay(NAN, p), 0.0f);
 }
 
 TEST(Render, FitLetterboxesAndAverages)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_dataWindow = img.m_displayWindow = {0, 0, 3, 1}; // 4x2
 	img.m_width = 4;
 	img.m_height = 2;
 	img.m_channelNames = {"R", "G", "B"};
-	img.m_planes.assign(3, rv::Plane(std::vector<float>(8, 1.0f)));
-	rv::DisplayParams d;
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(8, 1.0f)));
+	rega::DisplayParams d;
 	d.m_srgb = false;
-	d.m_outlines = rv::Outlines::FRAME_AND_DATA; // off by default
+	d.m_outlines = rega::Outlines::FRAME_AND_DATA; // off by default
 	// 4x2 image fit into 4x6 → image rows 2..3, the display-window outline
 	// on rows 1 and 4, transparent letterbox beyond.
-	auto out = rv::renderLayer(img, 4, 6, {}, d);
+	auto out = rega::renderLayer(img, 4, 6, {}, d);
 	auto alpha = [&](int x, int y)
 	{ return out.m_pixels[(y * 4 + x) * 4 + 3]; };
 	EXPECT_EQ(alpha(0, 0), 0);
-	EXPECT_EQ(out.m_pixels[(1 * 4 + 1) * 4 + 0], rv::OUTLINE_GREY);
+	EXPECT_EQ(out.m_pixels[(1 * 4 + 1) * 4 + 0], rega::OUTLINE_GREY);
 	EXPECT_EQ(alpha(0, 2), 255);
 	EXPECT_EQ(alpha(3, 3), 255);
 	EXPECT_EQ(out.m_pixels[(2 * 4 + 1) * 4 + 0], 255);
 	EXPECT_EQ(alpha(0, 5), 0);
 
-	auto half = rv::downsample(img, 2);
+	auto half = rega::downsample(img, 2);
 	EXPECT_EQ(half.m_width, 2);
 	EXPECT_EQ(half.m_reduce, 2);
 	EXPECT_FLOAT_EQ(*half.at(0, 3, 1), 1.0f);
@@ -403,97 +403,97 @@ TEST(Render, FitLetterboxesAndAverages)
 
 TEST(Render, PixelGridOnlyWhenZoomedIn)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_dataWindow = img.m_displayWindow = {0, 0, 1, 1}; // 2x2
 	img.m_width = img.m_height = 2;
 	img.m_channelNames = {"R", "G", "B"};
-	img.m_planes.assign(3, rv::Plane(std::vector<float>(4, 1.0f)));
-	rv::DisplayParams d;
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(4, 1.0f)));
+	rega::DisplayParams d;
 	d.m_srgb = false;
-	auto red = [](const rv::Rgba8Image& o, int x, int y)
+	auto red = [](const rega::Rgba8Image& o, int x, int y)
 	{ return o.m_pixels[(y * o.m_width + x) * 4]; };
 
-	rv::ViewParams v;
+	rega::ViewParams v;
 	v.m_fit = false;
 	v.m_zoom = 8; // each image pixel → 8x8 output px, centred
 	v.m_centerX = v.m_centerY = 1;
-	auto out = rv::renderLayer(img, 16, 16, v, d);
+	auto out = rega::renderLayer(img, 16, 16, v, d);
 	EXPECT_EQ(red(out, 4, 4), 255); // inside a pixel
 	EXPECT_LT(red(out, 8, 4), 255); // the x = 1 boundary
 	EXPECT_LT(red(out, 4, 8), 255); // the y = 1 boundary
 
 	v.m_zoom = 4; // below the threshold: no grid
-	out = rv::renderLayer(img, 16, 16, v, d);
+	out = rega::renderLayer(img, 16, 16, v, d);
 	EXPECT_EQ(red(out, 8, 4), 255);
 }
 
 TEST(Render, OutlinesTheDisplayWindow)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_dataWindow = img.m_displayWindow = {0, 0, 1, 1}; // 2x2
 	img.m_width = img.m_height = 2;
 	img.m_channelNames = {"R", "G", "B", "A"};
 	img.m_planes.assign(4,
-	                    rv::Plane(
+	                    rega::Plane(
 	                        std::vector<float>(4, 0.0f))); // fully transparent
-	rv::DisplayParams d;
+	rega::DisplayParams d;
 	d.m_srgb = false;
-	d.m_outlines = rv::Outlines::FRAME_AND_DATA; // off by default
+	d.m_outlines = rega::Outlines::FRAME_AND_DATA; // off by default
 	// Fit 2x2 into 8x4: scale 2, image at x 2..5, outline at x 1 and 6.
-	auto out = rv::renderLayer(img, 8, 4, {}, d);
+	auto out = rega::renderLayer(img, 8, 4, {}, d);
 	auto px = [&](int x, int y) { return &out.m_pixels[(y * 8 + x) * 4]; };
 	EXPECT_EQ(px(1, 1)[3], 255);
-	EXPECT_EQ(px(1, 1)[0], rv::OUTLINE_GREY);
-	EXPECT_EQ(px(6, 2)[0], rv::OUTLINE_GREY);
+	EXPECT_EQ(px(1, 1)[0], rega::OUTLINE_GREY);
+	EXPECT_EQ(px(6, 2)[0], rega::OUTLINE_GREY);
 	EXPECT_EQ(px(0, 1)[3], 0); // outside the outline: untouched
 	EXPECT_EQ(px(3, 1)[0], 0); // the image itself is not painted over
 }
 
 TEST(Render, DashesTheDataWindowWhenItDiffers)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_displayWindow = {0, 0, 7, 7}; // 8x8 frame
 	img.m_dataWindow = {2, 2, 5, 5};    // 4x4 of pixels in the middle
 	img.m_width = img.m_height = 4;
 	img.m_channelNames = {"R", "G", "B"};
-	img.m_planes.assign(3, rv::Plane(std::vector<float>(16, 1.0f)));
-	rv::DisplayParams d;
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(16, 1.0f)));
+	rega::DisplayParams d;
 	d.m_srgb = false;
-	d.m_outlines = rv::Outlines::FRAME_AND_DATA; // off by default
-	rv::ViewParams v;
+	d.m_outlines = rega::Outlines::FRAME_AND_DATA; // off by default
+	rega::ViewParams v;
 	v.m_fit = false;
 	v.m_zoom = 4; // 4 output px per image px
 	v.m_centerX = v.m_centerY = 4;
-	auto out = rv::renderLayer(img, 40, 40, v, d);
+	auto out = rega::renderLayer(img, 40, 40, v, d);
 	auto px = [&](int x, int y) { return &out.m_pixels[(y * 40 + x) * 4]; };
 	// Frame starts at output 4; data at 4 + 2*4 = 12, its outline at 11.
-	EXPECT_EQ(px(11, 13)[1], rv::DATA_OUTLINE_RGB[1]); // dash on
-	EXPECT_NE(px(11, 17)[1], rv::DATA_OUTLINE_RGB[1]); // dash gap
+	EXPECT_EQ(px(11, 13)[1], rega::DATA_OUTLINE_RGB[1]); // dash on
+	EXPECT_NE(px(11, 17)[1], rega::DATA_OUTLINE_RGB[1]); // dash gap
 	EXPECT_EQ(px(11, 17)[3], 255); // inside the frame: black, not clear
-	EXPECT_EQ(px(3, 10)[0], rv::OUTLINE_GREY); // the frame
-	EXPECT_EQ(px(13, 13)[0], 255);             // pixels untouched
+	EXPECT_EQ(px(3, 10)[0], rega::OUTLINE_GREY); // the frame
+	EXPECT_EQ(px(13, 13)[0], 255);               // pixels untouched
 
-	d.m_outlines = rv::Outlines::NONE; // `w` → off
-	out = rv::renderLayer(img, 40, 40, v, d);
+	d.m_outlines = rega::Outlines::NONE; // `w` → off
+	out = rega::renderLayer(img, 40, 40, v, d);
 	EXPECT_EQ(px(11, 13)[1], 0); // no dash, just the black frame
 	EXPECT_EQ(px(3, 10)[3], 0);  // outside the frame stays clear
 }
 
 TEST(Render, FitIncludesOverscan)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_displayWindow = {0, 0, 3, 3}; // 4x4 frame
 	img.m_dataWindow = {2, 0, 7, 3};    // pixels run 4 past the right edge
 	img.m_width = 6;
 	img.m_height = 4;
 	img.m_channelNames = {"R", "G", "B"};
-	img.m_planes.assign(3, rv::Plane(std::vector<float>(24, 1.0f)));
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(24, 1.0f)));
 	EXPECT_EQ(img.fitBounds().m_x1, 7);
-	rv::DisplayParams d;
+	rega::DisplayParams d;
 	d.m_srgb = false;
-	d.m_outlines = rv::Outlines::NONE;
+	d.m_outlines = rega::Outlines::NONE;
 	// Fit 8x4 of image into 16x8: scale 2, the rightmost pixel lands inside.
-	auto out = rv::renderLayer(img, 16, 8, {}, d);
+	auto out = rega::renderLayer(img, 16, 8, {}, d);
 	EXPECT_EQ(out.m_pixels[(4 * 16 + 15) * 4 + 0], 255);
 	// Frame left of the data: black (the frame), not transparent.
 	EXPECT_EQ(out.m_pixels[(4 * 16 + 0) * 4 + 3], 255);
@@ -502,59 +502,59 @@ TEST(Render, FitIncludesOverscan)
 
 TEST(Render, SelectedTileGetsADashedInsetFrame)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_dataWindow = img.m_displayWindow = {0, 0, 3, 3}; // 4x4
 	img.m_width = img.m_height = 4;
 	img.m_channelNames = {"R", "G", "B"};
-	img.m_planes.assign(3, rv::Plane(std::vector<float>(16, 0.0f)));
-	rv::DisplayParams d;
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(16, 0.0f)));
+	rega::DisplayParams d;
 	d.m_srgb = false;
 	d.m_selected = true;
-	auto out = rv::renderLayer(img, 16, 16, {}, d); // fit: frame fills it
+	auto out = rega::renderLayer(img, 16, 16, {}, d); // fit: frame fills it
 	auto px = [&](int x, int y) { return &out.m_pixels[(y * 16 + x) * 4]; };
-	EXPECT_EQ(px(1, 0)[0], rv::SELECTED_RGB[0]); // on the edge, dash on
-	EXPECT_EQ(px(5, 0)[0], 0);                   // dash off
-	EXPECT_EQ(px(8, 8)[0], 0);                   // the image itself
+	EXPECT_EQ(px(1, 0)[0], rega::SELECTED_RGB[0]); // on the edge, dash on
+	EXPECT_EQ(px(5, 0)[0], 0);                     // dash off
+	EXPECT_EQ(px(8, 8)[0], 0);                     // the image itself
 }
 
 TEST(Render, RingsTheMarkedPixelInRed)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_dataWindow = img.m_displayWindow = {0, 0, 3, 3}; // 4x4
 	img.m_width = img.m_height = 4;
 	img.m_channelNames = {"R", "G", "B"};
-	img.m_planes.assign(3, rv::Plane(std::vector<float>(16, 0.0f)));
-	rv::DisplayParams d;
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(16, 0.0f)));
+	rega::DisplayParams d;
 	d.m_srgb = false;
 	d.m_marker = std::pair(1, 1);
-	rv::ViewParams v;
+	rega::ViewParams v;
 	v.m_fit = false;
 	v.m_zoom = 8; // pixel (1, 1) covers output 8..15
 	v.m_centerX = v.m_centerY = 2;
-	auto out = rv::renderLayer(img, 32, 32, v, d);
+	auto out = rega::renderLayer(img, 32, 32, v, d);
 	auto red = [&](int x, int y) { return out.m_pixels[(y * 32 + x) * 4]; };
-	EXPECT_EQ(red(7, 10), rv::MARKER_RGB[0]); // just outside it
-	EXPECT_EQ(red(16, 10), rv::MARKER_RGB[0]);
-	EXPECT_EQ(red(10, 7), rv::MARKER_RGB[0]);
+	EXPECT_EQ(red(7, 10), rega::MARKER_RGB[0]); // just outside it
+	EXPECT_EQ(red(16, 10), rega::MARKER_RGB[0]);
+	EXPECT_EQ(red(10, 7), rega::MARKER_RGB[0]);
 	EXPECT_EQ(red(10, 10), 0); // the pixel itself shows, no dot
 	EXPECT_EQ(red(11, 11), 0);
 	EXPECT_EQ(red(6, 10), 0);
 
 	// Zoomed out (fit into 8x8: the pixel is output 2..3), the ring grows
 	// about it to show, and a dot marks the pixel in its middle.
-	out = rv::renderLayer(img, 8, 8, {}, d);
+	out = rega::renderLayer(img, 8, 8, {}, d);
 	auto red8 = [&](int x, int y) { return out.m_pixels[(y * 8 + x) * 4]; };
-	EXPECT_EQ(red8(6, 3), rv::MARKER_RGB[0]); // the ring
-	EXPECT_EQ(red8(3, 3), rv::MARKER_RGB[0]); // the dot
-	EXPECT_EQ(red8(2, 2), 0);                 // between them
+	EXPECT_EQ(red8(6, 3), rega::MARKER_RGB[0]); // the ring
+	EXPECT_EQ(red8(3, 3), rega::MARKER_RGB[0]); // the dot
+	EXPECT_EQ(red8(2, 2), 0);                   // between them
 }
 
 TEST(LayerImage, ScanCountsNanAndInfAndTakesFiniteStats)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_width = 4;
 	img.m_height = 2;
-	rv::Plane r = rv::Plane::floats(8), g = rv::Plane::halves(8);
+	rega::Plane r = rega::Plane::floats(8), g = rega::Plane::halves(8);
 	r.set(0, std::nanf(""));
 	g.set(0, INFINITY); // same pixel: counts as both
 	r.set(3, -INFINITY);
@@ -562,7 +562,7 @@ TEST(LayerImage, ScanCountsNanAndInfAndTakesFiniteStats)
 	g.set(6, std::nanf(""));
 	r.set(6, std::nanf("")); // NaN in two channels: one pixel
 	img.m_planes = {r, g};
-	rv::scanLayer(img);
+	rega::scanLayer(img);
 	EXPECT_EQ(img.m_nanPixels, 3);
 	EXPECT_EQ(img.m_infPixels, 2);
 	// Stats over the finite values only: r is 0 but for 5 of its 8.
@@ -572,13 +572,13 @@ TEST(LayerImage, ScanCountsNanAndInfAndTakesFiniteStats)
 	EXPECT_EQ(img.m_stats[0].m_max, 0.0f);
 	EXPECT_EQ(img.m_stats[1].m_count, 5);
 	// A reduced copy keeps the full-resolution counts.
-	const auto half = rv::downsample(img, 2);
+	const auto half = rega::downsample(img, 2);
 	EXPECT_EQ(half.m_nanPixels, 3);
 	EXPECT_EQ(half.m_infPixels, 2);
 	EXPECT_EQ(half.m_stats.size(), 2u);
 	// Loading counts too.
 	auto p = writeExr("finite.exr", {"R", "G", "B"}, 4, 4);
-	img = rv::loadLayer(rv::probeImage(p), 0);
+	img = rega::loadLayer(rega::probeImage(p), 0);
 	EXPECT_EQ(img.m_nanPixels, 0);
 	EXPECT_EQ(img.m_infPixels, 0);
 	ASSERT_EQ(img.m_stats.size(), 3u);
@@ -602,37 +602,37 @@ TEST(LayerImage, ScanCountsNanAndInfAndTakesFiniteStats)
 
 TEST(Render, BangPaintsNanAndInfPixels)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_dataWindow = img.m_displayWindow = {0, 0, 3, 0}; // 4x1
 	img.m_width = 4;
 	img.m_height = 1;
 	img.m_channelNames = {"R", "G", "B"};
-	img.m_planes.assign(3, rv::Plane(std::vector<float>(4, 0.5f)));
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(4, 0.5f)));
 	img.m_planes[0].set(1, std::nanf(""));
 	img.m_planes[2].set(2, -INFINITY);
-	rv::DisplayParams d;
+	rega::DisplayParams d;
 	d.m_srgb = false;
-	rv::ViewParams v;
+	rega::ViewParams v;
 	v.m_fit = false;
 	v.m_zoom = 1;
 	v.m_centerX = 2;
 	v.m_centerY = 0.5;
-	auto px = [](const rv::Rgba8Image& o, int x)
+	auto px = [](const rega::Rgba8Image& o, int x)
 	{
 		const uint8_t* p = &o.m_pixels[static_cast<size_t>(x) * 4];
 		return std::array<int, 3>{p[0], p[1], p[2]};
 	};
-	auto out = rv::renderLayer(img, 4, 1, v, d); // off: NaN / inf as 0
+	auto out = rega::renderLayer(img, 4, 1, v, d); // off: NaN / inf as 0
 	EXPECT_EQ(px(out, 1)[0], 0);
 	EXPECT_EQ(px(out, 2)[2], 0);
 	d.m_showNonFinite = true;
-	out = rv::renderLayer(img, 4, 1, v, d);
+	out = rega::renderLayer(img, 4, 1, v, d);
 	EXPECT_EQ(px(out, 0), (std::array<int, 3>{128, 128, 128}));
 	EXPECT_EQ(px(out, 1), (std::array<int, 3>{255, 0, 255})); // NaN
 	EXPECT_EQ(px(out, 2), (std::array<int, 3>{0, 255, 255})); // inf
 	// Averaged when zoomed out: one NaN among its pixels still shows.
 	v.m_zoom = 0.5;
-	out = rv::renderLayer(img, 2, 1, v, d);
+	out = rega::renderLayer(img, 2, 1, v, d);
 	EXPECT_EQ(px(out, 0), (std::array<int, 3>{255, 0, 255}));
 }
 
@@ -649,19 +649,19 @@ TEST(StbLoader, PngRoundTripsThroughSrgbView)
 	}
 	fs::path p = tmpDir() / "rt.png";
 	ASSERT_TRUE(stbi_write_png(p.string().c_str(), w, h, 4, px, w * 4));
-	auto info = rv::probeImage(p);
+	auto info = rega::probeImage(p);
 	EXPECT_EQ(info.m_format, "png");
 	EXPECT_TRUE(info.m_displayReferred);
 	ASSERT_EQ(info.m_layers[0].m_channels,
 	          (std::vector<std::string>{"R", "G", "B", "A"}));
-	auto img = rv::loadLayer(info, 0);
+	auto img = rega::loadLayer(info, 0);
 	// Alpha stays linear; colour is linearised and the default sRGB view
 	// restores it.
 	EXPECT_FLOAT_EQ(*img.at(3, 1, 0), px[7] / 255.0f);
-	rv::DisplayParams d;
+	rega::DisplayParams d;
 	for(int c = 0; c < 3; ++c)
 	{
-		float back = rv::applyDisplay(*img.at(c, 2, 1), d) * 255.0f;
+		float back = rega::applyDisplay(*img.at(c, 2, 1), d) * 255.0f;
 		EXPECT_NEAR(back, px[(1 * w + 2) * 4 + c], 0.51f);
 	}
 }
@@ -705,8 +705,8 @@ TEST(TiffLoader, Rgba16StripsLinearisedLikePng)
 			ASSERT_EQ(TIFFWriteScanline(tif.get(), &px[y * w * 4], y), 1);
 		}
 	}
-	ASSERT_TRUE(rv::isSupportedImage(p));
-	const auto info = rv::probeImage(p);
+	ASSERT_TRUE(rega::isSupportedImage(p));
+	const auto info = rega::probeImage(p);
 	EXPECT_EQ(info.m_format, "tiff");
 	EXPECT_TRUE(info.m_displayReferred);
 	ASSERT_EQ(info.m_layers.size(), 1u);
@@ -716,13 +716,13 @@ TEST(TiffLoader, Rgba16StripsLinearisedLikePng)
 	EXPECT_EQ(info.m_layers[0].m_types[0], "uint16");
 	EXPECT_EQ(info.m_parts[0].m_compression, "lzw");
 
-	const auto img = rv::loadLayer(info, 0);
+	const auto img = rega::loadLayer(info, 0);
 	EXPECT_EQ(img.m_width, w);
 	EXPECT_FLOAT_EQ(*img.at(3, 1, 0), px[7] / 65535.0f); // alpha stays linear
-	rv::DisplayParams d;
+	rega::DisplayParams d;
 	for(int c = 0; c < 3; ++c)
 	{
-		const float back = rv::applyDisplay(*img.at(c, 2, 1), d);
+		const float back = rega::applyDisplay(*img.at(c, 2, 1), d);
 		EXPECT_NEAR(back, px[(1 * w + 2) * 4 + c] / 65535.0f, 0.002f);
 	}
 }
@@ -801,7 +801,7 @@ TEST(TiffLoader, FloatTilesHalfStripsAndAThumbnailPage)
 		ASSERT_EQ(TIFFWriteScanline(t, const_cast<uint8_t*>(grey), 0), 1);
 	}
 
-	const auto info = rv::probeImage(p);
+	const auto info = rega::probeImage(p);
 	EXPECT_FALSE(info.m_displayReferred);
 	ASSERT_EQ(info.m_parts.size(), 3u);
 	ASSERT_EQ(info.m_layers.size(), 2u);
@@ -815,7 +815,7 @@ TEST(TiffLoader, FloatTilesHalfStripsAndAThumbnailPage)
 	          (std::vector<std::string>{"Y", "A"}));
 	EXPECT_EQ(info.m_layers[1].m_types[0], "half");
 
-	const auto rgb = rv::loadLayer(info, 0);
+	const auto rgb = rega::loadLayer(info, 0);
 	ASSERT_EQ(rgb.m_planes.size(), 3u);
 	EXPECT_FALSE(rgb.incomplete());
 	for(int c = 0; c < 3; ++c)
@@ -825,7 +825,7 @@ TEST(TiffLoader, FloatTilesHalfStripsAndAThumbnailPage)
 			EXPECT_EQ(*rgb.at(c, x, y), pattern(c, x, y)) << c << " " << x;
 		}
 	}
-	const auto matte = rv::loadLayer(info, 1);
+	const auto matte = rega::loadLayer(info, 1);
 	EXPECT_EQ(matte.m_width, sw);
 	EXPECT_TRUE(matte.m_planes[0].isHalf());
 	EXPECT_EQ(*matte.at(0, 4, 2), halfValue(4, 2, 0)); // no sRGB for float
@@ -851,10 +851,10 @@ TEST(TiffLoader, PaletteReadThroughRgba)
 		uint8_t row[2] = {1, 2};
 		ASSERT_EQ(TIFFWriteScanline(t, row, 0), 1);
 	}
-	const auto info = rv::probeImage(p);
+	const auto info = rega::probeImage(p);
 	ASSERT_EQ(info.m_layers[0].m_channels,
 	          (std::vector<std::string>{"R", "G", "B"}));
-	const auto img = rv::loadLayer(info, 0);
+	const auto img = rega::loadLayer(info, 0);
 	EXPECT_FLOAT_EQ(*img.at(0, 0, 0), 1.0f);
 	EXPECT_FLOAT_EQ(*img.at(2, 0, 0), 0.0f);
 	EXPECT_FLOAT_EQ(*img.at(0, 1, 0), 0.0f);
@@ -866,7 +866,7 @@ TEST(TiffLoader, NotATiffThrowsQuietly)
 	const fs::path p = tmpDir() / "bad.tiff";
 	std::ofstream(p) << "not a tiff at all";
 	testing::internal::CaptureStderr();
-	EXPECT_THROW(rv::probeImage(p), rv::LoadError);
+	EXPECT_THROW(rega::probeImage(p), rega::LoadError);
 	// libtiff's default handlers print to stderr, under the TUI.
 	EXPECT_EQ(testing::internal::GetCapturedStderr(), "");
 }
@@ -874,7 +874,7 @@ TEST(TiffLoader, NotATiffThrowsQuietly)
 TEST(ImageService, ReloadsFileChangedOnDisk)
 {
 	auto p = writeExr("changing.exr", {"R", "G", "B"}, 8, 4);
-	rv::ImageService svc(nullptr, size_t(64) << 20, 1);
+	rega::ImageService svc(nullptr, size_t(64) << 20, 1);
 	auto waitInfo = [&]
 	{
 		for(int i = 0; i < 500; ++i)
@@ -885,7 +885,7 @@ TEST(ImageService, ReloadsFileChangedOnDisk)
 			}
 			std::this_thread::sleep_for(std::chrono::milliseconds(5));
 		}
-		return rv::ImageInfoPtr{};
+		return rega::ImageInfoPtr{};
 	};
 	auto before = waitInfo();
 	ASSERT_TRUE(before);
@@ -917,7 +917,7 @@ TEST(ImageService, DemotedFramesGoFirstSoALoopKeepsSome)
 	// Misses in the second loop, playing each frame then (maybe) demoting it.
 	auto secondLoopMisses = [&](bool demote)
 	{
-		rv::ImageService svc(nullptr, 3 * frame + 16 * 4096, 1);
+		rega::ImageService svc(nullptr, 3 * frame + 16 * 4096, 1);
 		int misses = 0;
 		for(int loop = 0; loop < 2; ++loop)
 		{
@@ -947,7 +947,7 @@ TEST(ImageService, RetriesAfterBrokenFileIsFixed)
 	{
 		std::ofstream(p) << "not an exr yet";
 	}
-	rv::ImageService svc(nullptr, size_t(64) << 20, 1);
+	rega::ImageService svc(nullptr, size_t(64) << 20, 1);
 	for(int i = 0; i < 500 && !svc.error(p); ++i)
 	{
 		svc.info(p);
@@ -958,7 +958,7 @@ TEST(ImageService, RetriesAfterBrokenFileIsFixed)
 	writeExr("half-written.exr", {"R", "G", "B"}, 4, 4); // render finished
 	EXPECT_TRUE(svc.checkForChanges({p}));
 	EXPECT_FALSE(svc.error(p).has_value());
-	rv::ImageInfoPtr info;
+	rega::ImageInfoPtr info;
 	for(int i = 0; i < 500 && !info; ++i)
 	{
 		info = svc.info(p);
@@ -1014,8 +1014,8 @@ fs::path writeMixedExr(const std::string& name, int w, int h)
 
 TEST(ExrLoader, KeepsHalfChannelsHalfAndFloatOnesFloat)
 {
-	auto info = rv::probeImage(writeMixedExr("mixed.exr", 8, 4));
-	auto rgb = rv::loadLayer(info, info.findLayer(""));
+	auto info = rega::probeImage(writeMixedExr("mixed.exr", 8, 4));
+	auto rgb = rega::loadLayer(info, info.findLayer(""));
 	ASSERT_EQ(rgb.m_planes.size(), 3u);
 	for(const auto& p : rgb.m_planes)
 	{
@@ -1024,7 +1024,7 @@ TEST(ExrLoader, KeepsHalfChannelsHalfAndFloatOnesFloat)
 	EXPECT_EQ(rgb.bytes(), 3u * 8 * 4 * sizeof(uint16_t)); // half the memory
 	EXPECT_FLOAT_EQ(*rgb.at(0, 5, 3), 5 + 3 / 8.0f);       // lossless
 
-	auto z = rv::loadLayer(info, info.findLayer("depth"));
+	auto z = rega::loadLayer(info, info.findLayer("depth"));
 	ASSERT_EQ(z.m_planes.size(), 1u);
 	EXPECT_FALSE(z.m_planes[0].isHalf());
 	EXPECT_FLOAT_EQ(*z.at(0, 7, 3), 1000.0f + 7 + 3 / 1024.0f);
@@ -1032,8 +1032,8 @@ TEST(ExrLoader, KeepsHalfChannelsHalfAndFloatOnesFloat)
 
 TEST(Plane, DownsampleKeepsTheStorageType)
 {
-	auto info = rv::probeImage(writeMixedExr("mixed-down.exr", 8, 4));
-	auto img = rv::downsample(rv::loadLayer(info, info.findLayer("")), 2);
+	auto info = rega::probeImage(writeMixedExr("mixed-down.exr", 8, 4));
+	auto img = rega::downsample(rega::loadLayer(info, info.findLayer("")), 2);
 	ASSERT_EQ(img.m_width, 4);
 	EXPECT_TRUE(img.m_planes[0].isHalf());
 	// Pixels (2..3, 0..1): mean of x + y/8 = 2.5 + 0.0625.
@@ -1044,7 +1044,7 @@ TEST(Render, HalfAndMixedPlanesRenderLikeFloat)
 {
 	auto make = [](bool halfRgb, bool halfA)
 	{
-		rv::LayerImage img;
+		rega::LayerImage img;
 		img.m_width = 6;
 		img.m_height = 4;
 		img.m_dataWindow = img.m_displayWindow = {0, 0, 5, 3};
@@ -1052,7 +1052,8 @@ TEST(Render, HalfAndMixedPlanesRenderLikeFloat)
 		for(int c = 0; c < 4; ++c)
 		{
 			const bool h = c < 3 ? halfRgb : halfA;
-			rv::Plane p = h ? rv::Plane::halves(24) : rv::Plane::floats(24);
+			rega::Plane p =
+			    h ? rega::Plane::halves(24) : rega::Plane::floats(24);
 			for(size_t i = 0; i < 24; ++i)
 			{
 				p.set(i, c == 3 ? 1.0f : (i % 6) / 8.0f + c / 4.0f);
@@ -1061,10 +1062,10 @@ TEST(Render, HalfAndMixedPlanesRenderLikeFloat)
 		}
 		return img;
 	};
-	const auto ref = rv::renderLayer(make(false, false), 3, 2, {}, {});
-	EXPECT_EQ(rv::renderLayer(make(true, true), 3, 2, {}, {}).m_pixels,
+	const auto ref = rega::renderLayer(make(false, false), 3, 2, {}, {});
+	EXPECT_EQ(rega::renderLayer(make(true, true), 3, 2, {}, {}).m_pixels,
 	          ref.m_pixels);
-	EXPECT_EQ(rv::renderLayer(make(true, false), 3, 2, {}, {}).m_pixels,
+	EXPECT_EQ(rega::renderLayer(make(true, false), 3, 2, {}, {}).m_pixels,
 	          ref.m_pixels);
 }
 
@@ -1072,8 +1073,8 @@ TEST(ImageService, PrefetchesLandQuietly)
 {
 	auto p = writeExr("quiet.exr", {"R", "G", "B"}, 8, 4);
 	std::atomic<int> notified{0};
-	rv::ImageService svc([&] { ++notified; }, size_t(64) << 20, 1);
-	svc.layer(p, "rgba", 1, rv::ImageService::Priority::PREFETCH);
+	rega::ImageService svc([&] { ++notified; }, size_t(64) << 20, 1);
+	svc.layer(p, "rgba", 1, rega::ImageService::Priority::PREFETCH);
 	for(int i = 0; i < 500 && !svc.hasLayer(p, "rgba", 1); ++i)
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(5));
@@ -1097,17 +1098,17 @@ namespace
 {
 
 // A layer covering `dw`, every channel `v` (full resolution).
-rv::LayerImage flat(rv::Box2i dw, std::vector<std::string> names, float v)
+rega::LayerImage flat(rega::Box2i dw, std::vector<std::string> names, float v)
 {
-	rv::LayerImage img;
+	rega::LayerImage img;
 	img.m_dataWindow = img.m_displayWindow = dw;
 	img.m_width = dw.width();
 	img.m_height = dw.height();
 	img.m_channelNames = std::move(names);
 	for(size_t c = 0; c < img.m_channelNames.size(); ++c)
 	{
-		rv::Plane p =
-		    rv::Plane::floats(static_cast<size_t>(img.m_width) * img.m_height);
+		rega::Plane p = rega::Plane::floats(static_cast<size_t>(img.m_width) *
+		                                    img.m_height);
 		for(size_t i = 0; i < p.size(); ++i)
 		{
 			p.set(i, v);
@@ -1123,14 +1124,14 @@ TEST(Diff, AbsoluteDifferenceOverTheUnionOfWindowsAndChannels)
 {
 	const auto a = flat({0, 0, 3, 1}, {"R", "G"}, 1.0f);
 	const auto b = flat({2, 0, 5, 1}, {"R", "B"}, 0.25f);
-	const auto d = rv::diffLayers(a, b);
-	EXPECT_EQ(d.m_dataWindow, (rv::Box2i{0, 0, 5, 1}));
+	const auto d = rega::diffLayers(a, b);
+	EXPECT_EQ(d.m_dataWindow, (rega::Box2i{0, 0, 5, 1}));
 	ASSERT_EQ(d.m_channelNames, (std::vector<std::string>{"R", "B", "G"}));
 	EXPECT_FLOAT_EQ(*d.at(0, 0, 0), 1.0f);  // only A: against 0
 	EXPECT_FLOAT_EQ(*d.at(0, 2, 1), 0.75f); // both
 	EXPECT_FLOAT_EQ(*d.at(1, 5, 0), 0.25f); // B's channel, B's pixel
 	EXPECT_FLOAT_EQ(*d.at(2, 5, 0), 0.0f);  // A's channel, B's pixel
-	EXPECT_FLOAT_EQ(rv::maxValue(d), 1.0f);
+	EXPECT_FLOAT_EQ(rega::maxValue(d), 1.0f);
 }
 
 TEST(Diff, IdenticalIncludingNanIsZeroOneNanStays)
@@ -1139,26 +1140,26 @@ TEST(Diff, IdenticalIncludingNanIsZeroOneNanStays)
 	auto b = a;
 	a.m_planes[0].set(0, NAN);
 	b.m_planes[0].set(0, NAN);
-	auto same = rv::diffLayers(a, b);
-	EXPECT_FLOAT_EQ(rv::maxValue(same), 0.0f);
+	auto same = rega::diffLayers(a, b);
+	EXPECT_FLOAT_EQ(rega::maxValue(same), 0.0f);
 	EXPECT_EQ(same.m_nanPixels, 0);
 	b.m_planes[0].set(0, 0.5f);
-	EXPECT_EQ(rv::diffLayers(a, b).m_nanPixels, 1);
+	EXPECT_EQ(rega::diffLayers(a, b).m_nanPixels, 1);
 }
 
 TEST(ImageService, DiffsTwoFilesAndReportsAMissingSide)
 {
 	auto a = writeExr("diff-a.exr", {"R", "G", "B"}, 6, 4);
 	auto b = writeExr("diff-b.exr", {"R", "G", "B"}, 6, 4);
-	rv::ImageService svc(nullptr, size_t(64) << 20, 1);
-	rv::LayerImagePtr d;
+	rega::ImageService svc(nullptr, size_t(64) << 20, 1);
+	rega::LayerImagePtr d;
 	for(int i = 0; i < 500 && !d; ++i)
 	{
 		d = svc.diffLayer(a, b, "", 1);
 		std::this_thread::sleep_for(std::chrono::milliseconds(5));
 	}
 	ASSERT_TRUE(d);
-	EXPECT_FLOAT_EQ(rv::maxValue(*d), 0.0f);
+	EXPECT_FLOAT_EQ(rega::maxValue(*d), 0.0f);
 
 	const fs::path gone = tmpDir() / "diff-gone.exr";
 	fs::remove(gone);

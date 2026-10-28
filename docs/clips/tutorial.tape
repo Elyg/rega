@@ -1,5 +1,5 @@
-# rvtui --tutorial: the card, its first steps.
-Run rvtui --tutorial
+# rega --tutorial: the card, its first steps.
+Run rega --tutorial
 Wait 3
 Key j x2 0.8
 Key k

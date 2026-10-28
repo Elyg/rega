@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
-      # Everything `nix build .#static` needs, but not rvtui itself.
+      # Everything `nix build .#static` needs, but not rega itself.
       - run: nix build .#static.inputDerivation -L
 
   macos:

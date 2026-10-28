@@ -1,5 +1,5 @@
 {
-  description = "rvtui — terminal image viewer (C++20 + FTXUI + OpenEXR)";
+  description = "rega — terminal image viewer (C++20 + FTXUI + OpenEXR)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -14,15 +14,15 @@
     }:
     let
       # Nix builds have no tags; identify them by commit instead. A release passes its tag
-      # in: RVTUI_VERSION=0.1.0 nix build --impure .#static (getEnv is "" when pure).
+      # in: REGA_VERSION=0.1.0 nix build --impure .#static (getEnv is "" when pure).
       version =
         let
-          tag = builtins.getEnv "RVTUI_VERSION";
+          tag = builtins.getEnv "REGA_VERSION";
         in
         if tag != "" then tag else "git-${self.shortRev or self.dirtyShortRev or "dev"}";
 
       # pkgsStatic libraries aren't in the binary cache, so `.#static` compiles them from
-      # source; skip their test suites (rvtui's own still run). Non-static packages are
+      # source; skip their test suites (rega's own still run). Non-static packages are
       # left untouched so they keep coming from the cache.
       skipStaticDepTests =
         final: prev:
@@ -63,7 +63,7 @@
     in
     {
       overlays.default = final: prev: {
-        rvtui = final.callPackage ./nix/package.nix { inherit version; };
+        rega = final.callPackage ./nix/package.nix { inherit version; };
       };
     }
     // flake-utils.lib.eachDefaultSystem (
@@ -98,25 +98,25 @@
           export SHELL_TYPE="host"
           export CONAN_HOME="''${CONAN_HOME:-$HOME/.conan2}"
         '';
-        rvtui = pkgs.callPackage ./nix/package.nix { inherit version; };
+        rega = pkgs.callPackage ./nix/package.nix { inherit version; };
       in
       {
         packages =
           {
-            default = rvtui;
-            rvtui = rvtui;
+            default = rega;
+            rega = rega;
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
             # Fully static musl binary: copy anywhere, no runtime deps.
             static = pkgs.pkgsStatic.callPackage ./nix/package.nix { inherit version; };
           };
 
-        apps.default = flake-utils.lib.mkApp { drv = rvtui; };
+        apps.default = flake-utils.lib.mkApp { drv = rega; };
 
         # Deps from nixpkgs instead of conan: what CI and `nix build` use. clang-tidy parses
         # this tree cleanly (on macOS the Apple-clang compile DB trips nix clang-tidy).
         devShells.ci = pkgs.mkShell {
-          inputsFrom = [ rvtui ];
+          inputsFrom = [ rega ];
           packages = tools ++ [ pkgs.gtest ];
         };
 

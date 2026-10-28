@@ -4,13 +4,13 @@
 # first: only parse the tapes and print their steps.
 #
 # Each clip runs in its own Ghostty window (docs/clips/ghostty.conf, no user
-# config) on the tutorial's images, with fresh rvtui state. QuickRecord
+# config) on the tutorial's images, with fresh rega state. QuickRecord
 # records the window (--record-rect / --stop / --export, 0.0.6+) and burns in
 # the keys the tape pressed, each its own chip (this script writes the log),
 # and ffmpeg squeezes the result under the size budget.
 #
 # With AeroSpace (a tiling window manager) each clip's window goes to its own
-# workspace, `rvtui-guide`, filling the screen; the script switches there for
+# workspace, `rega-guide`, filling the screen; the script switches there for
 # the take and back after. Otherwise the window is the tape's Size.
 #
 # Needs, once: System Settings › Privacy & Security › Accessibility for the
@@ -39,18 +39,18 @@
 set -euo pipefail
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-rvtui=$(cd "$root" && realpath "${RVTUI_BIN:-build/macos-arm64-Release/rvtui}")
+rega=$(cd "$root" && realpath "${REGA_BIN:-build/macos-arm64-Release/rega}")
 qr=${QUICKRECORD:-/Applications/QuickRecord.app/Contents/MacOS/QuickRecord}
 ghostty=${GHOSTTY_APP:-/Applications/Ghostty.app}
 clips=$root/docs/clips
 media=$root/docs/src/media
 budget=${GUIDE_CLIP_BUDGET:-3145728} # bytes per clip
 maxWidth=${GUIDE_CLIP_WIDTH:-1600}   # px, the guide's content column is narrower
-# What the clips show lives here: rvtui prints full paths, and one under
+# What the clips show lives here: rega prints full paths, and one under
 # $HOME would put the user name in every take.
-stage=${GUIDE_STAGE:-/Users/Shared/rvtui-guide}
-cache=$stage/cache       # XDG_CACHE_HOME for every rvtui here
-tut=$cache/rvtui/tutorial
+stage=${GUIDE_STAGE:-/Users/Shared/rega-guide}
+cache=$stage/cache       # XDG_CACHE_HOME for every rega here
+tut=$cache/rega/tutorial
 render=$stage/render     # $WORK: a tape's own files (a render coming in)
 
 die() { echo "guide-record: $*" >&2; exit 1; }
@@ -75,7 +75,7 @@ ghosttyPid=""
 spawned=()
 if [ "$dry" = 0 ]; then # the Mac side: not for --dry-run
 	command -v ffmpeg >/dev/null || die "ffmpeg missing (it's in the dev shell)"
-	[ -x "$rvtui" ] || die "no rvtui at $rvtui: just build"
+	[ -x "$rega" ] || die "no rega at $rega: just build"
 	[ -d "$ghostty" ] || die "no Ghostty at $ghostty"
 	"$qr" --help 2>/dev/null | grep -q -- --record-rect || die "$qr has no --record-rect: QuickRecord 0.0.6+ needed"
 
@@ -83,7 +83,7 @@ if [ "$dry" = 0 ]; then # the Mac side: not for --dry-run
 	# while recording; caffeinate ends with this script.
 	caffeinate -dimsu -w $$ &
 
-	work=$(mktemp -d "${TMPDIR:-/tmp}/rvtui-guide.XXXXXX")
+	work=$(mktemp -d "${TMPDIR:-/tmp}/rega-guide.XXXXXX")
 	cleanup()
 	{
 		if [ -n "$ghosttyPid" ]; then kill "$ghosttyPid" 2>/dev/null || true; fi
@@ -98,7 +98,7 @@ if [ "$dry" = 0 ]; then # the Mac side: not for --dry-run
 
 	# The tutorial's images, rendered when missing or out of date.
 	mkdir -p "$stage"
-	XDG_CACHE_HOME=$cache "$rvtui" --tutorial-render >/dev/null ||
+	XDG_CACHE_HOME=$cache "$rega" --tutorial-render >/dev/null ||
 		die "the tutorial didn't render into $tut"
 fi
 
@@ -142,18 +142,18 @@ openWindow() # cols rows command
 	{
 		echo '#!/usr/bin/env bash'
 		echo "export TUT='$tut' WORK='$render' XDG_CACHE_HOME='$cache' XDG_STATE_HOME='$work/state' XDG_CONFIG_HOME='$work/config'"
-		echo "export PATH='$(dirname "$rvtui")':\"\$PATH\""
+		echo "export PATH='$(dirname "$rega")':\"\$PATH\""
 		echo 'cd "$TUT"'
 		echo "$3"
-		echo 'exec sleep 1000' # keep the window when rvtui quits early
+		echo 'exec sleep 1000' # keep the window when rega quits early
 	} >"$launcher"
 	chmod +x "$launcher"
 	open -na "$ghostty" --args --config-default-files=false \
 		--config-file="$clips/ghostty.conf" --window-width="$cols" --window-height="$rows" \
-		--title=rvtui-guide --command="$launcher"
+		--title=rega-guide --command="$launcher"
 	ghosttyPid=""
 	for _ in $(seq 40); do
-		ghosttyPid=$(pgrep -n -f "$ghostty/Contents/MacOS/ghostty.*rvtui-guide" || true)
+		ghosttyPid=$(pgrep -n -f "$ghostty/Contents/MacOS/ghostty.*rega-guide" || true)
 		if [ -n "$ghosttyPid" ] && windowRect >/dev/null 2>&1; then break; fi
 		sleep 0.25
 	done
@@ -173,15 +173,15 @@ openWindow() # cols rows command
 		# until it stays, with its workspace in front.
 		local placed=0
 		for _ in $(seq 10); do
-			aerospace move-node-to-workspace --focus-follows-window --window-id "$clipWid" rvtui-guide >/dev/null 2>&1 || true
+			aerospace move-node-to-workspace --focus-follows-window --window-id "$clipWid" rega-guide >/dev/null 2>&1 || true
 			sleep 1
-			if aerospace list-windows --workspace rvtui-guide --format '%{window-id}' | grep -qx "$clipWid" &&
-				[ "$(aerospace list-workspaces --focused)" = rvtui-guide ]; then
+			if aerospace list-windows --workspace rega-guide --format '%{window-id}' | grep -qx "$clipWid" &&
+				[ "$(aerospace list-workspaces --focused)" = rega-guide ]; then
 				placed=1
 				break
 			fi
 		done
-		[ "$placed" = 1 ] || die "AeroSpace keeps the clip's window off the rvtui-guide workspace"
+		[ "$placed" = 1 ] || die "AeroSpace keeps the clip's window off the rega-guide workspace"
 		# The layout settles, and a notification the rule posts (macOS shows
 		# them ~5 s) leaves before the take starts.
 		dbg "placed"
@@ -373,7 +373,7 @@ record() # tape
 	for step in "${pre[@]+"${pre[@]}"}"; do runStep "$step" "$tape"; done
 	dbg "waited"
 
-	# The pointer is recorded, and rvtui reads it hovering: park it in the
+	# The pointer is recorded, and rega reads it hovering: park it in the
 	# menu bar above the window (outside the take; a window edge would show a
 	# resize pointer), else mid status line, till a step moves it.
 	if [ -n "$clipWid" ]; then aerospace focus --window-id "$clipWid"; fi

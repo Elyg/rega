@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Case-insensitive match of `query` in `name`: a substring if there is one,
@@ -13,4 +13,4 @@ namespace rv
 std::optional<std::vector<size_t>> fuzzyMatch(const std::string& name,
                                               const std::string& query);
 
-} // namespace rv
+} // namespace rega

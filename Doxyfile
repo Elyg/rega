@@ -1,7 +1,7 @@
 # Doxygen config for `just docs`: HTML into build/docs (not committed).
 # Only non-defaults.
-PROJECT_NAME           = rvtui
-PROJECT_NUMBER         = $(RVTUI_VERSION)
+PROJECT_NAME           = rega
+PROJECT_NUMBER         = $(REGA_VERSION)
 PROJECT_BRIEF          = "Terminal image browser/viewer for OpenEXR, PNG and JPEG"
 OUTPUT_DIRECTORY       = build/docs
 HTML_OUTPUT            = .

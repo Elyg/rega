@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv::ui
+namespace rega::ui
 {
 
 /// `name` with the bytes at `pos` (fuzzyMatch hits) highlighted.
@@ -66,4 +66,4 @@ ellipsizeMiddle(std::string_view s, int width, std::span<const size_t> pos);
 /// one empty line for an empty `s`.
 [[nodiscard]] std::vector<std::string> wrapWidth(std::string_view s, int width);
 
-} // namespace rv::ui
+} // namespace rega::ui

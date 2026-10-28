@@ -1,7 +1,7 @@
 # Command line
 
 ```text
-rvtui [OPTIONS] [paths...]
+rega [OPTIONS] [paths...]
 ```
 
 ## Paths
@@ -26,7 +26,7 @@ Quote patterns with `#` so the shell leaves them alone. A plain frame path
 | `--diff A B` | compare A with B: A, B and \|A − B\| tiled. Repeat for more pairs; paths can carry labels. See [Compare](../viewer/compare.md) |
 | `--dump FILE` | print the layers, channels and metadata, then exit |
 | `--doctor` | check the terminal and tmux setup for images and copy, then exit (1 if a check fails). See [Terminal setup](../setup.md) |
-| `--tutorial` | render the sample images into `~/.cache/rvtui/tutorial` (first run) and open them with a guide. See [tutorial](../tutorial.md) |
+| `--tutorial` | render the sample images into `~/.cache/rega/tutorial` (first run) and open them with a guide. See [tutorial](../tutorial.md) |
 | `--graphics MODE` | `auto` (default), `kitty` or `halfblock`. See [setup](../setup.md) |
 | `--transfer MODE` | how kitty images reach the terminal: `auto` (default) picks `shm` (shared memory) locally outside tmux, `file` (temp files) in tmux, `direct` (inline) over ssh. Change it only if images stay blank |
 | `--link-rate SIZE` | bytes a second the ssh link is assumed to carry until measured, e.g. `20M`; playback sending images inline is paced to the link (default `4M`, `0`: unpaced, unmeasured) |
@@ -37,13 +37,13 @@ Quote patterns with `#` so the shell leaves them alone. A plain frame path
 | `--version` | print the version |
 | `-h`, `--help` | print the options |
 
-## Files rvtui keeps
+## Files rega keeps
 
 | Path | What |
 |------|------|
-| `~/.cache/rvtui/tutorial/` | the tutorial's images |
-| `~/.local/state/rvtui/annotations` | [annotations](../panes/annotations.md), between sessions |
-| `~/.local/state/rvtui/colour` | the [colour](../panes/colour.md) choices, per config |
+| `~/.cache/rega/tutorial/` | the tutorial's images |
+| `~/.local/state/rega/annotations` | [annotations](../panes/annotations.md), between sessions |
+| `~/.local/state/rega/colour` | the [colour](../panes/colour.md) choices, per config |
 
 `$XDG_CACHE_HOME` and `$XDG_STATE_HOME` move them.
 

@@ -9,7 +9,7 @@
 #include <thread>
 #include <utility>
 
-namespace rv
+namespace rega
 {
 
 /// The frames playback loops over, as indices (inclusive): the in / out
@@ -176,4 +176,4 @@ std::optional<int> Player::tick(
 	return next;
 }
 
-} // namespace rv
+} // namespace rega

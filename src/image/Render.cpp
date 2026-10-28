@@ -10,7 +10,7 @@
 #include <type_traits>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 const char* channelModeName(ChannelMode m)
@@ -659,4 +659,4 @@ Rgba8Image renderLayer(const LayerImage& img,
 	return out;
 }
 
-} // namespace rv
+} // namespace rega

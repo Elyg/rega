@@ -26,7 +26,7 @@
 #include <unistd.h>
 #include <vector>
 
-using namespace rv;
+using namespace rega;
 using namespace std::chrono_literals;
 
 namespace
@@ -71,7 +71,7 @@ struct Capture
 
 std::string shmName(int n)
 {
-	return "/rvtui-" + std::to_string(getpid()) + "-" + std::to_string(n);
+	return "/rega-" + std::to_string(getpid()) + "-" + std::to_string(n);
 }
 
 bool shmExists(const std::string& name)
@@ -379,7 +379,7 @@ TEST(Transmitter, KeepsEachImageIdsNewestFiles)
 TEST(Transmitter, TempFilesHoldTheRawPixelsAndAreRemovedByUs)
 {
 	// Inside tmux every attached client reads the same image, and terminals
-	// leave t=f files alone: rvtui removes them, MAX_IN_FLIGHT later.
+	// leave t=f files alone: rega removes them, MAX_IN_FLIGHT later.
 	Capture cap;
 	const Rgba8Image img = noise(16, 8);
 	const std::string dir = std::filesystem::temp_directory_path().string();
@@ -390,7 +390,7 @@ TEST(Transmitter, TempFilesHoldTheRawPixelsAndAreRemovedByUs)
 		{
 			d.pop_back();
 		}
-		return d + "/rvtui-" + std::to_string(getpid()) + "-" +
+		return d + "/rega-" + std::to_string(getpid()) + "-" +
 		       std::to_string(n) + ".rgba";
 	};
 	{
@@ -430,9 +430,9 @@ TEST(Transmitter, RemovesFilesLeftByDeadProcesses)
 		std::ofstream(dir / name) << "x";
 		return dir / name;
 	};
-	const auto stale = make("rvtui-" + std::to_string(dead) + "-3.rgba");
-	const auto mine = make("rvtui-" + std::to_string(getpid()) + "-999.rgba");
-	const auto other = make("rvtui-notes.rgba");
+	const auto stale = make("rega-" + std::to_string(dead) + "-3.rgba");
+	const auto mine = make("rega-" + std::to_string(getpid()) + "-999.rgba");
+	const auto other = make("rega-notes.rgba");
 	Capture cap;
 	kitty::Transmitter tx(true, Transfer::TEMP_FILE, cap.fn());
 	EXPECT_FALSE(std::filesystem::exists(stale));

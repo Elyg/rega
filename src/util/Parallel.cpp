@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -128,4 +128,4 @@ void parallelFor(int n, int grain, const std::function<void(int, int)>& fn)
 	done.wait();
 }
 
-} // namespace rv
+} // namespace rega

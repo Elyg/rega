@@ -23,10 +23,10 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@main
       - uses: DeterminateSystems/magic-nix-cache-action@main
       # Fully static musl binary: runs on any Linux. Nix can't see the tag, so pass it in.
-      - run: RVTUI_VERSION="${GITHUB_REF_NAME#v}" nix build --impure .#static -L
+      - run: REGA_VERSION="${GITHUB_REF_NAME#v}" nix build --impure .#static -L
       - run: |
           mkdir -p dist
-          tar -C result/bin -czf "dist/rvtui-${GITHUB_REF_NAME#v}-linux-${{ matrix.arch }}.tar.gz" rvtui
+          tar -C result/bin -czf "dist/rega-${GITHUB_REF_NAME#v}-linux-${{ matrix.arch }}.tar.gz" rega
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}

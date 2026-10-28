@@ -19,7 +19,7 @@
 namespace fs = std::filesystem;
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -1262,4 +1262,4 @@ Element Browser::render()
 	});
 }
 
-} // namespace rv
+} // namespace rega

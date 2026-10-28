@@ -20,7 +20,7 @@
 namespace fs = std::filesystem;
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -132,7 +132,7 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 			    }
 		    });
 	}
-	// Who watches a tmux session changes while rvtui runs: a laptop attaches
+	// Who watches a tmux session changes while rega runs: a laptop attaches
 	// over ssh (it can't read our files), then leaves (files are faster).
 	if(opts.m_transfer == "auto" && m_caps.m_tmux &&
 	   m_caps.m_graphics == GraphicsMode::KITTY)
@@ -529,12 +529,12 @@ Element App::renderHelp()
 	Element body;
 	if(m_mode == Mode::BROWSER)
 	{
-		title = " rvtui browser keys ";
+		title = " rega browser keys ";
 		body = column(help::browser(), 0);
 	}
 	else
 	{
-		title = " rvtui viewer keys ";
+		title = " rega viewer keys ";
 		Element left = column(help::viewer(), 0);
 		Element right = column(help::viewer(), 1);
 		// Two columns when they fit side by side, else one (scrollable).
@@ -788,4 +788,4 @@ int runApp(const AppOptions& opts)
 	return 0;
 }
 
-} // namespace rv
+} // namespace rega

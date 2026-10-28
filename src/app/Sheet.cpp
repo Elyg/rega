@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace rv
+namespace rega
 {
 
 int SheetLayout::tileAt(double x, double y) const
@@ -214,4 +214,4 @@ placeTile(const SheetLayout& l, const SheetView& v, SheetArea a, int i)
 	return p;
 }
 
-} // namespace rv
+} // namespace rega

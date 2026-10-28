@@ -5,21 +5,21 @@ execute_process(COMMAND git describe --tags --abbrev=0
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     OUTPUT_VARIABLE _GIT_TAG OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
 string(REGEX REPLACE "^v" "" _APP_VERSION "${_GIT_TAG}")
-if(DEFINED RVTUI_VERSION)
-    set(_APP_VERSION "${RVTUI_VERSION}") # nix builds have no .git
+if(DEFINED REGA_VERSION)
+    set(_APP_VERSION "${REGA_VERSION}") # nix builds have no .git
 elseif(NOT _APP_VERSION)
     set(_APP_VERSION "dev")
 endif()
 set(PROJECT_VERSION_STRING "${_APP_VERSION}")
 
-project(rvtui LANGUAGES C CXX)
+project(rega LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF) # -std=c++20, not gnu++20
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(RVTUI_BUILD_TESTS "Build unit tests" ON)
+option(REGA_BUILD_TESTS "Build unit tests" ON)
 
 # Dependencies come from conan (dev) or nixpkgs (nix build); target names differ slightly.
 find_package(ftxui REQUIRED)
@@ -32,17 +32,17 @@ find_package(CLI11 REQUIRED)
 find_package(OpenColorIO REQUIRED)
 find_package(Threads REQUIRED)
 if(TARGET ftxui::ftxui)
-    set(RVTUI_FTXUI ftxui::ftxui)
+    set(REGA_FTXUI ftxui::ftxui)
 else()
-    set(RVTUI_FTXUI ftxui::component ftxui::dom ftxui::screen)
+    set(REGA_FTXUI ftxui::component ftxui::dom ftxui::screen)
 endif()
 # conan: libdeflate::libdeflate; libdeflate's own config: _static / _shared.
 if(TARGET libdeflate::libdeflate)
-    set(RVTUI_LIBDEFLATE libdeflate::libdeflate)
+    set(REGA_LIBDEFLATE libdeflate::libdeflate)
 elseif(TARGET libdeflate::libdeflate_static)
-    set(RVTUI_LIBDEFLATE libdeflate::libdeflate_static)
+    set(REGA_LIBDEFLATE libdeflate::libdeflate_static)
 else()
-    set(RVTUI_LIBDEFLATE libdeflate::libdeflate_shared)
+    set(REGA_LIBDEFLATE libdeflate::libdeflate_shared)
 endif()
 find_package(stb QUIET)
 if(NOT TARGET stb::stb)
@@ -54,7 +54,7 @@ endif()
 configure_file(cmake/BuildInfo.h.in ${CMAKE_BINARY_DIR}/generated/BuildInfo.h @ONLY)
 
 # Sources listed by hand (no globbing): adding a file means adding it here.
-add_library(rvtui_core STATIC
+add_library(rega_core STATIC
     src/app/Annotations.cpp
     src/app/AnnotationsPane.cpp
     src/app/App.cpp
@@ -97,26 +97,26 @@ add_library(rvtui_core STATIC
     src/util/Log.cpp
     src/util/Parallel.cpp
     src/util/Ui.cpp)
-target_include_directories(rvtui_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
-target_link_libraries(rvtui_core PUBLIC
-    ${RVTUI_FTXUI} spdlog::spdlog OpenEXR::OpenEXR OpenColorIO::OpenColorIO
+target_include_directories(rega_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
+target_link_libraries(rega_core PUBLIC
+    ${REGA_FTXUI} spdlog::spdlog OpenEXR::OpenEXR OpenColorIO::OpenColorIO
     stb::stb TIFF::TIFF ZLIB::ZLIB
-    ${RVTUI_LIBDEFLATE} Threads::Threads)
+    ${REGA_LIBDEFLATE} Threads::Threads)
 
-add_executable(rvtui src/main.cpp)
-target_link_libraries(rvtui PRIVATE rvtui_core CLI11::CLI11)
+add_executable(rega src/main.cpp)
+target_link_libraries(rega PRIVATE rega_core CLI11::CLI11)
 
 # Only add the bucket render demo tool if the source file exists
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/bucket-render.cpp")
-    add_executable(rvtui_buckets EXCLUDE_FROM_ALL tools/bucket-render.cpp)
-    target_link_libraries(rvtui_buckets PRIVATE OpenEXR::OpenEXR)
+    add_executable(rega_buckets EXCLUDE_FROM_ALL tools/bucket-render.cpp)
+    target_link_libraries(rega_buckets PRIVATE OpenEXR::OpenEXR)
 endif()
 
 
-if(RVTUI_BUILD_TESTS)
+if(REGA_BUILD_TESTS)
     find_package(GTest REQUIRED)
     enable_testing()
-    add_executable(rvtui_tests
+    add_executable(rega_tests
         tests/test_annotations.cpp
         tests/test_browser.cpp
         tests/test_clipboard.cpp
@@ -137,9 +137,9 @@ if(RVTUI_BUILD_TESTS)
         tests/test_tutorial.cpp
         tests/test_util_ui.cpp
         tests/test_viewer.cpp)
-    target_link_libraries(rvtui_tests PRIVATE rvtui_core GTest::gtest_main)
+    target_link_libraries(rega_tests PRIVATE rega_core GTest::gtest_main)
     include(GoogleTest)
-    gtest_discover_tests(rvtui_tests)
+    gtest_discover_tests(rega_tests)
 endif()
 
-install(TARGETS rvtui RUNTIME DESTINATION bin)
+install(TARGETS rega RUNTIME DESTINATION bin)

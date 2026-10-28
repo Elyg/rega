@@ -1,6 +1,6 @@
 # Colour: the built-in ACES config, its views, the input set to ACEScg, raw
 # values.
-Run rvtui hdr-sky.exr
+Run rega hdr-sky.exr
 Key E x4 0.3
 Key 6
 Sleep 0.8

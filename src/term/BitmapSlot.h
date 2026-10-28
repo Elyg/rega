@@ -10,7 +10,7 @@
 #include <cstdint>
 #include <functional>
 
-namespace rv
+namespace rega
 {
 
 namespace kitty
@@ -48,4 +48,4 @@ private:
 	Rgba8Image m_sent; ///< the picture on screen
 };
 
-} // namespace rv
+} // namespace rega

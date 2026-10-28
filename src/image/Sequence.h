@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// A directory entry as shown by the browser: a directory, a single file, or a
@@ -50,7 +50,7 @@ std::vector<Entry> listDirectory(const std::filesystem::path& dir,
                                  bool showHidden);
 
 /// Build a sequence entry for a single frame path by scanning its siblings
-/// (used when rvtui is launched on a file). Returns a File entry if no sibling
+/// (used when rega is launched on a file). Returns a File entry if no sibling
 /// frames exist.
 Entry entryForPath(const std::filesystem::path& file);
 
@@ -66,4 +66,4 @@ std::vector<Entry> entriesForArgs(const std::vector<std::string>& args,
 /// "690B", "2.5M", "1.1G".
 std::string humanSize(std::uintmax_t bytes);
 
-} // namespace rv
+} // namespace rega

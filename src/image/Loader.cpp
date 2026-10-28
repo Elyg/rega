@@ -4,7 +4,7 @@
 #include <cctype>
 #include <cmath>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -52,4 +52,4 @@ LayerImage loadLayer(const ImageInfo& info, int layerIndex)
 	return img;
 }
 
-} // namespace rv
+} // namespace rega

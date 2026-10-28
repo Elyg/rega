@@ -1,5 +1,5 @@
 # Browser: moving with the live preview, into and out of folders.
-Run rvtui
+Run rega
 Key j x8 0.7
 Key k x3 0.5
 Sleep 0.5

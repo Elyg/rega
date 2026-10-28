@@ -7,11 +7,11 @@
 > filters. `space` marks images in any folder; `Enter` then views them, `t` tiles them,
 > `d` compares them. `cc` copies the path. `Esc` clears the filter, then the marks.
 
-`rvtui` with no arguments, or with a folder, starts here:
+`rega` with no arguments, or with a folder, starts here:
 
 ```bash
-rvtui            # the current folder
-rvtui shots/     # another one
+rega            # the current folder
+rega shots/     # another one
 ```
 
 Three columns, like the column view in the macOS Finder: the parent folder on the left,
@@ -31,7 +31,7 @@ lines.
 
 {{#include reference/keys.md:browser}}
 
-`q` quits from the browser. `Q` quits rvtui from anywhere.
+`q` quits from the browser. `Q` quits rega from anywhere.
 
 ## Moving around
 
@@ -95,27 +95,27 @@ the selected one when nothing is marked.
 | `cf` | the file name |
 | `cn` | the name without its extension |
 
-A sequence copies as its frame pattern, `/renders/shot.####.exr`, which Nuke and RV read
-as is. The bottom line shows what was copied. The copy works over ssh and in tmux the
+A sequence copies as its frame pattern, `/renders/shot.####.exr`, which Nuke and other viewers
+read as is. The bottom line shows what was copied. The copy works over ssh and in tmux the
 same way as `y` in the panes (see [Copying](panes/README.md#copying)).
 
 ## Picking files for other tools
 
-rvtui can act as a file picker. With `--chooser-file FILE`, `o` writes paths to FILE,
+rega can act as a file picker. With `--chooser-file FILE`, `o` writes paths to FILE,
 one per line, and quits: the marked images, or the selected entry when nothing is marked
 (a sequence as its first frame). `Enter` still opens the viewer.
 
 ```bash
-rvtui --chooser-file /tmp/picked shots/ && cat /tmp/picked
+rega --chooser-file /tmp/picked shots/ && cat /tmp/picked
 ```
 
 `--cwd-file FILE` writes the folder you were in when you quit, so a shell function can
 follow you there:
 
 ```bash
-rv() {
+re() {
   local f; f=$(mktemp)
-  rvtui --cwd-file "$f" "$@"
+  rega --cwd-file "$f" "$@"
   cd "$(cat "$f")" && rm -f "$f"
 }
 ```

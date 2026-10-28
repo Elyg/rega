@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Pixel box with inclusive corners; empty when m_x1 < m_x0.
@@ -311,4 +311,4 @@ struct ChannelMap
 /// R/G/B/A by name (also X/Y/Z, U/V/W); else the first channel as grey.
 ChannelMap mapChannels(const std::vector<std::string>& shortNames);
 
-} // namespace rv
+} // namespace rega

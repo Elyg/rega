@@ -1,5 +1,5 @@
 # Sequence: in and out points, playback looping between them.
-Run rvtui 'shot.####.exr'
+Run rega 'shot.####.exr'
 Wait 3
 Key :
 Type 1020

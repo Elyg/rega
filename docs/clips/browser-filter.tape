@@ -1,5 +1,5 @@
 # Browser: the fuzzy filter.
-Run rvtui
+Run rega
 Sleep 0.5
 Key /
 Type sky

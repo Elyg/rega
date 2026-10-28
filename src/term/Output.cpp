@@ -2,7 +2,7 @@
 
 #include <iostream>
 
-namespace rv::term
+namespace rega::term
 {
 
 void writeRaw(std::string_view bytes, bool flush)
@@ -14,4 +14,4 @@ void writeRaw(std::string_view bytes, bool flush)
 	}
 }
 
-} // namespace rv::term
+} // namespace rega::term

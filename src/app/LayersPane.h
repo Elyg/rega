@@ -7,7 +7,7 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
 
-namespace rv
+namespace rega
 {
 
 /// [5] layer list: moving the cursor (or clicking a row) shows that layer.
@@ -51,4 +51,4 @@ private:
 	ftxui::Box m_box{};
 };
 
-} // namespace rv
+} // namespace rega

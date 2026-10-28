@@ -15,7 +15,7 @@
 namespace fs = std::filesystem;
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -1169,7 +1169,7 @@ bool Viewer::event(Event e)
 	{
 		m_meta.stopTyping(); // clicked away mid-filter: keys are keys again
 	}
-	// Letter aliases for the pane numbers (RV-ish): m metadata, o / x
+	// Letter aliases for the pane numbers: m metadata, o / x
 	// files, i inspector, / layers. Not while typing, nor `x` in the
 	// inspector, where it clears the pick, nor `/` in the metadata, where
 	// it filters.
@@ -2607,7 +2607,7 @@ Element Viewer::renderStatus(const ImageInfoPtr& info)
 		cache = fmt::format("cache {}/{}",
 		                    humanSize(m_ctx.m_svc.bytesUsed()),
 		                    humanSize(m_ctx.m_svc.budget()));
-		// Over ssh both ends hold frames: decoded here (remote, where rvtui
+		// Over ssh both ends hold frames: decoded here (remote, where rega
 		// runs) and kept by the terminal (local, where it shows them).
 		if(m_ctx.m_caps.m_graphics == GraphicsMode::KITTY &&
 		   m_ctx.m_caps.m_transfer == Transfer::DIRECT &&
@@ -2623,4 +2623,4 @@ Element Viewer::renderStatus(const ImageInfoPtr& info)
 	return m_ctx.statusLine(right, std::move(playback), cache);
 }
 
-} // namespace rv
+} // namespace rega

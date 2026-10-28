@@ -12,7 +12,7 @@
 #include <map>
 #include <string>
 
-namespace rv
+namespace rega
 {
 
 /// [3] open files: pick, reorder (J/K) and drop (x) the viewer's sources,
@@ -100,4 +100,4 @@ private:
 	ftxui::Box m_box{};
 };
 
-} // namespace rv
+} // namespace rega

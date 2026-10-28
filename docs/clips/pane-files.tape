@@ -1,5 +1,5 @@
 # Files: picking, reordering, expanding a sequence into its frames.
-Run rvtui chart.exr hdr-sky.exr 'shot.####.exr'
+Run rega chart.exr hdr-sky.exr 'shot.####.exr'
 Wait 3
 Key 3
 Sleep 0.8

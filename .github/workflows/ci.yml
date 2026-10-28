@@ -35,4 +35,4 @@ jobs:
       # Builds from nixpkgs deps and runs the unit tests (doCheck).
       - run: nix build .#default -L
       - name: guide keys reference is current (just guide-keys)
-        run: ./result/bin/rvtui --help-keys | diff - docs/src/reference/keys.md
+        run: ./result/bin/rega --help-keys | diff - docs/src/reference/keys.md

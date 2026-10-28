@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Raw template lines per slot (before `[#…]` substitution).
@@ -87,7 +87,7 @@ public:
 	void parse(const std::string& text);             ///< replaces the state
 	bool load(const std::filesystem::path& p);       ///< false if unreadable
 	bool save(const std::filesystem::path& p) const; ///< false on error
-	/// $XDG_STATE_HOME/rvtui/annotations (~/.local/state/rvtui/annotations).
+	/// $XDG_STATE_HOME/rega/annotations (~/.local/state/rega/annotations).
 	static std::filesystem::path defaultStatePath();
 
 private:
@@ -96,4 +96,4 @@ private:
 	std::vector<std::string> m_history;
 };
 
-} // namespace rv
+} // namespace rega

@@ -15,15 +15,15 @@ namespace fs = std::filesystem;
 namespace
 {
 
-constexpr rv::tutorial::Options SMALL{.m_first = 1001,
-                                      .m_frames = 3,
-                                      .m_width = 48,
-                                      .m_height = 27};
+constexpr rega::tutorial::Options SMALL{.m_first = 1001,
+                                        .m_frames = 3,
+                                        .m_width = 48,
+                                        .m_height = 27};
 
 std::vector<std::string> layerLabels(const fs::path& p)
 {
 	std::vector<std::string> out;
-	for(const auto& l : rv::probeImage(p).m_layers)
+	for(const auto& l : rega::probeImage(p).m_layers)
 	{
 		out.push_back(l.label());
 	}
@@ -34,15 +34,15 @@ std::vector<std::string> layerLabels(const fs::path& p)
 
 TEST(Tutorial, WritesTheSequenceStillsAndReadme)
 {
-	const fs::path dir = rvtest::freshDir("tutorial");
+	const fs::path dir = regatest::freshDir("tutorial");
 	int last = 0, total = 0;
-	rv::tutorial::write(dir,
-	                    SMALL,
-	                    [&](int done, int n)
-	                    {
-		                    last = done;
-		                    total = n;
-	                    });
+	rega::tutorial::write(dir,
+	                      SMALL,
+	                      [&](int done, int n)
+	                      {
+		                      last = done;
+		                      total = n;
+	                      });
 	EXPECT_EQ(last, total);
 	EXPECT_EQ(total, 3 + 6 + 20);
 	for(int f = 1001; f <= 1003; ++f)
@@ -81,9 +81,9 @@ TEST(Tutorial, WritesTheSequenceStillsAndReadme)
 	}
 
 	// The data window: a box inside the display window.
-	const rv::ImageInfo beachball = rv::probeImage(dir / "beachball.exr");
-	const rv::Box2i data = beachball.dataWindow();
-	const rv::Box2i frame = beachball.displayWindow();
+	const rega::ImageInfo beachball = rega::probeImage(dir / "beachball.exr");
+	const rega::Box2i data = beachball.dataWindow();
+	const rega::Box2i frame = beachball.displayWindow();
 	EXPECT_GT(data.m_x0, frame.m_x0);
 	EXPECT_GT(data.m_y0, frame.m_y0);
 	EXPECT_LT(data.m_x1, frame.m_x1);
@@ -92,30 +92,30 @@ TEST(Tutorial, WritesTheSequenceStillsAndReadme)
 
 TEST(Tutorial, WipSequenceHasGapsAndAHalfWrittenLastFrame)
 {
-	const fs::path dir = rvtest::freshDir("tutorial");
-	rv::tutorial::write(dir, SMALL);
+	const fs::path dir = regatest::freshDir("tutorial");
+	rega::tutorial::write(dir, SMALL);
 	for(int f : {1006, 1007, 1008, 1015})
 	{
 		EXPECT_FALSE(fs::exists(dir / fmt::format("wip.{}.exr", f))) << f;
 	}
 	for(int f : {1001, 1005, 1009, 1023})
 	{
-		const rv::ImageInfo info =
-		    rv::probeImage(dir / fmt::format("wip.{}.exr", f));
-		EXPECT_FALSE(rv::loadLayer(info, 0).incomplete()) << f;
+		const rega::ImageInfo info =
+		    rega::probeImage(dir / fmt::format("wip.{}.exr", f));
+		EXPECT_FALSE(rega::loadLayer(info, 0).incomplete()) << f;
 	}
-	const rv::ImageInfo last = rv::probeImage(dir / "wip.1024.exr");
-	EXPECT_TRUE(rv::loadLayer(last, 0).incomplete());
+	const rega::ImageInfo last = rega::probeImage(dir / "wip.1024.exr");
+	EXPECT_TRUE(rega::loadLayer(last, 0).incomplete());
 }
 
 TEST(Tutorial, ChartV2DiffersFromChart)
 {
-	const fs::path dir = rvtest::freshDir("tutorial");
-	rv::tutorial::write(dir, SMALL);
-	const rv::LayerImage a =
-	    rv::loadLayer(rv::probeImage(dir / "chart.exr"), 0);
-	const rv::LayerImage b =
-	    rv::loadLayer(rv::probeImage(dir / "chart-v2.exr"), 0);
+	const fs::path dir = regatest::freshDir("tutorial");
+	rega::tutorial::write(dir, SMALL);
+	const rega::LayerImage a =
+	    rega::loadLayer(rega::probeImage(dir / "chart.exr"), 0);
+	const rega::LayerImage b =
+	    rega::loadLayer(rega::probeImage(dir / "chart-v2.exr"), 0);
 	ASSERT_EQ(a.m_planes.size(), b.m_planes.size());
 	int differ = 0;
 	for(size_t c = 0; c < a.m_planes.size(); ++c)
@@ -130,12 +130,12 @@ TEST(Tutorial, ChartV2DiffersFromChart)
 
 TEST(Tutorial, BrokenRenderHasNanAndInf)
 {
-	const fs::path dir = rvtest::freshDir("tutorial");
-	rv::tutorial::write(dir, SMALL);
-	const rv::ImageInfo info = rv::probeImage(dir / "nan-inf.exr");
-	const rv::LayerImage img = rv::loadLayer(info, 0);
+	const fs::path dir = regatest::freshDir("tutorial");
+	rega::tutorial::write(dir, SMALL);
+	const rega::ImageInfo info = rega::probeImage(dir / "nan-inf.exr");
+	const rega::LayerImage img = rega::loadLayer(info, 0);
 	int nans = 0, infs = 0;
-	for(const rv::Plane& plane : img.m_planes)
+	for(const rega::Plane& plane : img.m_planes)
 	{
 		for(size_t i = 0; i < plane.size(); ++i)
 		{
@@ -150,12 +150,12 @@ TEST(Tutorial, BrokenRenderHasNanAndInf)
 
 TEST(Tutorial, EnsureRendersOnceThenAgainWhenTheSetChanges)
 {
-	const fs::path dir = rvtest::freshDir("tutorial");
-	EXPECT_TRUE(rv::tutorial::ensure(dir, SMALL));
-	EXPECT_FALSE(rv::tutorial::ensure(dir, SMALL));
-	rv::tutorial::Options fewer = SMALL;
+	const fs::path dir = regatest::freshDir("tutorial");
+	EXPECT_TRUE(rega::tutorial::ensure(dir, SMALL));
+	EXPECT_FALSE(rega::tutorial::ensure(dir, SMALL));
+	rega::tutorial::Options fewer = SMALL;
 	fewer.m_frames = 2;
-	EXPECT_TRUE(rv::tutorial::ensure(dir, fewer));
+	EXPECT_TRUE(rega::tutorial::ensure(dir, fewer));
 	EXPECT_FALSE(fs::exists(dir / "shot.1003.exr")); // stale frame gone
 	EXPECT_TRUE(fs::exists(dir / "shot.1002.exr"));
 }

@@ -1,5 +1,5 @@
 # Display: colour, one channel, alpha, luma.
-Run rvtui shot.1001.exr
+Run rega shot.1001.exr
 Key r
 Sleep 0.8
 Key g

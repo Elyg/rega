@@ -1,5 +1,5 @@
 # Inspector: the readout under the mouse, a picked pixel, stats.
-Run rvtui chart.exr
+Run rega chart.exr
 Key 4
 Move 0.25 0.3
 Sleep 0.6

@@ -17,7 +17,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -590,4 +590,4 @@ TermCaps detectCaps(const std::string& forced, const std::string& transfer)
 	return caps;
 }
 
-} // namespace rv
+} // namespace rega

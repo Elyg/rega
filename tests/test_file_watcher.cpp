@@ -6,8 +6,8 @@
 #include <algorithm>
 #include <mutex>
 
-using namespace rv;
-using namespace rvtest;
+using namespace rega;
+using namespace regatest;
 using namespace std::chrono_literals;
 
 namespace

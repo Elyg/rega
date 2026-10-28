@@ -4,7 +4,7 @@
 
 > [!TIP]
 > **TL;DR** `6` opens the colour pane: `j` / `k` pick a row, `h` / `l` change it, `Enter`
-> picks from a list. With `$OCIO` set, rvtui shows images through that config. Without
+> picks from a list. With `$OCIO` set, rega shows images through that config. Without
 > it, images are plain sRGB, or you pick a built-in ACES config in the first row. For
 > ACEScg renders under a built-in config, set the input row to `ACEScg` ([why](#aces)).
 
@@ -32,11 +32,11 @@ viewer.
 ## Input colour space
 
 By default the config's file rules decide each image's input colour space, from its path
-(a studio config often maps render folders or extensions to a space). rvtui doesn't read
+(a studio config often maps render folders or extensions to a space). rega doesn't read
 a colour space from the EXR header. The input row overrides the rules for the source
 shown (a whole sequence), for this session.
 
-Integer images (PNG, JPEG, and 8- or 16-bit TIFF) are already display-encoded. rvtui
+Integer images (PNG, JPEG, and 8- or 16-bit TIFF) are already display-encoded. rega
 decodes them from their sRGB codes once, so the input colour space applies to those
 codes and the curve isn't applied twice.
 
@@ -49,14 +49,14 @@ transform off to show the raw values on the image too, and back on; see
 
 ## ACES
 
-**With your studio's config.** Point `$OCIO` at it, as for Nuke or RV:
+**With your studio's config.** Point `$OCIO` at it, as for Nuke:
 
 ```bash
 export OCIO=/studio/config/config.ocio
-rvtui shots/
+rega shots/
 ```
 
-rvtui then shows its displays, views and looks, and its file rules pick each image's
+rega then shows its displays, views and looks, and its file rules pick each image's
 input colour space, the same as in the other apps reading that config.
 
 **Without one.** OCIO comes with two ACES configs built in, nothing to download:
@@ -66,7 +66,7 @@ input colour space, the same as in the other apps reading that config.
 | OCIO studio config (ACES, built in) | `ocio://studio-config-latest`: the full set of ACES colour spaces, displays and views |
 | OCIO CG config (ACES, built in) | `ocio://cg-config-latest`: a smaller set for CG work |
 
-Pick one in the config row (`6`, then `h` / `l` on the first row); rvtui remembers it for
+Pick one in the config row (`6`, then `h` / `l` on the first row); rega remembers it for
 next time. The display defaults to the config's default display (sRGB for the built-in
 ones), and the view to its default for that display, the ACES SDR output transform.
 
@@ -79,8 +79,8 @@ ones), and the view to its default for that display, the ACES SDR output transfo
 
 ## What's remembered
 
-rvtui remembers the config you picked last, and per config its display, view and look,
-in `~/.local/state/rvtui/colour`. `$OCIO`, when set, wins at start-up.
+rega remembers the config you picked last, and per config its display, view and look,
+in `~/.local/state/rega/colour`. `$OCIO`, when set, wins at start-up.
 
 ## Speed
 

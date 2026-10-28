@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <utility>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -108,4 +108,4 @@ void BitmapSlot::draw(ftxui::Screen& screen,
 	}
 }
 
-} // namespace rv
+} // namespace rega

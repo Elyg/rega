@@ -2,7 +2,7 @@
 
 #include <functional>
 
-namespace rv
+namespace rega
 {
 
 /// Number of threads parallelFor() spreads work over (workers + the caller).
@@ -14,4 +14,4 @@ int parallelism();
 /// so nesting cannot deadlock.
 void parallelFor(int n, int grain, const std::function<void(int, int)>& fn);
 
-} // namespace rv
+} // namespace rega

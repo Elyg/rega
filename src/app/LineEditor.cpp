@@ -7,7 +7,7 @@
 
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 LineEditor::LineEditor(std::string_view text)
@@ -183,4 +183,4 @@ LineEditor::Result LineEditor::event(const Event& e,
 	return Result::EDITED;
 }
 
-} // namespace rv
+} // namespace rega

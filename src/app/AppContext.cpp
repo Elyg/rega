@@ -11,7 +11,7 @@
 
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 std::unique_ptr<ImageSlot> newSlot(AppContext& ctx)
@@ -31,7 +31,7 @@ void AppContext::copyText(std::string_view text)
 
 bool AppContext::tmuxSelectPane(char dir) const
 {
-	return rv::tmuxSelectPane(dir, m_caps.m_tmux);
+	return rega::tmuxSelectPane(dir, m_caps.m_tmux);
 }
 
 Element AppContext::statusLine(std::string_view hints,
@@ -77,4 +77,4 @@ int AppContext::reduceFor(const ImageSlot& slot,
 	return std::clamp(static_cast<int>(std::floor(slack / scale)), 1, 32);
 }
 
-} // namespace rv
+} // namespace rega

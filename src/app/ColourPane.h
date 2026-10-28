@@ -12,7 +12,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// [6] colour column: the OCIO config, display, view and look, and the shown
@@ -104,4 +104,4 @@ private:
 	ftxui::Box m_box{};
 };
 
-} // namespace rv
+} // namespace rega

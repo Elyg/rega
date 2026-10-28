@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <cctype>
 
-namespace rv::kitty
+namespace rega::kitty
 {
 
 namespace
@@ -263,4 +263,4 @@ void LinkMeter::dropLost(Clock::time_point now)
 	}
 }
 
-} // namespace rv::kitty
+} // namespace rega::kitty

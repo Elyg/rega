@@ -7,7 +7,7 @@
 #include <string_view>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// One line of text being typed, readline style, edited by glyph (so a
@@ -67,4 +67,4 @@ private:
 	int m_compLen = 0;   ///< glyphs inserted by the completion
 };
 
-} // namespace rv
+} // namespace rega

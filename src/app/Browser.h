@@ -18,7 +18,7 @@
 #include <string_view>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// What `c` then `what` copies for one browser entry: `c` its path, `d` its
@@ -168,4 +168,4 @@ private:
 	std::chrono::steady_clock::time_point m_lastClick{};
 };
 
-} // namespace rv
+} // namespace rega

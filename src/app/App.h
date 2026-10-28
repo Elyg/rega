@@ -21,7 +21,7 @@
 #include <thread>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Command-line options.
@@ -113,4 +113,4 @@ private:
 	FileWatcher m_watcher;   ///< last: stops before the rest goes
 };
 
-} // namespace rv
+} // namespace rega

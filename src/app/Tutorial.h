@@ -3,10 +3,10 @@
 #include <filesystem>
 #include <functional>
 
-namespace rv::tutorial
+namespace rega::tutorial
 {
 
-/// What `rvtui --tutorial` renders.
+/// What `rega --tutorial` renders.
 struct Options
 {
 	int m_first = 1001; ///< first frame number of the sequence
@@ -15,7 +15,7 @@ struct Options
 	int m_height = 540;
 };
 
-/// $XDG_CACHE_HOME/rvtui/tutorial (~/.cache/rvtui/tutorial).
+/// $XDG_CACHE_HOME/rega/tutorial (~/.cache/rega/tutorial).
 std::filesystem::path defaultDir();
 
 /// Called after each file is written with (written, total); from any thread,
@@ -38,4 +38,4 @@ bool ensure(const std::filesystem::path& dir,
             const Options& opts = {},
             const Progress& progress = {});
 
-} // namespace rv::tutorial
+} // namespace rega::tutorial

@@ -140,8 +140,8 @@ def render(frame, count, width, height):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Render the rvtui demo EXR sequence.")
-    ap.add_argument("out", nargs="?", default="demos/rvtui-sequence")
+    ap = argparse.ArgumentParser(description="Render the rega demo EXR sequence.")
+    ap.add_argument("out", nargs="?", default="demos/rega-sequence")
     ap.add_argument("--frames", type=int, default=48)
     ap.add_argument("--size", default="960x540")
     args = ap.parse_args()
@@ -153,7 +153,7 @@ def main():
             "compression": OpenEXR.ZIP_COMPRESSION,
             "type": OpenEXR.scanlineimage,
             "framesPerSecond": (int(FPS), 1),
-            "software": "rvtui scripts/demo-sequence.py",
+            "software": "rega scripts/demo-sequence.py",
         }
         path = out / f"shot.{FIRST_FRAME + i:04d}.exr"
         with OpenEXR.File(header, render(i, args.frames, width, height)) as f:

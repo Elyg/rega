@@ -6,7 +6,7 @@
 #include <deque>
 #include <string_view>
 
-namespace rv::kitty
+namespace rega::kitty
 {
 
 /// What the link to a terminal over ssh carries, and how long it still needs
@@ -106,4 +106,4 @@ private:
 	double m_boost = 1; ///< COUNTER: room seen to spare since the last sample
 };
 
-} // namespace rv::kitty
+} // namespace rega::kitty

@@ -7,7 +7,7 @@
 #include <fstream>
 #include <map>
 
-using namespace rv;
+using namespace rega;
 namespace fs = std::filesystem;
 
 namespace
@@ -151,7 +151,7 @@ TEST(Annotations, StateRoundTripPruneAndHistory)
 	EXPECT_EQ(a.history().size(), Annotations::MAX_HISTORY);
 	EXPECT_EQ(a.history().front(), "line 9");
 
-	const fs::path p = fs::temp_directory_path() / "rvtui-tests" / "ann-state";
+	const fs::path p = fs::temp_directory_path() / "rega-tests" / "ann-state";
 	fs::remove(p);
 	ASSERT_TRUE(a.save(p));
 	Annotations b;
@@ -199,7 +199,7 @@ TEST(Labels, AnExistingFileOrAnUnknownSlotStaysWhole)
 	EXPECT_TRUE(splitLabels("a.exr:label=middle:x").second.empty());
 	EXPECT_TRUE(splitLabels("plain.exr").second.empty());
 	const fs::path odd =
-	    fs::temp_directory_path() / "rvtui-tests" / "x.exr:label=top:y";
+	    fs::temp_directory_path() / "rega-tests" / "x.exr:label=top:y";
 	fs::create_directories(odd.parent_path());
 	std::ofstream(odd) << "";
 	EXPECT_EQ(splitLabels(odd.string()).first, odd.string());

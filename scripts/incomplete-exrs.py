@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Make incomplete EXRs from a complete one, for testing how rvtui copes.
+"""Make incomplete EXRs from a complete one, for testing how rega copes.
 
 Two kinds of incomplete, as they turn up in practice:
 
@@ -70,9 +70,9 @@ def rendering(data, table, offsets, fraction):
 
 def main():
     parser = argparse.ArgumentParser(description="Make incomplete EXRs from a complete one.")
-    parser.add_argument("source", nargs="?", default="demos/rvtui-sequence/shot.1001.exr")
+    parser.add_argument("source", nargs="?", default="demos/rega-sequence/shot.1001.exr")
     parser.add_argument("out_dir", nargs="?", default="demos/incomplete")
-    parser.add_argument("--sequence", default="demos/rvtui-sequence", help="sequence to copy mid-render")
+    parser.add_argument("--sequence", default="demos/rega-sequence", help="sequence to copy mid-render")
     parser.add_argument("--frames", type=int, default=10, help="frames of it to take")
     args = parser.parse_args()
 

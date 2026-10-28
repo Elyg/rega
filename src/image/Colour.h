@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// An OCIO display transform (input colour space → display / view, plus a
@@ -51,7 +51,7 @@ using ColourTransformPtr = std::shared_ptr<const ColourTransform>;
 /// OpenColorIO: the config in use ($OCIO, one of OCIO's built-in ones, or a
 /// file), the display / view / look picked from it, each image's input
 /// colour space (the config's file rules, unless overridden per source) and
-/// the baked transforms. Without a config rvtui keeps its plain sRGB view.
+/// the baked transforms. Without a config rega keeps its plain sRGB view.
 /// Choices are remembered per config in a small state file. UI thread only.
 class ColourManager
 {
@@ -71,7 +71,7 @@ public:
 	ColourManager(const ColourManager&) = delete;
 	ColourManager& operator=(const ColourManager&) = delete;
 
-	/// $XDG_STATE_HOME/rvtui/colour (~/.local/state/rvtui/colour).
+	/// $XDG_STATE_HOME/rega/colour (~/.local/state/rega/colour).
 	static std::filesystem::path defaultStatePath();
 
 	/// Start-up: $OCIO when set, else the config picked last time, else
@@ -159,4 +159,4 @@ private:
 	std::map<std::pair<std::string, bool>, ColourTransformPtr> m_transforms;
 };
 
-} // namespace rv
+} // namespace rega

@@ -1,5 +1,5 @@
 # Browser: a sequence as one row; e expands it into frames and folds it back.
-Run rvtui
+Run rega
 Key j x7 0.3
 Sleep 1.5
 Key e

@@ -1,5 +1,5 @@
 # Viewer: stepping through layers, naming them, tiling them all.
-Run rvtui shot.1001.exr
+Run rega shot.1001.exr
 Key ] x5 0.9
 Key T
 Sleep 1

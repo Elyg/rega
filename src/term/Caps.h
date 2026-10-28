@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// How images are drawn.
@@ -44,7 +44,7 @@ struct TermCaps
 	int m_cellW = 10, m_cellH = 20; ///< pixels per cell
 	std::string m_terminalName;
 	/// A misconfiguration worth a lasting warning (e.g. kitty graphics off
-	/// because tmux has no allow-passthrough). Short; `rvtui --doctor` has the
+	/// because tmux has no allow-passthrough). Short; `rega --doctor` has the
 	/// details. Empty when nothing to report.
 	std::string m_note;
 
@@ -157,4 +157,4 @@ bool refreshCellSize(TermCaps& caps);
 const char* graphicsModeName(GraphicsMode m); ///< "kitty" | "halfblock"
 const char* transferName(Transfer t);         ///< "direct" | "shm" | "file"
 
-} // namespace rv
+} // namespace rega

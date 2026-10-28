@@ -19,7 +19,7 @@ TEST(StderrToLog, LogsWhatIsWrittenToStderrThenPutsItBack)
 	struct stat was{}, now{};
 	ASSERT_EQ(::fstat(STDERR_FILENO, &was), 0);
 	{
-		const rv::log::StderrToLog capture;
+		const rega::log::StderrToLog capture;
 		// As OpenEXR prints, then a raw write: one line split across both,
 		// a CRLF, an empty line, and an end with no newline.
 		std::fprintf(stderr, "first line\nsecond");

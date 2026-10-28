@@ -23,7 +23,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv::kitty
+namespace rega::kitty
 {
 
 #include "term/Diacritics.inc"
@@ -477,8 +477,8 @@ Transmitter::~Transmitter()
 
 void Transmitter::removeStaleFiles() const
 {
-	// A killed rvtui (terminal closed, SIGHUP) leaves its last
-	// MAX_IN_FLIGHT files: rvtui-<pid>-<n>.rgba of pids no longer running.
+	// A killed rega (terminal closed, SIGHUP) leaves its last
+	// MAX_IN_FLIGHT files: rega-<pid>-<n>.rgba of pids no longer running.
 	std::error_code ec;
 	for(const auto& e : std::filesystem::directory_iterator(m_fileDir, ec))
 	{
@@ -486,7 +486,7 @@ void Transmitter::removeStaleFiles() const
 		int pid = 0;
 		unsigned long long n = 0;
 		char ext[8] = {};
-		if(std::sscanf(name.c_str(), "rvtui-%d-%llu.%7s", &pid, &n, ext) != 3 ||
+		if(std::sscanf(name.c_str(), "rega-%d-%llu.%7s", &pid, &n, ext) != 3 ||
 		   std::string_view(ext) != "rgba" || pid <= 0 || pid == getpid())
 		{
 			continue;
@@ -608,7 +608,7 @@ std::string Transmitter::encode(const Rgba8Image& img, TransmitOptions opt)
 		{
 			std::lock_guard lock(m_mutex);
 			// Shared memory names are short: macOS allows 31 characters.
-			name = (file ? m_fileDir : std::string()) + "/rvtui-" +
+			name = (file ? m_fileDir : std::string()) + "/rega-" +
 			       std::to_string(getpid()) + "-" +
 			       std::to_string(m_localCount++) + (file ? ".rgba" : "");
 		}
@@ -859,4 +859,4 @@ std::optional<std::pair<int, int>> placeholderRowCol(std::string_view cell)
 	return std::pair{row->second, col->second};
 }
 
-} // namespace rv::kitty
+} // namespace rega::kitty

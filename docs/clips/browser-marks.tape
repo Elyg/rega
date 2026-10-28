@@ -1,5 +1,5 @@
 # Browser: marks, then viewing them one by one and tiled.
-Run rvtui
+Run rega
 Key j
 Key Space
 Key j

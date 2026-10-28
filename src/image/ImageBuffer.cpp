@@ -7,7 +7,7 @@
 #include <cmath>
 #include <mutex>
 
-namespace rv
+namespace rega
 {
 
 std::string LayerInfo::shortName(const std::string& full)
@@ -327,4 +327,4 @@ ChannelMap mapChannels(const std::vector<std::string>& names)
 	return m;
 }
 
-} // namespace rv
+} // namespace rega

@@ -8,7 +8,7 @@
 #include <thread>
 #include <vector>
 
-using namespace rv;
+using namespace rega;
 using namespace std::chrono_literals;
 
 namespace

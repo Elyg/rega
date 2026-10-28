@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <cstdio>
 
-namespace rv
+namespace rega
 {
 
 std::string osc52(std::string_view text)
@@ -46,4 +46,4 @@ bool tmuxSelectPane(char dir, bool tmux)
 	return false;
 }
 
-} // namespace rv
+} // namespace rega

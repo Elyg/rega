@@ -8,7 +8,7 @@
 
 using namespace ftxui;
 
-namespace rv::ui
+namespace rega::ui
 {
 
 Element highlighted(std::string_view name,
@@ -328,4 +328,4 @@ std::vector<std::string> wrapWidth(std::string_view s, int width)
 	return lines;
 }
 
-} // namespace rv::ui
+} // namespace rega::ui

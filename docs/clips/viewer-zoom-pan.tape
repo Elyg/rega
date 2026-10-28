@@ -1,5 +1,5 @@
 # Viewer: zoom, pan, 1:1 and fit.
-Run rvtui chart.exr
+Run rega chart.exr
 Key + x3 0.5
 Key l x5 0.2
 Key j x3 0.2

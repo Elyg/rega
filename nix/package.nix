@@ -53,7 +53,7 @@ let
   # TIFF textures and plates need only libtiff's built-in codecs and zlib. nixpkgs'
   # libtiff also links jpeg, xz, zstd, webp and libdeflate, which the static build
   # would compile from source; and its CMake config doesn't name its dependencies
-  # for a static link, so only ZLIB::ZLIB (found by rvtui anyway) can be among them.
+  # for a static link, so only ZLIB::ZLIB (found by rega anyway) can be among them.
   tiffStatic = libtiff.overrideAttrs (old: {
     doCheck = false;
     propagatedBuildInputs = [ zlib ];
@@ -92,7 +92,7 @@ let
       opencolorio;
 in
 stdenv.mkDerivation {
-  pname = "rvtui";
+  pname = "rega";
   inherit version;
 
   src = lib.fileset.toSource {
@@ -124,8 +124,8 @@ stdenv.mkDerivation {
   checkInputs = [ gtest ];
 
   cmakeFlags = [
-    (lib.cmakeFeature "RVTUI_VERSION" version)
-    (lib.cmakeBool "RVTUI_BUILD_TESTS" true)
+    (lib.cmakeFeature "REGA_VERSION" version)
+    (lib.cmakeBool "REGA_BUILD_TESTS" true)
   ];
 
   # Tests write temporary EXRs; fine in the sandbox.
@@ -133,7 +133,7 @@ stdenv.mkDerivation {
 
   meta = {
     description = "Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG";
-    mainProgram = "rvtui";
+    mainProgram = "rega";
     platforms = lib.platforms.unix;
   };
 }

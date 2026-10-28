@@ -21,7 +21,7 @@
 #include <tuple>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 namespace kitty
@@ -351,4 +351,4 @@ ftxui::Element placeAt(ftxui::Elements children, std::vector<ftxui::Box> boxes);
 /// of the cell to its left instead.
 void compactPlaceholders(ftxui::Screen& screen);
 
-} // namespace rv
+} // namespace rega

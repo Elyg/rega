@@ -3,15 +3,15 @@
 <video src="../media/viewer-diff.mp4" autoplay loop muted playsinline></video>
 
 > [!TIP]
-> **TL;DR** `rvtui --diff v1.exr v2.exr`, or mark two images in the browser and press
+> **TL;DR** `rega --diff v1.exr v2.exr`, or mark two images in the browser and press
 > `d`. You get A, B and |A − B|: whatever changed lights up. Click the difference tile
 > and `2` lists the header rows that differ.
 
 ## Starting a comparison
 
 ```bash
-rvtui --diff v1.exr v2.exr
-rvtui --diff a1.exr b1.exr --diff a2.exr b2.exr   # several pairs: n / p
+rega --diff v1.exr v2.exr
+rega --diff a1.exr b1.exr --diff a2.exr b2.exr   # several pairs: n / p
 ```
 
 Or in the [browser](../browser.md#marks): mark two images and press `d`. More marked pair
@@ -46,7 +46,7 @@ selected, the pane shows that image's header.
 Name each side so the tiles say which is which:
 
 ```bash
-rvtui --diff v1.exr:label=bl:old v2.exr:label=bl:new
+rega --diff v1.exr:label=bl:old v2.exr:label=bl:new
 ```
 
 See [Labels from the command line](../panes/annotations.md#labels-from-the-command-line).

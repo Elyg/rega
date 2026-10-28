@@ -1,4 +1,4 @@
-# rvtui — command interface. `just` with no arguments lists everything.
+# rega — command interface. `just` with no arguments lists everything.
 #
 # One active build config at a time, so no recipe takes it as an argument.
 # Change it with `just set-config Release`; everything else follows.
@@ -8,9 +8,9 @@ set shell := ["bash", "-c"]
 # Apple Silicon on macOS, x64 elsewhere (presets: macos-arm64-*, linux-x64-*).
 arch := if os() == "macos" { "macos-arm64" } else { "linux-x64" }
 
-# The active config: whatever `just set-config` last wrote, else $RVTUI_CONFIG, else Release.
-state_file := ".rvtui-config"
-config := if path_exists(state_file) == "true" { trim(`cat .rvtui-config`) } else { env('RVTUI_CONFIG', 'Release') }
+# The active config: whatever `just set-config` last wrote, else $REGA_CONFIG, else Release.
+state_file := ".rega-config"
+config := if path_exists(state_file) == "true" { trim(`cat .rega-config`) } else { env('REGA_CONFIG', 'Release') }
 
 preset := arch + "-" + config
 build_dir := "build" / preset
@@ -21,7 +21,7 @@ alias help := default
 
 # List recipes, grouped
 default:
-    @just --list --unsorted --list-heading $'\nrvtui — building {{ config }} for {{ arch }}\n'
+    @just --list --unsorted --list-heading $'\nrega — building {{ config }} for {{ arch }}\n'
 
 # --- build -------------------------------------------------------------------
 
@@ -46,7 +46,7 @@ _deps-once:
 configure: _deps-once
     @{{ if path_exists(build_dir / "CMakeCache.txt") == "true" { "" } else { "just setup" } }}
 
-# Build rvtui and the tests
+# Build rega and the tests
 [group('build')]
 build: configure
     cmake --build --preset {{ preset }}
@@ -62,10 +62,10 @@ set-config value:
 
 # --- run ---------------------------------------------------------------------
 
-# Run rvtui: `just run`, `just run demos/`, `just run --dump foo.exr`
+# Run rega: `just run`, `just run demos/`, `just run --dump foo.exr`
 [group('run')]
 run *args: build
-    ./{{ build_dir }}/rvtui {{ args }}
+    ./{{ build_dir }}/rega {{ args }}
 
 # Download the OpenEXR test images into demos/ (gitignored)
 [group('run')]
@@ -73,7 +73,7 @@ fetch-demos:
     @[ -d demos/openexr-images ] || git clone --depth 1 https://github.com/AcademySoftwareFoundation/openexr-images.git demos/openexr-images
     @echo "demo images in demos/openexr-images"
 
-# Render the multi-layer demo sequence into demos/rvtui-sequence/ (numpy ray tracer)
+# Render the multi-layer demo sequence into demos/rega-sequence/ (numpy ray tracer)
 [group('run')]
 demo-sequence *args:
     nix shell --impure --expr 'let p = (builtins.getFlake "nixpkgs").legacyPackages.${builtins.currentSystem}; in p.python3.withPackages (ps: [ ps.openexr ps.numpy ])' \
@@ -86,14 +86,14 @@ demo-incomplete *args:
 
 # Fake bucket renders killed mid-frame (tiled, in progress) in demos/buckets/: `just demo-buckets [source.exr]`
 [group('run')]
-demo-buckets source="demos/rvtui-sequence/shot.1001.exr": configure
-    cmake --build --preset {{ preset }} --target rvtui_buckets
-    ./{{ build_dir }}/rvtui_buckets {{ source }} demos/buckets
+demo-buckets source="demos/rega-sequence/shot.1001.exr": configure
+    cmake --build --preset {{ preset }} --target rega_buckets
+    ./{{ build_dir }}/rega_buckets {{ source }} demos/buckets
 
 # Browse the demo images: `just demo`
 [group('run')]
 demo: fetch-demos build
-    ./{{ build_dir }}/rvtui demos/openexr-images
+    ./{{ build_dir }}/rega demos/openexr-images
 
 # --- test --------------------------------------------------------------------
 
@@ -125,7 +125,7 @@ lint:
 [group('docs')]
 docs:
     rm -rf build/docs
-    RVTUI_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) doxygen Doxyfile
+    REGA_VERSION=$(git describe --tags --abbrev=0 2>/dev/null || echo dev) doxygen Doxyfile
     @echo "build/docs/index.html"
 
 # User guide (mdBook in docs/): docs/book/index.html
@@ -142,16 +142,16 @@ guide-serve:
 # Regenerate the guide's keys reference from the help overlay's table
 [group('docs')]
 guide-keys: build
-    ./{{ build_dir }}/rvtui --help-keys > docs/src/reference/keys.md
+    ./{{ build_dir }}/rega --help-keys > docs/src/reference/keys.md
 
 # Record the guide's clips on this Mac (Ghostty + quickrecord): `just guide-record [name…]`
 [group('docs')]
 guide-record *names: build
-    RVTUI_BIN={{ build_dir }}/rvtui ./scripts/guide-record.sh {{ names }}
+    REGA_BIN={{ build_dir }}/rega ./scripts/guide-record.sh {{ names }}
 
 # --- package -----------------------------------------------------------------
 
-# Release tarball: dist/rvtui-<version>-<arch>.tar.gz (conan, Release)
+# Release tarball: dist/rega-<version>-<arch>.tar.gz (conan, Release)
 [group('package')]
 package:
     #!/usr/bin/env bash
@@ -160,11 +160,11 @@ package:
         conan install . -pr:h=./conan-profiles/conan-{{ arch }}-clang -pr:b=./conan-profiles/conan-{{ arch }}-clang \
             -s build_type=Release --output-folder=conan-build/conan-{{ arch }}-clang/Release --build=missing
     cmake --preset {{ arch }}-Release
-    cmake --build --preset {{ arch }}-Release --target rvtui
+    cmake --build --preset {{ arch }}-Release --target rega
     version=$(git describe --tags --abbrev=0 2>/dev/null || echo dev)
     mkdir -p dist
-    tar -C build/{{ arch }}-Release -czf "dist/rvtui-${version#v}-{{ arch }}.tar.gz" rvtui
-    echo "dist/rvtui-${version#v}-{{ arch }}.tar.gz"
+    tar -C build/{{ arch }}-Release -czf "dist/rega-${version#v}-{{ arch }}.tar.gz" rega
+    echo "dist/rega-${version#v}-{{ arch }}.tar.gz"
 
 # --- clean -------------------------------------------------------------------
 

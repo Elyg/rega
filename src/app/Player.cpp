@@ -4,7 +4,7 @@
 #include <mutex>
 #include <stop_token>
 
-namespace rv
+namespace rega
 {
 
 Player::Player(std::function<void()> wake, NowFn now)
@@ -144,4 +144,4 @@ void Player::stopTicker()
 	}
 }
 
-} // namespace rv
+} // namespace rega

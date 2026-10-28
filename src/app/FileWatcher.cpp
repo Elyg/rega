@@ -4,7 +4,7 @@
 
 namespace fs = std::filesystem;
 
-namespace rv
+namespace rega
 {
 
 FileWatcher::FileWatcher(std::chrono::milliseconds interval,
@@ -124,4 +124,4 @@ void FileWatcher::run(std::stop_token stop)
 	}
 }
 
-} // namespace rv
+} // namespace rega

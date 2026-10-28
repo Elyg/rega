@@ -6,7 +6,7 @@
 #include <string>
 #include <thread>
 
-namespace rv::log
+namespace rega::log
 {
 
 /// Plain stdout logger (pattern "%v") for user-facing CLI output such as --dump.
@@ -15,8 +15,8 @@ spdlog::logger& out();
 /// Default logger → stderr.
 void initConsole();
 /// Call before running the TUI: from then on everything goes to `file` (the
-/// terminal belongs to FTXUI). Empty `file` → $RVTUI_LOG or
-/// ~/.cache/rvtui/rvtui.log.
+/// terminal belongs to FTXUI). Empty `file` → $REGA_LOG or
+/// ~/.cache/rega/rega.log.
 void redirectToFile(std::string file = {});
 
 /// While alive, whatever is written to stderr (fd 2) is logged line by line
@@ -38,4 +38,4 @@ private:
 	std::thread m_thread;
 };
 
-} // namespace rv::log
+} // namespace rega::log

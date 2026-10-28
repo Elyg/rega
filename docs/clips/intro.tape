@@ -1,7 +1,7 @@
 # Introduction: the main features in the order you meet them. Browse with
 # live previews, open the sequence, play it, step, its layers one by one and
 # all tiled, the metadata, back to the browser.
-Run rvtui
+Run rega
 Sleep 1
 Key j x3 0.8
 Key j x4 0.3

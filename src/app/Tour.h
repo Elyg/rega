@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// Where the user is, for the tour steps that need a place as well as keys
@@ -19,7 +19,7 @@ struct TourView
 	float m_exposure = 0.0f;
 };
 
-/// `rvtui --tutorial`'s walkthrough: a floating card with one step at a time.
+/// `rega --tutorial`'s walkthrough: a floating card with one step at a time.
 /// Each step names its keys; they turn green once pressed, and the step is
 /// done when all of them are (and, for some, the user is in the right place:
 /// the sequence open, the sun stopped down...). A done step shows a tick
@@ -79,4 +79,4 @@ private:
 	std::vector<bool> m_pressed; ///< parallel to m_keys
 };
 
-} // namespace rv
+} // namespace rega

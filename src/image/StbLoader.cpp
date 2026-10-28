@@ -9,7 +9,7 @@
 #include <memory>
 #include <stb_image.h>
 
-namespace rv
+namespace rega
 {
 
 // LDR files are display-referred sRGB; linearised (srgbToLinear) so the
@@ -117,4 +117,4 @@ LayerImage loadStbLayer(const ImageInfo& info, int layerIndex)
 	return img;
 }
 
-} // namespace rv
+} // namespace rega

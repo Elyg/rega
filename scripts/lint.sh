@@ -12,7 +12,7 @@
 set -uo pipefail
 
 build_dir="${1:?usage: lint.sh <build_dir>}"
-root="${RVTUI_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+root="${REGA_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$root"
 
 db="$build_dir/compile_commands.json"

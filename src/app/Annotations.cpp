@@ -9,7 +9,7 @@
 
 namespace fs = std::filesystem;
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -157,7 +157,7 @@ void Annotations::addHistory(const std::string& line)
 std::string Annotations::serialize() const
 {
 	std::ostringstream out;
-	out << "# rvtui annotations (session state, rewritten on quit)\n";
+	out << "# rega annotations (session state, rewritten on quit)\n";
 	out << "[global]\n";
 	writeSet(out, m_global);
 	size_t kept = 0;
@@ -321,7 +321,7 @@ fs::path Annotations::defaultStatePath()
 	{
 		return {};
 	}
-	return base / "rvtui" / "annotations";
+	return base / "rega" / "annotations";
 }
 
 std::pair<std::string, AnnotationSet> splitLabels(const std::string& arg)
@@ -359,4 +359,4 @@ std::pair<std::string, AnnotationSet> splitLabels(const std::string& arg)
 	return {arg.substr(0, first), std::move(labels)};
 }
 
-} // namespace rv
+} // namespace rega

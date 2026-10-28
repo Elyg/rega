@@ -1,6 +1,6 @@
 [book]
-title = "rvtui"
-description = "User guide for rvtui, the terminal image browser/viewer for OpenEXR, TIFF, PNG and JPEG."
+title = "rega"
+description = "User guide for rega, the terminal image browser/viewer for OpenEXR, TIFF, PNG and JPEG."
 authors = ["etitas"]
 language = "en"
 src = "src"
@@ -12,8 +12,8 @@ create-missing = false
 [output.html]
 default-theme = "ayu"
 preferred-dark-theme = "ayu"
-git-repository-url = "https://github.com/Elyg/rvtui"
-edit-url-template = "https://github.com/Elyg/rvtui/edit/main/docs/{path}"
+git-repository-url = "https://github.com/Elyg/rega"
+edit-url-template = "https://github.com/Elyg/rega/edit/main/docs/{path}"
 additional-css = ["theme/custom.css"]
 additional-js = ["theme/mermaid.min.js", "theme/mermaid-init.js"]
 

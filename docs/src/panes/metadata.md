@@ -20,7 +20,7 @@ The header of the frame on screen:
   `framesPerSecond`, `comments`, the renderer's own);
 - each layer and its channels.
 
-As you step or play, it shows each frame's header. (`rvtui --dump` prints the same, with
+As you step or play, it shows each frame's header. (`rega --dump` prints the same, with
 types: see below.)
 
 ## Moving and filtering
@@ -45,7 +45,7 @@ between those and both headers whole.
 ## From the command line
 
 ```console
-$ rvtui --dump shot.1001.exr
+$ rega --dump shot.1001.exr
 shot.1001.exr  [exr]
 fps: 24
 

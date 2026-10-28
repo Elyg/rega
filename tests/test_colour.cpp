@@ -11,8 +11,8 @@
 #include <cstdlib>
 #include <ranges>
 
-using namespace rv;
-using namespace rvtest;
+using namespace rega;
+using namespace regatest;
 namespace OCIO = OCIO_NAMESPACE;
 
 namespace

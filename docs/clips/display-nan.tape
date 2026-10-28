@@ -1,5 +1,5 @@
 # Display: NaN and inf pixels, painted, and the layer they came from.
-Run rvtui nan-inf.exr
+Run rega nan-inf.exr
 Sleep 1
 Key 4
 Sleep 1.5

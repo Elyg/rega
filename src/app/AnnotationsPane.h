@@ -11,7 +11,7 @@
 #include <string>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// The level inside pane [3] (`l` on a row): one annotation set, global or the
@@ -108,4 +108,4 @@ private:
 	std::optional<Edit> m_edit;
 };
 
-} // namespace rv
+} // namespace rega

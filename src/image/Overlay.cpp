@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -213,4 +213,4 @@ layoutOverlay(int x0, int y0, int w, int h, const OverlayText& text)
 	return out;
 }
 
-} // namespace rv
+} // namespace rega

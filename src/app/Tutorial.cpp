@@ -29,7 +29,7 @@
 
 namespace fs = std::filesystem;
 
-namespace rv::tutorial
+namespace rega::tutorial
 {
 
 namespace
@@ -37,7 +37,7 @@ namespace
 
 // Bump when what write() produces changes: ensure() then renders again.
 constexpr int REVISION = 10;
-constexpr const char* STAMP = ".rvtui-tutorial";
+constexpr const char* STAMP = ".rega-tutorial";
 constexpr int FPS = 24;
 constexpr int STILLS = 6;
 // wip.####.exr, a render still being written: WIP_FRAMES frame numbers from
@@ -65,7 +65,7 @@ void writeExr(const fs::path& path,
 {
 	Imf::Header header(display, data);
 	header.compression() = Imf::ZIP_COMPRESSION;
-	header.insert("software", Imf::StringAttribute("rvtui --tutorial"));
+	header.insert("software", Imf::StringAttribute("rega --tutorial"));
 	header.insert("comments", Imf::StringAttribute(comments));
 	if(fps > 0)
 	{
@@ -753,10 +753,10 @@ void writeNanInf(const fs::path& path, int w, int h)
 	         "step through the layers to find which one broke.");
 }
 
-constexpr const char* README = R"(rvtui tutorial
+constexpr const char* README = R"(rega tutorial
 ==============
 
-Images made by `rvtui --tutorial` to try the viewer on.
+Images made by `rega --tutorial` to try the viewer on.
 A card in the corner walks you through them: F1 hides
 it, F2 skips a step, F3 goes back one. Each image says
 what it shows in its `comments` (metadata pane: 2 or
@@ -789,7 +789,7 @@ opens, space marks.
 3. c r g b a u: colour, one channel, alpha, luma.
    e / E exposure, y / Y gamma, 0 resets.
 4. Ctrl+click a pixel: the inspector (4) shows it.
-5. q: back to the browser (Shift+q quits rvtui
+5. q: back to the browser (Shift+q quits rega
    from anywhere). Mark a few stills with space,
    then Enter: n / p step, t tiles them.
 6. nan-inf.exr: the inspector warns about the NaNs;
@@ -838,7 +838,7 @@ fs::path defaultDir()
 	{
 		base = fs::temp_directory_path();
 	}
-	return base / "rvtui" / "tutorial";
+	return base / "rega" / "tutorial";
 }
 
 void write(const fs::path& dir, const Options& opts, const Progress& progress)
@@ -977,4 +977,4 @@ bool ensure(const fs::path& dir, const Options& opts, const Progress& progress)
 	return true;
 }
 
-} // namespace rv::tutorial
+} // namespace rega::tutorial

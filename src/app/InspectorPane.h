@@ -12,7 +12,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// "[x, y]" as Nuke counts them (y up from the frame's bottom), with ≈ when
@@ -78,4 +78,4 @@ private:
 	ftxui::Box m_box{};
 };
 
-} // namespace rv
+} // namespace rega

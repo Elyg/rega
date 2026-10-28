@@ -11,6 +11,7 @@ result
 demos/*/
 .cache/
 compile_commands.json
-.rvtui-config
+.rega-config
 /agent/
 /docs/book/
+.DS_Store

@@ -9,7 +9,7 @@
 
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 FilesPane::FilesPane(ViewerState& state, AppContext& ctx)
@@ -344,4 +344,4 @@ bool FilesPane::event(const Event& e)
 	return true;
 }
 
-} // namespace rv
+} // namespace rega

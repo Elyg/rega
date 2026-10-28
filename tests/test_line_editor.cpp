@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-using namespace rv;
+using namespace rega;
 using ftxui::Event;
 using R = LineEditor::Result;
 

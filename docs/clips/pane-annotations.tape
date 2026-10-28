@@ -1,6 +1,6 @@
 # Annotations: a global line, bottom centre, with the frame number; then
 # playing, the number following the frames.
-Run rvtui 'shot.####.exr'
+Run rega 'shot.####.exr'
 Wait 3
 Key 3
 Sleep 0.6

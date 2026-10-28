@@ -1,6 +1,6 @@
 // Fake a bucket renderer killed mid-frame, for testing how viewers cope.
 //
-//     rvtui_buckets SOURCE.exr OUT_DIR
+//     rega_buckets SOURCE.exr OUT_DIR
 //
 // A bucket renderer (Arnold, RenderMan) writes a tiled EXR as buckets finish:
 // OpenEXR puts a zeroed tile offset table after the header when the file is
@@ -221,7 +221,7 @@ int main(int argc, char** argv)
 {
 	if(argc != 3)
 	{
-		std::fprintf(stderr, "rvtui_buckets SOURCE.exr OUT_DIR\n");
+		std::fprintf(stderr, "rega_buckets SOURCE.exr OUT_DIR\n");
 		return 2;
 	}
 	try
@@ -268,7 +268,7 @@ int main(int argc, char** argv)
 	}
 	catch(const std::exception& e)
 	{
-		std::fprintf(stderr, "rvtui_buckets: %s\n", e.what());
+		std::fprintf(stderr, "rega_buckets: %s\n", e.what());
 		return 1;
 	}
 	return 0;

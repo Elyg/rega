@@ -11,7 +11,7 @@
 namespace fs = std::filesystem;
 using namespace ftxui;
 
-namespace rv
+namespace rega
 {
 
 namespace
@@ -390,4 +390,4 @@ bool ColourPane::event(const Event& e,
 	return true;
 }
 
-} // namespace rv
+} // namespace rega

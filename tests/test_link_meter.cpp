@@ -13,7 +13,7 @@
 #include <unordered_map>
 #include <vector>
 
-using namespace rv;
+using namespace rega;
 using namespace std::chrono_literals;
 using kitty::LinkMeter;
 using Mode = LinkMeter::Mode;

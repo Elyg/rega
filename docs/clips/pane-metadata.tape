@@ -1,5 +1,5 @@
 # Metadata: moving, the expanded row, the filter.
-Run rvtui shot.1001.exr
+Run rega shot.1001.exr
 Key 2
 Sleep 0.8
 Key j x6 0.35

@@ -3,7 +3,7 @@
 #include <string>
 #include <string_view>
 
-namespace rv
+namespace rega
 {
 
 /// The OSC 52 sequence that puts `text` on the terminal's clipboard.
@@ -17,4 +17,4 @@ namespace rv
 /// Move to the neighbouring tmux pane ('L','R','U','D'); false outside tmux.
 bool tmuxSelectPane(char dir, bool tmux);
 
-} // namespace rv
+} // namespace rega

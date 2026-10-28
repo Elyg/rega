@@ -13,7 +13,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 /// One image or sequence open in the viewer.
@@ -186,4 +186,4 @@ inline bool inside(const ftxui::Box& b, int x, int y) noexcept
 	return x >= b.x_min && x <= b.x_max && y >= b.y_min && y <= b.y_max;
 }
 
-} // namespace rv
+} // namespace rega

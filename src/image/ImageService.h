@@ -16,7 +16,7 @@
 #include <variant>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 using ImageInfoPtr = std::shared_ptr<const ImageInfo>;
@@ -173,4 +173,4 @@ private:
 	std::vector<std::thread> m_threads;
 };
 
-} // namespace rv
+} // namespace rega

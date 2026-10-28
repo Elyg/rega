@@ -8,7 +8,7 @@
 #include <string_view>
 #include <unordered_set>
 
-namespace rv
+namespace rega
 {
 
 ImageService::ImageService(std::function<void()> notify,
@@ -530,4 +530,4 @@ void ImageService::run()
 	}
 }
 
-} // namespace rv
+} // namespace rega

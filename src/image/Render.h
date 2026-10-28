@@ -9,7 +9,7 @@
 #include <utility>
 #include <vector>
 
-namespace rv
+namespace rega
 {
 
 class ColourTransform;
@@ -132,4 +132,4 @@ Rgba8Image renderLayer(const LayerImage& img,
                        const ViewParams& view,
                        const DisplayParams& disp);
 
-} // namespace rv
+} // namespace rega

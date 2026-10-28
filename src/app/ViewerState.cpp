@@ -8,7 +8,7 @@
 
 namespace fs = std::filesystem;
 
-namespace rv
+namespace rega
 {
 
 bool Source::filled() const
@@ -394,4 +394,4 @@ int ViewerState::sidePanelWidth() const
 	                std::max(MIN_RIGHT, w - leftPanelWidth() - 2 - MIN_IMAGE));
 }
 
-} // namespace rv
+} // namespace rega
