@@ -1,5 +1,6 @@
 #include "app/Viewer.h"
 
+#include "agent/AgentClient.h"
 #include "util/Ui.h"
 
 #include <ftxui/screen/terminal.hpp>
@@ -361,7 +362,9 @@ int Viewer::cappedBudget() const
 	// so a fixed guess blurs CG for nothing. Below a floor the picture is
 	// too small to see; the frame rate gives instead. Unpaced, nothing is
 	// known of the link: halve it to keep playback near frame rate.
-	if(m_ctx.m_caps.m_transfer == Transfer::DIRECT)
+	// Through an agent, frames go as JPEG and the socket paces them: no
+	// fitting to what inline PNG costs.
+	if(m_ctx.m_caps.m_transfer == Transfer::DIRECT && !m_ctx.m_kitty.agent())
 	{
 		constexpr int MIN_LINK_PIXELS = 100'000;
 		if(const double rate = m_ctx.m_kitty.linkRate(); rate > 0)
@@ -1727,6 +1730,30 @@ bool Viewer::keyEvent(const Event& e, const ImageInfoPtr& info)
 		                      cappedBudget() / 1e6,
 		                      TOTAL_PIXEL_BUDGET / 1e6)
 		        : std::string("playback: capped (softer decode)");
+	}
+	else if(ch("C"))
+	{
+		if(const auto client = m_ctx.m_kitty.agent())
+		{
+			// What goes over the agent's socket; every picture again.
+			constexpr int CHOICES[] = {60, 85, 95, agent::QUALITY_LOSSLESS};
+			int next = CHOICES[0];
+			for(const int c : CHOICES)
+			{
+				if(c > client->quality())
+				{
+					next = c;
+					break;
+				}
+			}
+			client->setQuality(next);
+			++m_ctx.m_caps.m_resend;
+			m_ctx.m_message = "agent: " + agent::qualityName(next);
+		}
+		else
+		{
+			m_ctx.m_message = "no agent: C sets its picture quality";
+		}
 	}
 	else if(ch("F"))
 	{

@@ -60,6 +60,7 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 | `playbar` | click: go to frame, wheel: step |
 | `F` | cycle playback fps |
 | `P` | playback: capped resolution (keeps up) / full res |
+| `C` | agent mode: picture quality q60 / q85 / q95 / lossless |
 | `S` | stats: link, picture cost, caches (anywhere) |
 <!-- ANCHOR_END: viewer-sequence -->
 

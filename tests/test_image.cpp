@@ -636,7 +636,7 @@ TEST(Render, BangPaintsNanAndInfPixels)
 	EXPECT_EQ(px(out, 0), (std::array<int, 3>{255, 0, 255}));
 }
 
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+// Implemented in src/image/StbWriter.cpp.
 #include <stb_image_write.h>
 
 TEST(StbLoader, PngRoundTripsThroughSrgbView)

@@ -172,9 +172,10 @@ std::optional<SshPeer> parseSshConnection(std::string_view value)
 	return SshPeer{sshEndpoint(clientIp, clientPort), serverPort};
 }
 
-std::vector<SshPeer> tmuxSshPeers()
+std::vector<std::string> tmuxClientEnv(const std::string& name)
 {
-	std::vector<SshPeer> peers;
+	std::vector<std::string> values;
+	const std::string prefix = name + "=";
 	std::istringstream pids(tmuxClientPids());
 	std::string pid;
 	while(pids >> pid)
@@ -183,14 +184,23 @@ std::vector<SshPeer> tmuxSshPeers()
 		std::string var;
 		while(std::getline(environ, var, '\0'))
 		{
-			if(var.starts_with("SSH_CONNECTION="))
+			if(var.starts_with(prefix))
 			{
-				if(auto peer = parseSshConnection(std::string_view(var).substr(
-				       sizeof "SSH_CONNECTION=" - 1)))
-				{
-					peers.push_back(std::move(*peer));
-				}
+				values.push_back(var.substr(prefix.size()));
 			}
+		}
+	}
+	return values;
+}
+
+std::vector<SshPeer> tmuxSshPeers()
+{
+	std::vector<SshPeer> peers;
+	for(const std::string& value : tmuxClientEnv("SSH_CONNECTION"))
+	{
+		if(auto peer = parseSshConnection(value))
+		{
+			peers.push_back(std::move(*peer));
 		}
 	}
 	return peers;

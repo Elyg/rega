@@ -55,6 +55,10 @@ configure_file(cmake/BuildInfo.h.in ${CMAKE_BINARY_DIR}/generated/BuildInfo.h @O
 
 # Sources listed by hand (no globbing): adding a file means adding it here.
 add_library(rega_core STATIC
+    src/agent/Agent.cpp
+    src/agent/AgentClient.cpp
+    src/agent/AgentDemo.cpp
+    src/agent/Protocol.cpp
     src/app/Annotations.cpp
     src/app/AnnotationsPane.cpp
     src/app/App.cpp
@@ -84,6 +88,7 @@ add_library(rega_core STATIC
     src/image/Render.cpp
     src/image/Sequence.cpp
     src/image/StbLoader.cpp
+    src/image/StbWriter.cpp
     src/image/TiffLoader.cpp
     src/term/BitmapSlot.cpp
     src/term/Caps.cpp
@@ -117,6 +122,7 @@ if(REGA_BUILD_TESTS)
     find_package(GTest REQUIRED)
     enable_testing()
     add_executable(rega_tests
+        tests/test_agent.cpp
         tests/test_annotations.cpp
         tests/test_browser.cpp
         tests/test_clipboard.cpp

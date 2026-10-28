@@ -1,5 +1,6 @@
 #include "app/App.h"
 
+#include "agent/AgentClient.h"
 #include "app/HelpKeys.h"
 #include "image/Loader.h"
 #include "term/Kitty.h"
@@ -166,6 +167,56 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 			    }
 		    });
 	}
+	// Agent mode: over ssh, an `rega --agent` at the far end keeps played
+	// frames in its RAM; only their names cross the pty. Looked for again
+	// while there is none (a reattach from a Mac running one), and dropped
+	// when it goes (its ssh ended).
+	if(opts.m_agent && m_caps.m_graphics == GraphicsMode::KITTY)
+	{
+		m_agentWatch = std::jthread(
+		    [this](std::stop_token stop)
+		    {
+			    std::shared_ptr<agent::AgentClient> current;
+			    std::mutex mu;
+			    std::condition_variable_any cv;
+			    std::unique_lock lock(mu);
+			    for(bool first = true;; first = false)
+			    {
+				    if(!first)
+				    {
+					    cv.wait_for(lock,
+					                stop,
+					                CLIENT_CHECK_INTERVAL,
+					                [] { return false; });
+				    }
+				    if(stop.stop_requested())
+				    {
+					    return;
+				    }
+				    auto found = [&](std::shared_ptr<agent::AgentClient> a)
+				    {
+					    {
+						    std::lock_guard agentLock(m_agentMu);
+						    m_agentFound = std::move(a);
+					    }
+					    m_screen.PostEvent(Event::Custom);
+				    };
+				    if(current && !current->connected())
+				    {
+					    current.reset();
+					    found(nullptr);
+				    }
+				    if(current || m_kitty.transfer() != Transfer::DIRECT)
+				    {
+					    continue; // on this machine: nothing to forward
+				    }
+				    if((current = agent::AgentClient::discover(m_caps.m_tmux)))
+				    {
+					    found(current);
+				    }
+			    }
+		    });
+	}
 	spdlog::info("terminal '{}', graphics {} ({}), cell {}x{}px, tmux {}{}",
 	             m_caps.m_terminalName,
 	             graphicsModeName(m_caps.m_graphics),
@@ -318,6 +369,25 @@ void App::clientsChanged(Transfer t)
 	m_screen.PostEvent(Event::Custom);
 }
 
+void App::agentChanged(std::shared_ptr<agent::AgentClient> client)
+{
+	if(client)
+	{
+		client->setQuality(m_opts.m_agentQuality);
+		// A name armed: what waited for it can show now.
+		client->setOnChange([this] { m_screen.PostEvent(Event::Custom); });
+	}
+	m_kitty.setAgent(client, static_cast<size_t>(m_opts.m_agentCache));
+	++m_caps.m_resend;
+	m_ctx.m_message =
+	    client ? fmt::format("agent: frames kept on the terminal's machine "
+	                         "({}, C to change)",
+	                         agent::qualityName(m_opts.m_agentQuality))
+	           : std::string("agent gone: frames inline again");
+	spdlog::info("{}", m_ctx.m_message);
+	m_screen.PostEvent(Event::Custom);
+}
+
 void App::filesChanged(const std::vector<fs::path>& changed)
 {
 	bool redraw = m_browser.refresh();
@@ -334,6 +404,14 @@ void App::filesChanged(const std::vector<fs::path>& changed)
 
 Element App::render()
 {
+	{
+		std::unique_lock lock(m_agentMu);
+		if(auto found = std::exchange(m_agentFound, std::nullopt))
+		{
+			lock.unlock();
+			agentChanged(std::move(*found));
+		}
+	}
 	// One frame, one update (synchronized output, DEC mode 2026): the
 	// terminal draws nothing until the end marker, written once FTXUI has
 	// printed the frame (a task runs right after the draw). Without it a
@@ -448,10 +526,34 @@ Element App::renderStats()
 	                   fmt::format("{:.0f} of {:.0f} MiB, here",
 	                               mb(static_cast<double>(m_svc.bytesUsed())),
 	                               mb(static_cast<double>(m_svc.budget())))));
+	const auto client = m_kitty.agent();
+	if(client)
+	{
+		const auto a = client->stats();
+		rows.push_back(row("agent",
+		                   fmt::format("{}, {}",
+		                               client->path(),
+		                               agent::qualityName(client->quality()))));
+		rows.push_back(
+		    row("sent",
+		        fmt::format("{} frames, {:.0f} MiB; last {}x{}, {:.0f} KiB",
+		                    a.m_sent,
+		                    mb(static_cast<double>(a.m_bytes)),
+		                    a.m_lastW,
+		                    a.m_lastH,
+		                    a.m_lastBytes / 1024.0)));
+		rows.push_back(row(
+		    "names",
+		    fmt::format("{} shown, {} stale; ready {:.0f} ms, re-arm {:.0f} ms",
+		                a.m_shown,
+		                a.m_stale,
+		                a.m_readyMs,
+		                a.m_rearmMs)));
+	}
 	if(m_kitty.terminalCache() > 0 && s.m_inline)
 	{
 		rows.push_back(
-		    row("terminal",
+		    row(client ? "agent RAM" : "terminal",
 		        fmt::format("{} frames, {:.0f} of {:.0f} MiB kept",
 		                    kept.m_frames,
 		                    mb(static_cast<double>(kept.m_bytes)),

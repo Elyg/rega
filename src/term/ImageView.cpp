@@ -1,5 +1,6 @@
 #include "term/ImageView.h"
 
+#include "agent/AgentClient.h"
 #include "term/Kitty.h"
 
 #include <ftxui/dom/node.hpp>
@@ -449,7 +450,25 @@ ImageSlot::Prepared ImageSlot::prepare(Request req) const
 		opt.m_id = m_id;
 		// Keep 32 ids for slots to come (tiles, the playbar).
 		constexpr size_t KEEP_FREE_IDS = 32;
-		if(req.m_cache)
+		const auto agent = req.m_cache ? m_tx.agent() : nullptr;
+		if(agent)
+		{
+			// Kept by the agent: it holds the pixels, the terminal shows
+			// them by the name it arms. Blocks while the link is full.
+			if(const uint32_t sent = agent->send(bmp))
+			{
+				p.m_agent = agent;
+				p.m_agentKey = sent;
+				p.m_bytes = req.m_bytes;
+				p.m_width = bmp.m_width;
+				p.m_height = bmp.m_height;
+			}
+			else
+			{
+				m_tx.cacheDropped(req.m_bytes); // agent gone: sent as ever
+			}
+		}
+		else if(req.m_cache)
 		{
 			if(const uint32_t id = m_tx.tryAllocId(KEEP_FREE_IDS))
 			{
@@ -463,7 +482,10 @@ ImageSlot::Prepared ImageSlot::prepare(Request req) const
 		}
 		opt.m_cols = key.m_cols;
 		opt.m_rows = key.m_rows;
-		p.m_escapes = m_tx.encode(bmp, opt);
+		if(!p.m_agentKey)
+		{
+			p.m_escapes = m_tx.encode(bmp, opt);
+		}
 	}
 	else
 	{
@@ -478,6 +500,15 @@ ImageSlot::Prepared ImageSlot::prepare(Request req) const
 
 void ImageSlot::apply(Prepared p)
 {
+	if(p.m_agentKey)
+	{
+		// On screen once the agent has it: keep it, show it when armed.
+		const Key key = p.m_key;
+		LayerImagePtr img = p.m_img;
+		keep(p);
+		showCached(m_cache.begin(), key, std::move(img));
+		return;
+	}
 	if(p.m_key.m_mode == GraphicsMode::KITTY)
 	{
 		// Replaces the picture under m_id (and, by its placement id, the
@@ -599,13 +630,16 @@ bool ImageSlot::flushStored()
 		// Without an id of its own it was encoded under m_id: writing it
 		// would replace what is on screen. And a draw may have sent the
 		// same frame meanwhile.
-		if(!p.m_cacheId ||
+		if((!p.m_cacheId && !p.m_agentKey) ||
 		   findKept(p.m_key, p.m_img->m_origin) != m_cache.end())
 		{
 			releaseUnsent(p);
 			continue;
 		}
-		m_tx.write(p.m_escapes);
+		if(!p.m_agentKey) // the agent has it already
+		{
+			m_tx.write(p.m_escapes);
+		}
 		keep(p);
 		wrote = true;
 	}
@@ -640,14 +674,40 @@ bool ImageSlot::storedInAnyView(const std::string& pathPrefix) const
 	                           });
 }
 
-void ImageSlot::showCached(std::list<Cached>::iterator it,
+bool ImageSlot::showCached(std::list<Cached>::iterator it,
                            const Key& key,
                            LayerImagePtr img)
 {
+	if(it->m_agent)
+	{
+		std::string name;
+		switch(it->m_agent->take(it->m_agentKey, name))
+		{
+			case agent::AgentClient::Show::WAIT:
+				return false; // the agent wakes us when armed
+			case agent::AgentClient::Show::GONE:
+				drop(it);
+				return false;
+			case agent::AgentClient::Show::NOW:
+				break;
+		}
+		// As apply(): replaces the picture under m_id.
+		if(m_transmitted && (key.m_cols != m_cols || key.m_rows != m_rows))
+		{
+			m_tx.write(kitty::deletePlacements(m_id, m_tx.tmux()));
+		}
+		kitty::TransmitOptions opt;
+		opt.m_id = m_id;
+		opt.m_cols = key.m_cols;
+		opt.m_rows = key.m_rows;
+		opt.m_tmux = m_tx.tmux();
+		m_tx.write(kitty::transmitShared(it->m_width, it->m_height, name, opt));
+		m_transmitted = true;
+	}
 	m_cache.splice(m_cache.begin(), m_cache, it); // most recently shown
 	m_tx.countKeptShown();
 	const Cached& c = m_cache.front();
-	m_shownId = c.m_id;
+	m_shownId = c.m_agent ? m_id : c.m_id;
 	m_mapping = c.m_mapping;
 	m_quality = c.m_quality;
 	m_cellRgb = c.m_cellRgb;
@@ -656,6 +716,7 @@ void ImageSlot::showCached(std::list<Cached>::iterator it,
 	m_frame = c.m_frame;
 	m_last = key;
 	m_keepAlive = std::move(img);
+	return true;
 }
 
 bool ImageSlot::makeRoom(const Key& key, const LayerImage& img, size_t bytes)
@@ -702,20 +763,36 @@ void ImageSlot::keep(const Prepared& p)
 	                          p.m_mapping,
 	                          p.m_quality,
 	                          p.m_cellRgb,
-	                          p.m_img->m_displayWindow});
+	                          p.m_img->m_displayWindow,
+	                          p.m_agent,
+	                          p.m_agentKey,
+	                          p.m_width,
+	                          p.m_height});
 }
 
 void ImageSlot::drop(std::list<Cached>::iterator it)
 {
-	m_tx.write(kitty::deleteImage(it->m_id, m_tx.tmux()));
-	m_tx.releaseId(it->m_id);
+	if(it->m_agent)
+	{
+		it->m_agent->forget(it->m_agentKey);
+	}
+	else
+	{
+		m_tx.write(kitty::deleteImage(it->m_id, m_tx.tmux()));
+		m_tx.releaseId(it->m_id);
+	}
 	m_tx.cacheDropped(it->m_bytes);
 	m_cache.erase(it);
 }
 
 void ImageSlot::releaseUnsent(const Prepared& p) const
 {
-	if(p.m_cacheId)
+	if(p.m_agentKey)
+	{
+		p.m_agent->forget(p.m_agentKey);
+		m_tx.cacheDropped(p.m_bytes);
+	}
+	else if(p.m_cacheId)
 	{
 		m_tx.releaseId(p.m_cacheId);
 		m_tx.cacheDropped(p.m_bytes);
@@ -863,14 +940,16 @@ void ImageSlot::draw(ftxui::Screen& screen,
 	{
 		m_viewSince = std::chrono::steady_clock::now();
 	}
-	if(const auto kept = kittyMode ? findCached(key, *img) : m_cache.end();
-	   kept != m_cache.end())
+	auto kept = kittyMode ? findCached(key, *img) : m_cache.end();
+	if(kept != m_cache.end() && (!m_last || !(*m_last == key)) &&
+	   !showCached(kept, key, img) && findCached(key, *img) == m_cache.end())
 	{
-		// Kept in the terminal: show it by its id, send nothing.
-		if(!m_last || !(*m_last == key))
-		{
-			showCached(kept, key, img);
-		}
+		kept = m_cache.end(); // the agent let it go: send it again
+	}
+	if(kept != m_cache.end())
+	{
+		// Kept in the terminal (or by the agent, maybe not armed yet: the
+		// previous picture stays meanwhile): show it, send no pixels.
 		m_lastDrawn = key;
 		std::lock_guard lk(m_jobMu);
 		m_waitFor.reset();

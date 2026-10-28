@@ -83,6 +83,10 @@ struct SshPeer
 	std::string m_serverPort;
 };
 std::optional<SshPeer> parseSshConnection(std::string_view value);
+/// Variable `name` in the environment of each client attached to this pane's
+/// tmux session (/proc: Linux only; none elsewhere), one value per client
+/// that has it.
+std::vector<std::string> tmuxClientEnv(const std::string& name);
 /// The ssh connections the clients attached to this pane's tmux session came
 /// in over: SSH_CONNECTION from each client's environment (/proc: Linux
 /// only; none elsewhere, or for a client attached at the desk).

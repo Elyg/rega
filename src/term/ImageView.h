@@ -28,6 +28,10 @@ namespace kitty
 {
 class Transmitter;
 }
+namespace agent
+{
+class AgentClient;
+}
 
 /// A persistent on-screen image area. The FTXUI element it produces renders the
 /// layer at the exact pixel size of the box it is laid out in, then either
@@ -216,6 +220,11 @@ private:
 		uint32_t m_cacheId = 0; ///< sent under its own id, to keep (0: m_id)
 		size_t m_bytes = 0;     ///< as the terminal holds it (RGBA)
 		bool m_storeOnly = false;
+		/// Sent to the agent instead, to keep there: no m_escapes, shown by
+		/// the name it arms (see showCached).
+		std::shared_ptr<agent::AgentClient> m_agent;
+		uint32_t m_agentKey = 0;
+		int m_width = 0, m_height = 0; ///< its pixels
 	};
 	/// A picture kept in the terminal under its own id.
 	struct Cached
@@ -229,6 +238,10 @@ private:
 		double m_quality = 1.0;
 		std::vector<uint8_t> m_cellRgb;
 		Box2i m_frame{};
+		/// Kept by the agent (m_id unused): see Prepared.
+		std::shared_ptr<agent::AgentClient> m_agent;
+		uint32_t m_agentKey = 0;
+		int m_width = 0, m_height = 0;
 	};
 	/// Whether `a` and `b` draw the same way, image and pixel cap aside: a
 	/// kept picture shows for a key it was not quite made for when only the
@@ -244,7 +257,10 @@ private:
 	/// The kept picture of `img` drawn as `key`, or end.
 	std::list<Cached>::iterator findCached(const Key& key,
 	                                       const LayerImage& img);
-	void showCached(std::list<Cached>::iterator it,
+	/// Show a kept picture. Kept by the agent, it goes again by the name
+	/// the agent armed: false when none is yet (wait for it) or the agent let
+	/// it go (then it is dropped: send it again).
+	bool showCached(std::list<Cached>::iterator it,
 	                const Key& key,
 	                LayerImagePtr img);
 	/// Output pixels of the picture for `key`, and the quality (output px per

@@ -1,4 +1,7 @@
 #include "BuildInfo.h"
+#include "agent/Agent.h"
+#include "agent/AgentClient.h"
+#include "agent/AgentDemo.h"
 #include "app/App.h"
 #include "app/HelpKeys.h"
 #include "app/Tutorial.h"
@@ -12,6 +15,9 @@
 #include "util/Log.h"
 
 #include <CLI/CLI.hpp>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -229,6 +235,30 @@ CLI::Validator sizeValue()
 	    "SIZE");
 }
 
+// This executable's absolute path, for --shell-init.
+std::string selfPath(const char* argv0)
+{
+	std::error_code ec;
+#ifdef __APPLE__
+	char buf[4096];
+	uint32_t size = sizeof buf;
+	if(_NSGetExecutablePath(buf, &size) == 0)
+	{
+		if(auto p = fs::canonical(buf, ec); !ec)
+		{
+			return p.string();
+		}
+	}
+#else
+	if(auto p = fs::canonical("/proc/self/exe", ec); !ec)
+	{
+		return p.string();
+	}
+#endif
+	auto p = fs::canonical(argv0, ec);
+	return ec ? std::string(argv0) : p.string();
+}
+
 } // namespace
 
 int main(int argc, char** argv)
@@ -244,6 +274,34 @@ int main(int argc, char** argv)
 	cli.add_flag("--help-keys", helpKeys)->group("");
 	bool tutorialRender = false; // hidden: render the tutorial set, then exit
 	cli.add_flag("--tutorial-render", tutorialRender)->group("");
+	// Hidden, agent mode prototype (docs/plans/agent-prototype.md): `--agent
+	// -- ssh …` on the Mac, `--agent-demo <sequence>` on the remote.
+	bool agent = false, agentDemo = false;
+	cli.add_flag("--agent", agent)->group("");
+	cli.add_flag("--agent-demo", agentDemo)->group("");
+	std::uint64_t agentBudget = 0;
+	cli.add_option("--agent-budget", agentBudget)
+	    ->transform(sizeValue())
+	    ->group("");
+	std::string agentLog, quality = "85";
+	cli.add_option("--agent-log", agentLog)->group("");
+	cli.add_option("--quality", quality)
+	    ->check(CLI::IsMember({"60", "85", "95", "lossless", "raw"}))
+	    ->group("");
+	std::string shellInit;
+	cli.add_option("--shell-init", shellInit)
+	    ->check(CLI::IsMember({"bash", "zsh"}))
+	    ->group("");
+	bool noAgent = false;
+	cli.add_flag("--no-agent", noAgent)->group("");
+	std::uint64_t agentCache = rega::kitty::Transmitter::DEFAULT_AGENT_CACHE;
+	cli.add_option("--agent-cache", agentCache)
+	    ->transform(sizeValue())
+	    ->group("");
+	int demoLoops = 3;
+	double demoFps = 24;
+	cli.add_option("--loops", demoLoops)->group("");
+	cli.add_option("--fps", demoFps)->group("");
 	std::string dumpPath, graphics = "auto", transfer = "auto", chooserFile,
 	                      cwdFile;
 	auto* pathsOpt = cli.add_option(
@@ -329,6 +387,29 @@ int main(int argc, char** argv)
 		{
 			return rega::runDoctor(graphics);
 		}
+		if(!shellInit.empty())
+		{
+			fmt::print("{}",
+			           rega::agent::shellInit(shellInit, selfPath(argv[0])));
+			return 0;
+		}
+		if(agent)
+		{
+			rega::agent::AgentOptions a;
+			a.m_command = paths; // what follows --
+			a.m_budget = agentBudget;
+			a.m_log = agentLog;
+			return rega::agent::runAgent(a);
+		}
+		if(agentDemo)
+		{
+			rega::agent::DemoOptions d;
+			d.m_paths = paths;
+			d.m_quality = quality;
+			d.m_loops = demoLoops;
+			d.m_fps = demoFps;
+			return rega::agent::runAgentDemo(d);
+		}
 		if(!dumpPath.empty())
 		{
 			return dump(dumpPath);
@@ -408,6 +489,12 @@ int main(int argc, char** argv)
 		opts.m_tutorial = tutorial;
 		opts.m_linkRate = static_cast<double>(linkRate);
 		opts.m_terminalCache = terminalCache;
+		opts.m_agent = !noAgent;
+		opts.m_agentCache = agentCache;
+		opts.m_agentQuality = quality == "lossless"
+		                          ? rega::agent::QUALITY_LOSSLESS
+		                      : quality == "raw" ? rega::agent::QUALITY_RAW
+		                                         : std::stoi(quality);
 		return rega::runApp(opts);
 	}
 	catch(const std::exception& e)

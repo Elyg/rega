@@ -1,5 +1,6 @@
 #include "term/Kitty.h"
 
+#include "agent/AgentClient.h"
 #include "util/Parallel.h"
 
 #include <spdlog/spdlog.h>
@@ -152,14 +153,15 @@ namespace
 {
 
 // Control keys shared by both transfer modes (no medium, no compression).
-std::string placementKeys(const Rgba8Image& img,
+std::string placementKeys(int width,
+                          int height,
                           const TransmitOptions& opt,
                           bool png = false)
 {
 	// A PNG says its own size.
 	std::string keys = png ? "a=T,f=100,q=2"
-	                       : "a=T,f=32,q=2,s=" + std::to_string(img.m_width) +
-	                             ",v=" + std::to_string(img.m_height);
+	                       : "a=T,f=32,q=2,s=" + std::to_string(width) +
+	                             ",v=" + std::to_string(height);
 	keys += ",i=" + std::to_string(opt.m_id);
 	if(opt.m_virtualPlacement)
 	{
@@ -328,7 +330,8 @@ std::string transmit(const Rgba8Image& img, const TransmitOptions& opt)
 	// it keeps only the channels needed (one for a channel or alpha shown as
 	// grey, none for an alpha that is all opaque).
 	const std::string png = encodePng(img);
-	const std::string keys = placementKeys(img, opt, true);
+	const std::string keys =
+	    placementKeys(img.m_width, img.m_height, opt, true);
 	const std::string payload =
 	    base64(reinterpret_cast<const uint8_t*>(png.data()), png.size());
 
@@ -361,12 +364,27 @@ std::string transmitShared(const Rgba8Image& img,
                            const TransmitOptions& opt,
                            bool file)
 {
-	std::string keys = placementKeys(img, opt);
+	std::string keys = placementKeys(img.m_width, img.m_height, opt);
 	// No S= with t=f: Ghostty 1.3.1 answers "EINVAL: invalid data" to a
 	// file with a size given (it reads the whole file without one).
 	keys.insert(keys.find(",q="),
 	            file ? std::string(",t=f")
 	                 : ",t=s,S=" + std::to_string(img.m_pixels.size()));
+	const std::string seq =
+	    "\x1b_G" + keys + ";" +
+	    base64(reinterpret_cast<const uint8_t*>(name.data()), name.size()) +
+	    "\x1b\\";
+	return tmuxWrap(seq, opt.m_tmux);
+}
+
+std::string transmitShared(int width,
+                           int height,
+                           std::string_view name,
+                           const TransmitOptions& opt)
+{
+	std::string keys = placementKeys(width, height, opt);
+	keys.insert(keys.find(",q="),
+	            ",t=s,S=" + std::to_string(size_t(width) * height * 4));
 	const std::string seq =
 	    "\x1b_G" + keys + ";" +
 	    base64(reinterpret_cast<const uint8_t*>(name.data()), name.size()) +
@@ -542,10 +560,33 @@ uint32_t Transmitter::tryAllocId(size_t keepFree)
 	return allocId();
 }
 
+size_t Transmitter::terminalCache() const
+{
+	std::lock_guard lock(m_mutex);
+	return m_agent && m_agent->connected() ? m_agentBudget
+	                                       : m_cacheBudget.load();
+}
+
+void Transmitter::setAgent(std::shared_ptr<agent::AgentClient> agent,
+                           size_t budget)
+{
+	std::lock_guard lock(m_mutex);
+	m_agent = std::move(agent);
+	m_agentBudget = budget;
+}
+
+std::shared_ptr<agent::AgentClient> Transmitter::agent() const
+{
+	std::lock_guard lock(m_mutex);
+	return m_agent && m_agent->connected() ? m_agent : nullptr;
+}
+
 bool Transmitter::reserveCache(size_t bytes)
 {
 	std::lock_guard lock(m_mutex);
-	if(m_cacheUse.m_bytes + bytes > m_cacheBudget)
+	const size_t budget =
+	    m_agent && m_agent->connected() ? m_agentBudget : m_cacheBudget.load();
+	if(m_cacheUse.m_bytes + bytes > budget)
 	{
 		return false;
 	}

@@ -10,12 +10,18 @@
 #include <cstdint>
 #include <deque>
 #include <functional>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <utility>
+
+namespace rega::agent
+{
+class AgentClient;
+}
 
 namespace rega::kitty
 {
@@ -71,6 +77,12 @@ std::string transmitShared(const Rgba8Image& img,
                            std::string_view name,
                            const TransmitOptions& opt,
                            bool file = false);
+/// transmitShared() for a picture of `width` x `height` RGBA held elsewhere
+/// (by the agent, see agent::AgentClient).
+std::string transmitShared(int width,
+                           int height,
+                           std::string_view name,
+                           const TransmitOptions& opt);
 /// Create shared memory object `name` holding the raw pixels of `img`. The
 /// terminal unlinks it once read. False on failure.
 bool writeSharedMemory(const std::string& name, const Rgba8Image& img);
@@ -137,10 +149,17 @@ public:
 	{
 		m_cacheBudget = bytes;
 	}
-	[[nodiscard]] size_t terminalCache() const noexcept
-	{
-		return m_cacheBudget;
-	}
+	/// What pictures kept may take: the agent's budget while one is
+	/// connected (they are kept there), else the terminal's.
+	[[nodiscard]] size_t terminalCache() const;
+
+	/// Agent mode: pictures to keep go to `rega --agent` on the machine
+	/// with the terminal instead (see ImageSlot), within `budget` bytes of its
+	/// RAM. Null: none, kept in the terminal as before.
+	void setAgent(std::shared_ptr<agent::AgentClient> agent, size_t budget);
+	/// The agent, while connected; else null.
+	[[nodiscard]] std::shared_ptr<agent::AgentClient> agent() const;
+	static constexpr size_t DEFAULT_AGENT_CACHE = size_t(4) << 30;
 	/// What the slots keep there now: pictures and bytes (decoded).
 	struct CacheUse
 	{
@@ -227,6 +246,8 @@ private:
 	mutable std::mutex m_mutex;
 	LinkMeter m_link;
 	std::atomic<size_t> m_cacheBudget = 0;
+	std::shared_ptr<agent::AgentClient> m_agent; ///< m_mutex
+	size_t m_agentBudget = 0;
 	CacheUse m_cacheUse;
 	double m_bytesPerPixel = 0; ///< inline pictures, averaged; 0: none yet
 	size_t m_lastBytes = 0, m_sent = 0, m_keptShown = 0; ///< see LinkStats

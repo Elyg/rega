@@ -16,6 +16,8 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <thread>
@@ -46,6 +48,11 @@ struct AppOptions
 	/// Terminal image memory played frames may keep (inline only; 0 none).
 	std::uint64_t m_terminalCache = DEFAULT_TERMINAL_CACHE;
 	static constexpr std::uint64_t DEFAULT_TERMINAL_CACHE = 256ull << 20;
+	/// Agent mode: look for `rega --agent` at the other end of ssh, and keep
+	/// played frames there (its RAM, m_agentCache bytes) instead.
+	bool m_agent = true;
+	std::uint64_t m_agentCache = kitty::Transmitter::DEFAULT_AGENT_CACHE;
+	int m_agentQuality = 85; ///< see agent::encodeFrame
 };
 
 /// Run the TUI until quit; returns the exit code.
@@ -83,6 +90,9 @@ private:
 	/// On the UI thread: other terminals attached to tmux. Send every
 	/// picture again, `t`'s way.
 	void clientsChanged(Transfer t);
+	/// On the UI thread: an agent answered, or the one in use went (null).
+	/// Send every picture again, to it or inline.
+	void agentChanged(std::shared_ptr<agent::AgentClient> client);
 	/// Point the watcher at the directories on screen.
 	void updateWatch();
 	/// What the tour watches, as things are now.
@@ -110,7 +120,12 @@ private:
 	/// --transfer auto in tmux: re-checks the clients attached.
 	std::jthread m_clientCheck;
 	std::jthread m_linkPoll; ///< in tmux: what it sent clients over ssh
-	FileWatcher m_watcher;   ///< last: stops before the rest goes
+	/// What m_agentWatch found (an agent, or null: it went) for render() to
+	/// take up: a task posted before the event loop runs is dropped.
+	std::mutex m_agentMu;
+	std::optional<std::shared_ptr<agent::AgentClient>> m_agentFound;
+	std::jthread m_agentWatch; ///< looks for an agent while there is none
+	FileWatcher m_watcher;     ///< last: stops before the rest goes
 };
 
 } // namespace rega
