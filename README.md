@@ -10,7 +10,9 @@ Draws images with the kitty graphics protocol, or half-blocks on any terminal.
 
 ## Demo
 
-https://github.com/user-attachments/assets/e3305c5d-d0ce-436d-8682-f4f18394bde8
+
+https://github.com/user-attachments/assets/973de310-c645-416d-a799-bee1c89ba906
+
 
 ## Usage
 
