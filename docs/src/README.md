@@ -2,8 +2,10 @@
 
 <video src="media/intro.mp4" autoplay loop muted playsinline></video>
 
-rega is an image browser and viewer that runs in the terminal; the name means sights. It is
-made for renders: multi-layer OpenEXR files and sequences, plus TIFF, PNG and JPEG.
+rega is an image browser and viewer that runs in the terminal. It is made for renders:
+multi-layer OpenEXR files and sequences, plus TIFF, PNG and JPEG.
+
+*rega* (reh-GAH, /rʲɛˈɡɐ/): Lithuanian for "sight".
 
 Use it on your own machine, or on one you reach through a terminal, such as a farm node
 or a remote workstation: log in there with ssh from Ghostty or kitty, run rega on that

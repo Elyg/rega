@@ -1,7 +1,9 @@
 # rega
 
-*Rega* means sights. Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG.
+Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG.
 Draws images with the kitty graphics protocol, or half-blocks on any terminal.
+
+*rega* (reh-GAH, /rʲɛˈɡɐ/): Lithuanian for "sight".
 
 <h2 align="center"><a href="https://elyg.github.io/rega">📖 User guide</a></h2>
 <p align="center">Features with a short clip · terminal and tmux setup · colour (OCIO, ACES) · keybinds</p>
