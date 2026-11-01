@@ -1,6 +1,6 @@
 # rega
 
-Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG.
+Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG, JPEG, MOV and MP4.
 Draws images with the kitty graphics protocol, or half-blocks on any terminal.
 
 *rega* (reh-GAH, /rʲɛˈɡɐ/): Lithuanian for "sight".

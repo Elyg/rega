@@ -38,6 +38,10 @@ int dump(const fs::path& path)
 	{
 		out.info("fps: {}", *info.m_fps);
 	}
+	if(info.m_frameCount > 1)
+	{
+		out.info("frames: {}", info.m_frameCount);
+	}
 	for(size_t i = 0; i < info.m_parts.size(); ++i)
 	{
 		const auto& p = info.m_parts[i];
@@ -233,8 +237,8 @@ CLI::Validator sizeValue()
 
 int main(int argc, char** argv)
 {
-	CLI::App cli{
-	    "rega — terminal image browser/viewer for EXR, TIFF, PNG and JPEG"};
+	CLI::App cli{"rega — terminal image browser/viewer for EXR, TIFF, PNG, "
+	             "JPEG, MOV and MP4"};
 	cli.set_version_flag(
 	    "--version",
 	    REGA_VERSION

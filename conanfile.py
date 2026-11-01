@@ -1,6 +1,14 @@
 from conan import ConanFile
 
 
+# What rega plays: the QuickTime / MP4 container and the codecs found in it. Kept in
+# step with nix/package.nix and licenses/FFMPEG-BUILD.txt.
+FFMPEG_DECODERS = (
+    "h264,hevc,prores,dnxhd,mjpeg,mpeg2video,mpeg4,png,qtrle,rawvideo,v210,vp9"
+)
+FFMPEG_PARSERS = "h264,hevc,mjpeg,mpeg4video,mpegvideo,vp9"
+
+
 class RegaConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
     generators = "CMakeDeps", "CMakeToolchain"
@@ -16,6 +24,7 @@ class RegaConan(ConanFile):
         self.requires("libdeflate/[>=1.19 <2]")
         self.requires("cli11/2.6.0")
         self.requires("opencolorio/2.5.2")
+        self.requires("ffmpeg/9.0.1")
         self.requires("gtest/1.17.0")
 
     def configure(self):
@@ -29,3 +38,22 @@ class RegaConan(ConanFile):
         # (all built in, or from zlib / libdeflate); no other codecs.
         for opt in ("jpeg", "lzma", "zstd", "jbig", "webp", "lerc", "cxx"):
             setattr(self.options["libtiff"], opt, False)
+        # Decode only, from local files, with no codec libraries or OS frameworks:
+        # libavformat, libavcodec and libswscale's own code plus zlib.
+        ffmpeg = self.options["ffmpeg"]
+        for opt in ("avdevice", "avfilter", "postproc", "swresample", "with_programs"):
+            setattr(ffmpeg, opt, False)
+        for opt in (
+            "appkit", "audiotoolbox", "avfoundation", "bzip2", "coreimage", "fontconfig",
+            "freetype", "fribidi", "harfbuzz", "libalsa", "libaom", "libdav1d", "libdrm",
+            "libfdk_aac", "libiconv", "libjxl", "libmp3lame", "libsvtav1", "libvpx",
+            "libwebp", "libx264", "libx265", "libxml2", "lzma", "openapv", "openh264",
+            "openjpeg", "opus", "pulse", "sdl", "ssl", "vaapi", "vdpau", "videotoolbox",
+            "vorbis", "vulkan", "xcb", "xlib",
+        ):
+            setattr(ffmpeg, "with_" + opt, False)
+        ffmpeg.disable_everything = True
+        ffmpeg.enable_decoders = FFMPEG_DECODERS
+        ffmpeg.enable_demuxers = "mov"
+        ffmpeg.enable_parsers = FFMPEG_PARSERS
+        ffmpeg.enable_protocols = "file"

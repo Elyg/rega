@@ -3,6 +3,7 @@
 #include "image/Loader.h"
 
 #include <spdlog/fmt/fmt.h>
+#include <spdlog/spdlog.h>
 
 #include <algorithm>
 #include <cctype>
@@ -20,6 +21,11 @@ bool Entry::isImage() const
 {
 	return m_kind == Kind::SEQUENCE ||
 	       (m_kind == Kind::FILE && isSupportedImage(m_path));
+}
+
+bool Entry::isMovie() const
+{
+	return m_kind == Kind::SEQUENCE && rega::isMovie(m_path);
 }
 
 std::string Entry::rangeString() const
@@ -94,8 +100,9 @@ std::vector<Entry> groupFiles(const fs::path& dir,
 	for(const auto& n : names)
 	{
 		std::string prefix, digits, suffix;
-		if(isSupportedImage(n) && splitFrame(n, prefix, digits, suffix) &&
-		   digits.size() <= 9)
+		// Movies don't group: clip_v001.mov and clip_v002.mov are two takes.
+		if(isSupportedImage(n) && !isMovie(n) &&
+		   splitFrame(n, prefix, digits, suffix) && digits.size() <= 9)
 		{
 			auto& g = groups[{prefix, suffix}];
 			g.m_frames.emplace_back(std::stoi(digits), n);
@@ -389,6 +396,35 @@ Entry entryForPath(const fs::path& file)
 	e.m_path = dir / fname;
 	std::error_code ec;
 	e.m_size = fs::file_size(e.m_path, ec);
+	return e;
+}
+
+Entry movieEntry(const fs::path& file)
+{
+	Entry e;
+	e.m_kind = Entry::Kind::FILE;
+	e.m_name = file.filename().string();
+	e.m_path = file;
+	std::error_code ec;
+	e.m_size = fs::file_size(file, ec);
+	int frames = 0;
+	try
+	{
+		frames = probeImage(file).m_frameCount;
+	}
+	catch(const LoadError& err)
+	{
+		spdlog::warn("{}: {}", file.string(), err.what());
+		return e;
+	}
+	e.m_kind = Entry::Kind::SEQUENCE;
+	e.m_frames.reserve(static_cast<size_t>(frames));
+	e.m_frameNumbers.reserve(static_cast<size_t>(frames));
+	for(int i = 0; i < frames; ++i)
+	{
+		e.m_frames.push_back(movieFramePath(file, i));
+		e.m_frameNumbers.push_back(i + 1);
+	}
 	return e;
 }
 

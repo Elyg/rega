@@ -36,7 +36,7 @@ By default the config's file rules decide each image's input colour space, from 
 a colour space from the EXR header. The input row overrides the rules for the source
 shown (a whole sequence), for this session.
 
-Integer images (PNG, JPEG, and 8- or 16-bit TIFF) are already display-encoded. rega
+Integer images (PNG, JPEG, 8- or 16-bit TIFF, and movies) are already display-encoded. rega
 decodes them from their sRGB codes once, so the input colour space applies to those
 codes and the curve isn't applied twice.
 

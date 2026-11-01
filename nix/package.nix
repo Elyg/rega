@@ -1,6 +1,7 @@
 {
   lib,
   stdenv,
+  buildPackages,
   cmake,
   ninja,
   pkg-config,
@@ -15,6 +16,8 @@
   opencolorio,
   expat,
   minizip-ng,
+  fetchurl,
+  nasm,
   gtest,
   version ? "dev",
 }:
@@ -72,6 +75,50 @@ let
       ];
   });
 
+  # What rega plays: the QuickTime / MP4 container and the codecs found in it, built
+  # the same here and for the static binary. Decode only, from local files, with no
+  # codec libraries or OS frameworks. Kept in step with conanfile.py and
+  # licenses/FFMPEG-BUILD.txt.
+  ffmpegMovies = stdenv.mkDerivation rec {
+    pname = "ffmpeg-rega";
+    src = import ./ffmpeg-source.nix { inherit fetchurl; };
+    inherit (src) version;
+    depsBuildBuild = [ buildPackages.stdenv.cc ]; # runs its table generators
+    nativeBuildInputs = [ pkg-config ] ++ lib.optional stdenv.hostPlatform.isx86 nasm;
+    buildInputs = [ zlib ];
+    # FFmpeg's configure is its own: no --build / --host, and static libraries are
+    # all it should build.
+    configurePlatforms = [ ];
+    dontDisableStatic = true;
+    configureFlags =
+      [
+        "--arch=${stdenv.hostPlatform.parsed.cpu.name}"
+        "--target_os=${stdenv.hostPlatform.parsed.kernel.name}"
+        "--cc=${stdenv.cc.targetPrefix}cc"
+        "--pkg-config=pkg-config"
+        "--enable-pic"
+        "--disable-autodetect"
+        "--disable-everything"
+        "--disable-programs"
+        "--disable-doc"
+        "--disable-network"
+        "--disable-avdevice"
+        "--disable-avfilter"
+        "--disable-swresample"
+        "--enable-zlib"
+        "--enable-demuxer=mov"
+        "--enable-protocol=file"
+        "--enable-decoder=h264,hevc,prores,dnxhd,mjpeg,mpeg2video,mpeg4,png,qtrle,rawvideo,v210,vp9"
+        "--enable-parser=h264,hevc,mjpeg,mpeg4video,mpegvideo,vp9"
+      ]
+      ++ lib.optionals (stdenv.hostPlatform != stdenv.buildPlatform) [
+        "--enable-cross-compile"
+        "--cross-prefix=${stdenv.cc.targetPrefix}"
+        "--host-cc=${buildPackages.stdenv.cc}/bin/cc"
+      ];
+    enableParallelBuilding = true;
+  };
+
   # The static (musl) build: no GL apps or python, which have no static libs. Its test
   # suite isn't built either: it's slow to compile and adds nothing to a release.
   ocio =
@@ -120,6 +167,7 @@ stdenv.mkDerivation {
     libdeflate
     cli11
     ocio
+    ffmpegMovies
   ];
   checkInputs = [ gtest ];
 
@@ -132,7 +180,7 @@ stdenv.mkDerivation {
   doCheck = true;
 
   meta = {
-    description = "Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG and JPEG";
+    description = "Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG, JPEG, MOV and MP4";
     mainProgram = "rega";
     platforms = lib.platforms.unix;
   };

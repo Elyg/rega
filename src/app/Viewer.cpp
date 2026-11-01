@@ -1,5 +1,6 @@
 #include "app/Viewer.h"
 
+#include "image/Loader.h"
 #include "util/Ui.h"
 
 #include <ftxui/screen/terminal.hpp>
@@ -21,6 +22,34 @@ namespace rega
 namespace
 {
 const double FPS_CHOICES[] = {12, 23.976, 24, 25, 30, 48, 60};
+
+// The playbar's tracks ask something of every frame on every draw, which a
+// long movie can't afford. Past this many frames only some are asked, evenly
+// spaced, each answering for those up to the next: far more than the bar has
+// cells to show.
+constexpr int TRACK_FRAMES = 4096;
+
+int trackStep(int frames)
+{
+	return std::max(1, frames / TRACK_FRAMES);
+}
+
+// One answer per frame, from ask(f) on every trackStep()th.
+template <class Ask>
+std::vector<bool> askTrack(int frames, Ask&& ask)
+{
+	const int step = trackStep(frames);
+	std::vector<bool> out(static_cast<size_t>(frames));
+	for(int f = 0; f < frames; f += step)
+	{
+		const bool yes = ask(f);
+		for(int g = f; yes && g < std::min(frames, f + step); ++g)
+		{
+			out[g] = true;
+		}
+	}
+	return out;
+}
 
 // hjkl / arrows pan by a few cells, HJKL by more: (dx, dy) in cells.
 std::optional<std::pair<double, double>> panStep(const Event& e)
@@ -99,8 +128,21 @@ void Viewer::open(std::vector<Entry> entries, bool tile)
 void Viewer::openSources(std::vector<Source> sources, bool tile)
 {
 	m_state.m_sources = std::move(sources);
-	for(const auto& s : m_state.m_sources)
+	// A listing leaves movies as files; playing one needs its frames.
+	auto opened = [](Entry& e)
 	{
+		if(e.m_kind == Entry::Kind::FILE && isMovie(e.m_path))
+		{
+			e = movieEntry(e.m_path);
+		}
+	};
+	for(auto& s : m_state.m_sources)
+	{
+		opened(s.m_entry);
+		if(s.m_diffA)
+		{
+			opened(*s.m_diffA);
+		}
 		m_ctx.m_ann.touch(sourceKey(s));
 	}
 	m_state.m_current = 0;
@@ -134,6 +176,25 @@ bool Viewer::rescan()
 		Entry& en = src.m_entry;
 		if(en.m_kind != Entry::Kind::SEQUENCE)
 		{
+			continue;
+		}
+		if(en.isMovie())
+		{
+			// One being written has no frames to show until it is complete.
+			std::error_code ec;
+			const auto size = fs::file_size(en.m_path, ec);
+			if(ec || size == en.m_size)
+			{
+				continue;
+			}
+			Entry again = movieEntry(en.m_path);
+			if(again.isMovie())
+			{
+				en = std::move(again);
+				m_state.m_frame =
+				    std::min(m_state.m_frame, m_state.frameCount() - 1);
+				changed = true;
+			}
 			continue;
 		}
 		// A sequence being rendered grows (or shrinks).
@@ -324,13 +385,14 @@ std::vector<bool> Viewer::storedFrames(const ImageInfo& info)
 	auto& svc = m_ctx.m_svc;
 	const Source& src = m_state.m_sources[0];
 	const int reduce = playbackReduce(info, *m_viewSlot);
-	std::vector<bool> stored(static_cast<size_t>(m_state.frameCount()));
-	for(int f = 0; f < m_state.frameCount(); ++f)
-	{
-		stored[f] = m_viewSlot->stored(
-		    svc.originOf(src.frame(f), m_state.m_layerLabel, reduce));
-	}
-	return stored;
+	return askTrack(m_state.frameCount(),
+	                [&](int f)
+	                {
+		                return m_viewSlot->stored(
+		                    svc.originOf(src.frame(f),
+		                                 m_state.m_layerLabel,
+		                                 reduce));
+	                });
 }
 
 std::vector<bool> Viewer::storedElsewhere()
@@ -340,12 +402,12 @@ std::vector<bool> Viewer::storedElsewhere()
 		return {};
 	}
 	const Source& src = m_state.m_sources[0];
-	std::vector<bool> kept(static_cast<size_t>(m_state.frameCount()));
-	for(int f = 0; f < m_state.frameCount(); ++f)
-	{
-		kept[f] = m_viewSlot->storedInAnyView(src.frame(f).string() + "|");
-	}
-	return kept;
+	return askTrack(m_state.frameCount(),
+	                [&](int f)
+	                {
+		                return m_viewSlot->storedInAnyView(
+		                    src.frame(f).string() + "|");
+	                });
 }
 
 int Viewer::cappedBudget() const
@@ -988,7 +1050,7 @@ KeyLookup Viewer::keyLookup(int source,
 		{
 			if(key == "file")
 			{
-				return frame.filename().string();
+				return splitMovieFrame(frame).first.filename().string();
 			}
 			if(key == "frame")
 			{
@@ -2521,19 +2583,22 @@ Element Viewer::renderPlaybar(const ImageInfoPtr& info)
 {
 	const Source& src = m_state.m_sources[m_state.m_current];
 	const int n = m_state.frameCount();
+	const int step = trackStep(n);
 	std::vector<fs::path> frames;
-	frames.reserve(n);
-	for(int i = 0; i < n; ++i)
+	frames.reserve(n / step + 1);
+	for(int i = 0; i < n; i += step)
 	{
 		frames.push_back(src.frame(i));
 	}
+	const std::vector<bool> cached =
+	    m_ctx.m_svc.cachedLayers(frames, m_state.m_layerLabel);
 	return m_playbar.render(
 	    {.m_frames = n,
 	     .m_frame = m_state.m_frame,
 	     .m_range = m_state.playRange(),
 	     .m_hasIn = m_state.m_in.has_value(),
 	     .m_hasOut = m_state.m_out.has_value(),
-	     .m_cached = m_ctx.m_svc.cachedLayers(frames, m_state.m_layerLabel),
+	     .m_cached = askTrack(n, [&](int f) { return cached[f / step]; }),
 	     .m_stored = info ? storedFrames(*info) : std::vector<bool>{},
 	     .m_storedElsewhere = storedElsewhere(),
 	     .m_label = [&src](int f) { return src.frameLabel(f); },

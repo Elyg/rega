@@ -4,6 +4,7 @@
 
 #include <filesystem>
 #include <stdexcept>
+#include <utility>
 
 namespace rega
 {
@@ -14,8 +15,20 @@ struct LoadError : std::runtime_error
 	using std::runtime_error::runtime_error;
 };
 
-/// .exr, .png, .jpg, .jpeg, .tif or .tiff (any case).
+/// .exr, .png, .jpg, .jpeg, .tif, .tiff, .mov or .mp4 (any case).
 bool isSupportedImage(const std::filesystem::path& p);
+
+/// .mov or .mp4 (any case): one file holding many frames.
+bool isMovie(const std::filesystem::path& p);
+/// Frame `index` (0-based) of a movie as a path of its own, "clip.mov#41", so
+/// that everything going by path treats a movie like a numbered sequence. Only
+/// the loaders and ImageService open these; a plain movie path is its frame 0.
+std::filesystem::path movieFramePath(const std::filesystem::path& file,
+                                     int index);
+/// The file behind `p` and the frame in it: (movie, index) for a movie frame's
+/// path, (p, 0) for anything else.
+std::pair<std::filesystem::path, int>
+splitMovieFrame(const std::filesystem::path& p);
 
 /// Read headers / layer structure only. Throws LoadError.
 ImageInfo probeImage(const std::filesystem::path& p);
@@ -31,6 +44,8 @@ ImageInfo probeStb(const std::filesystem::path& p);
 LayerImage loadStbLayer(const ImageInfo& info, int layerIndex);
 ImageInfo probeTiff(const std::filesystem::path& p);
 LayerImage loadTiffLayer(const ImageInfo& info, int layerIndex);
+ImageInfo probeMovie(const std::filesystem::path& p);
+LayerImage loadMovieLayer(const ImageInfo& info, int layerIndex);
 
 /// sRGB EOTF, 0-1 code to linear: how display-referred (integer) files are
 /// decoded, so the default sRGB view round-trips them.

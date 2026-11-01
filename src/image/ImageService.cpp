@@ -38,8 +38,9 @@ ImageService::~ImageService()
 
 namespace
 {
-std::string fileStamp(const std::filesystem::path& p)
+std::string fileStamp(const std::filesystem::path& frame)
 {
+	const std::filesystem::path p = splitMovieFrame(frame).first;
 	std::error_code ec;
 	auto mtime = std::filesystem::last_write_time(p, ec);
 	if(ec)
@@ -83,6 +84,21 @@ bool ImageService::checkForChanges(
 	}
 	bool changed = false;
 	std::lock_guard lk(m_mu);
+	// A movie's frames are stamped apart, each under its own name.
+	for(size_t i = 0, files = now.size(); i < files; ++i)
+	{
+		if(isMovie(now[i].first))
+		{
+			const std::string frames = now[i].first + "#";
+			for(const auto& [path, stamp] : m_stamps)
+			{
+				if(path.starts_with(frames))
+				{
+					now.emplace_back(path, now[i].second);
+				}
+			}
+		}
+	}
 	for(auto& [path, stamp] : now)
 	{
 		auto it = m_stamps.find(path);

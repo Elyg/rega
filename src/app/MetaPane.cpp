@@ -1,5 +1,6 @@
 #include "app/MetaPane.h"
 
+#include "image/Loader.h"
 #include "util/Clipboard.h"
 #include "util/Fuzzy.h"
 #include "util/Ui.h"
@@ -44,9 +45,9 @@ std::vector<MetaPane::Item> MetaPane::items(const ImageInfoPtr& info) const
 		return diffItems(m_ctx.m_svc.info(src.diffFrame(m_state.m_frame)),
 		                 info);
 	}
-	items.push_back(
-	    {K::TITLE, m_state.currentFramePath().filename().string(), ""});
-	items.push_back({K::PATH, "path", m_state.currentFramePath().string()});
+	const fs::path file = splitMovieFrame(m_state.currentFramePath()).first;
+	items.push_back({K::TITLE, file.filename().string(), ""});
+	items.push_back({K::PATH, "path", file.string()});
 	for(size_t p = 0; p < info->m_parts.size(); ++p)
 	{
 		const auto& part = info->m_parts[p];
@@ -79,8 +80,10 @@ std::vector<MetaPane::Item> MetaPane::diffItems(const ImageInfoPtr& a,
 	items.push_back({K::TITLE, "header diff", ""});
 	const size_t summary = items.size();
 	items.push_back({K::SUMMARY, "", ""});
-	items.push_back({K::PATH, "A", src.diffFrame(m_state.m_frame).string()});
-	items.push_back({K::PATH, "B", m_state.currentFramePath().string()});
+	auto file = [](const fs::path& frame)
+	{ return splitMovieFrame(frame).first.string(); };
+	items.push_back({K::PATH, "A", file(src.diffFrame(m_state.m_frame))});
+	items.push_back({K::PATH, "B", file(m_state.currentFramePath())});
 	if(!a)
 	{
 		items[summary].m_name = "reading A…";

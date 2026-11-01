@@ -102,6 +102,11 @@ demo: fetch-demos build
 test: build
     ctest --preset {{ preset }}
 
+# Regenerate the small movies under tests/data (committed)
+[group('test')]
+test-movies:
+    ./scripts/make-test-movies.sh
+
 # --- check -------------------------------------------------------------------
 
 # Format all C/C++ sources in place (.clang-format)

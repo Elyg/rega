@@ -31,6 +31,21 @@ find_package(TIFF REQUIRED)
 find_package(CLI11 REQUIRED)
 find_package(OpenColorIO REQUIRED)
 find_package(Threads REQUIRED)
+# FFmpeg: conan's CMake targets, else pkg-config (nixpkgs). --static flags either way:
+# nix/package.nix builds the same trimmed FFmpeg for shared and static alike.
+find_package(ffmpeg QUIET COMPONENTS avformat avcodec swscale avutil)
+if(TARGET ffmpeg::avformat)
+    set(REGA_FFMPEG ffmpeg::avformat ffmpeg::avcodec ffmpeg::swscale ffmpeg::avutil)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(FFMPEG REQUIRED libavformat libavcodec libswscale libavutil)
+    add_library(rega_ffmpeg INTERFACE)
+    target_include_directories(rega_ffmpeg INTERFACE ${FFMPEG_INCLUDE_DIRS})
+    # "-framework X" stays one item: split in two, CMake drops the repeated -framework.
+    string(REPLACE "-framework;" "-framework " _FFMPEG_LINK "${FFMPEG_STATIC_LDFLAGS}")
+    target_link_libraries(rega_ffmpeg INTERFACE ${_FFMPEG_LINK})
+    set(REGA_FFMPEG rega_ffmpeg)
+endif()
 if(TARGET ftxui::ftxui)
     set(REGA_FTXUI ftxui::ftxui)
 else()
@@ -80,6 +95,7 @@ add_library(rega_core STATIC
     src/image/ImageBuffer.cpp
     src/image/ImageService.cpp
     src/image/Loader.cpp
+    src/image/MovieLoader.cpp
     src/image/Overlay.cpp
     src/image/Render.cpp
     src/image/Sequence.cpp
@@ -100,7 +116,7 @@ add_library(rega_core STATIC
 target_include_directories(rega_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(rega_core PUBLIC
     ${REGA_FTXUI} spdlog::spdlog OpenEXR::OpenEXR OpenColorIO::OpenColorIO
-    stb::stb TIFF::TIFF ZLIB::ZLIB
+    stb::stb TIFF::TIFF ZLIB::ZLIB ${REGA_FFMPEG}
     ${REGA_LIBDEFLATE} Threads::Threads)
 
 add_executable(rega src/main.cpp)
@@ -127,6 +143,7 @@ if(REGA_BUILD_TESTS)
         tests/test_line_editor.cpp
         tests/test_link_meter.cpp
         tests/test_log.cpp
+        tests/test_movie.cpp
         tests/test_panes.cpp
         tests/test_playbar.cpp
         tests/test_player.cpp
@@ -138,6 +155,8 @@ if(REGA_BUILD_TESTS)
         tests/test_util_ui.cpp
         tests/test_viewer.cpp)
     target_link_libraries(rega_tests PRIVATE rega_core GTest::gtest_main)
+    target_compile_definitions(rega_tests PRIVATE
+        REGA_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     include(GoogleTest)
     gtest_discover_tests(rega_tests)
 endif()

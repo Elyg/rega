@@ -1104,6 +1104,13 @@ Element Browser::renderPreview()
 		                                 humanSize(e->m_size))) |
 		                color(Color::Magenta));
 	}
+	else if(info->m_frameCount > 1)
+	{
+		lines.push_back(text(fmt::format("{} frames · {}",
+		                                 info->m_frameCount,
+		                                 humanSize(e->m_size))) |
+		                color(Color::Magenta));
+	}
 	else
 	{
 		lines.push_back(text(humanSize(e->m_size)) | dim);

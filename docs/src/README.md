@@ -3,7 +3,7 @@
 <video src="media/intro.mp4" autoplay loop muted playsinline></video>
 
 rega is an image browser and viewer that runs in the terminal. It is made for renders:
-multi-layer OpenEXR files and sequences, plus TIFF, PNG and JPEG.
+multi-layer OpenEXR files and sequences, plus TIFF, PNG, JPEG, MOV and MP4.
 
 *rega* (reh-GAH, /rʲɛˈɡɐ/): Lithuanian for "sight".
 

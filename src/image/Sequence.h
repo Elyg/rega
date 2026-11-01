@@ -30,6 +30,9 @@ struct Entry
 
 	/// A sequence, or a supported image file.
 	bool isImage() const;
+	/// A movie opened to play: its frames are movieFramePath()s, and m_path
+	/// and m_name are the file's. In a listing a movie is a plain file.
+	bool isMovie() const;
 	std::string rangeString() const; ///< "1001-1050,1060-1100"
 };
 
@@ -53,6 +56,11 @@ std::vector<Entry> listDirectory(const std::filesystem::path& dir,
 /// (used when rega is launched on a file). Returns a File entry if no sibling
 /// frames exist.
 Entry entryForPath(const std::filesystem::path& file);
+
+/// What the viewer opens `file`, a movie, as: a sequence of its frames numbered
+/// from 1 (this reads its header). A plain file entry if that cannot be read,
+/// for the viewer to say why.
+Entry movieEntry(const std::filesystem::path& file);
 
 /// Resolve command-line paths into viewer entries. A plain frame path opens
 /// just that file; a sequence needs a glob — `shot.*.exr`, `shot.####.exr`

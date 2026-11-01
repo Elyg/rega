@@ -145,6 +145,11 @@ void FilesPane::toggleSourceExpand()
 		return;
 	}
 	const Entry& at = sources[i].m_entry;
+	if(at.isMovie())
+	{
+		m_ctx.m_message = "a movie's frames have no files to expand into";
+		return;
+	}
 	if(at.m_kind == Entry::Kind::SEQUENCE)
 	{
 		const int frames = static_cast<int>(at.m_frames.size());

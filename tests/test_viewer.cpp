@@ -1,6 +1,7 @@
 #include "TestContext.h"
 #include "app/Sheet.h"
 #include "app/Viewer.h"
+#include "image/Loader.h"
 #include "image/Sequence.h"
 
 #include <ftxui/dom/node.hpp>
@@ -219,6 +220,54 @@ TEST_F(ViewerTest, FrameSteppingWrapsRound)
 	press(key(" "));
 	EXPECT_EQ(m_c.m_ctx.m_message, "not a sequence");
 	EXPECT_FALSE(m_v.playing());
+}
+
+TEST_F(ViewerTest, AMovieOpensAsFramesAndSteps)
+{
+	const fs::path movie = fs::path(REGA_TEST_DATA) / "gop.mp4";
+	m_v.open({entryForPath(movie)});
+	ASSERT_TRUE(state().m_sources[0].m_entry.isMovie());
+	EXPECT_EQ(state().frameCount(), 48);
+	EXPECT_EQ(sourceKey(state().m_sources[0]), movie.string());
+
+	press(key("."));
+	EXPECT_EQ(state().m_frame, 1);
+	EXPECT_EQ(state().currentFramePath(), movieFramePath(movie, 1));
+	draw();
+
+	// Frame paths stay inside: the metadata names the file.
+	press(key("2"));
+	ftxui::Screen screen(120, 40);
+	ftxui::Render(screen, m_v.render());
+	EXPECT_NE(screen.ToString().find("gop.mp4"), std::string::npos);
+	EXPECT_EQ(screen.ToString().find("gop.mp4#"), std::string::npos);
+	press(Event::Escape);
+
+	// A frame number, the way a sequence goes to one: they start at 1.
+	press(key(":"));
+	press(key("4"));
+	press(key("8"));
+	press(Event::Return);
+	EXPECT_EQ(state().m_frame, 47);
+
+	ASSERT_TRUE(info());
+	EXPECT_EQ(info()->m_frame, 47);
+	EXPECT_EQ(*info()->m_fps, 24.0);
+}
+
+TEST_F(ViewerTest, AnUnreadableMovieStaysOneFrameAndSaysWhy)
+{
+	const fs::path bad = m_dir / "broken.mov";
+	std::ofstream(bad) << "not a movie";
+	m_v.open({entryForPath(bad)});
+	EXPECT_FALSE(state().m_sources[0].m_entry.isMovie());
+	EXPECT_EQ(state().frameCount(), 1);
+	m_c.m_svc.info(state().currentFramePath());
+	EXPECT_TRUE(waitFor(
+	    [&]
+	    { return m_c.m_svc.error(state().currentFramePath()).has_value(); }));
+	EXPECT_NE(m_c.m_svc.error(state().currentFramePath())->find("cannot read"),
+	          std::string::npos);
 }
 
 TEST_F(ViewerTest, MetadataFilterDrawsAndEndsWhenFocusLeaves)
