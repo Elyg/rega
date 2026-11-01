@@ -94,3 +94,14 @@ just              # list every recipe
 
 Developed with assistance from [Claude Code](https://claude.com/claude-code). All changes
 are reviewed, tested, and maintained by me.
+
+## Licence
+
+rega is under the [MIT licence](LICENSE). The notices for the libraries in its release
+binaries are in [`licenses/`](licenses/THIRD_PARTY_NOTICES.txt) and in each release tarball.
+
+The binaries include [FFmpeg](https://ffmpeg.org), used under the
+[LGPL 2.1 or later](licenses/LGPL-2.1.txt) with no GPL or non-free parts. Each
+[release](https://github.com/Elyg/rega/releases) attaches FFmpeg's exact source, and
+[`licenses/FFMPEG-BUILD.txt`](licenses/FFMPEG-BUILD.txt) lists how it's built and how to
+rebuild rega with your own.

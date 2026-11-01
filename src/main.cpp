@@ -235,7 +235,15 @@ int main(int argc, char** argv)
 {
 	CLI::App cli{
 	    "rega — terminal image browser/viewer for EXR, TIFF, PNG and JPEG"};
-	cli.set_version_flag("--version", REGA_VERSION);
+	cli.set_version_flag(
+	    "--version",
+	    REGA_VERSION
+	    "\n"
+	    "rega is under the MIT licence.\n"
+	    "It uses FFmpeg (https://ffmpeg.org), copyright the FFmpeg "
+	    "developers,\nunder the LGPL 2.1 or later. FFmpeg's source and "
+	    "build flags come with\nevery release: "
+	    "https://github.com/Elyg/rega/releases");
 
 	std::vector<std::string> paths;
 	std::string benchPath;

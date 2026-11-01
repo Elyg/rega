@@ -26,7 +26,8 @@ jobs:
       - run: REGA_VERSION="${GITHUB_REF_NAME#v}" nix build --impure .#static -L
       - run: |
           mkdir -p dist
-          tar -C result/bin -czf "dist/rega-${GITHUB_REF_NAME#v}-linux-${{ matrix.arch }}.tar.gz" rega
+          tar -czf "dist/rega-${GITHUB_REF_NAME#v}-linux-${{ matrix.arch }}.tar.gz" \
+            -C result/bin rega -C "$GITHUB_WORKSPACE" LICENSE licenses
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
@@ -52,8 +53,24 @@ jobs:
           name: macos-arm64
           path: dist/*.tar.gz
 
+  # The LGPL wants FFmpeg's exact source and build flags beside the binaries using it.
+  ffmpeg-source:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DeterminateSystems/nix-installer-action@main
+      - run: |
+          nix build .#ffmpeg-source
+          mkdir -p dist
+          cp -L result "dist/$(nix eval --raw .#ffmpeg-source.name)"
+          cp licenses/FFMPEG-BUILD.txt dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ffmpeg-source
+          path: dist/*
+
   release:
-    needs: [linux-static, macos]
+    needs: [linux-static, macos, ffmpeg-source]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
@@ -62,5 +79,8 @@ jobs:
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
-          files: dist/*.tar.gz
+          files: dist/*
+          body: >-
+            rega includes [FFmpeg](https://ffmpeg.org), used under the LGPL 2.1 or later.
+            Its source and build flags are attached below.
           generate_release_notes: true

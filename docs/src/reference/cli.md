@@ -34,7 +34,7 @@ Quote patterns with `#` so the shell leaves them alone. A plain frame path
 | `--cache SIZE` | memory for decoded images, e.g. `8G` or `512M` (default `4G`, at least `64M`) |
 | `--chooser-file FILE` | `o` in the browser writes the chosen paths to FILE and exits. See [picking files](../browser.md#picking-files-for-other-tools) |
 | `--cwd-file FILE` | on exit, write the last folder to FILE |
-| `--version` | print the version |
+| `--version` | print the version and licence notice |
 | `-h`, `--help` | print the options |
 
 ## Files rega keeps

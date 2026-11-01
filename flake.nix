@@ -105,6 +105,8 @@
           {
             default = rega;
             rega = rega;
+            # Attached to each release (release.yml), as the LGPL asks.
+            ffmpeg-source = pkgs.callPackage ./nix/ffmpeg-source.nix { };
           }
           // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
             # Fully static musl binary: copy anywhere, no runtime deps.

@@ -163,7 +163,8 @@ package:
     cmake --build --preset {{ arch }}-Release --target rega
     version=$(git describe --tags --abbrev=0 2>/dev/null || echo dev)
     mkdir -p dist
-    tar -C build/{{ arch }}-Release -czf "dist/rega-${version#v}-{{ arch }}.tar.gz" rega
+    tar -czf "dist/rega-${version#v}-{{ arch }}.tar.gz" \
+        -C build/{{ arch }}-Release rega -C "$PWD" LICENSE licenses
     echo "dist/rega-${version#v}-{{ arch }}.tar.gz"
 
 # --- clean -------------------------------------------------------------------

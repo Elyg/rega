@@ -6,6 +6,8 @@
 #
 # REGA_VERSION  a release to install, e.g. 0.0.15 (default: the latest)
 # REGA_BIN_DIR  where to put the binary (default: ~/.local/bin)
+#
+# Its licence and third-party notices go in ~/.local/share/doc/rega.
 set -euo pipefail
 
 repo="https://github.com/Elyg/rega"
@@ -13,7 +15,7 @@ repo="https://github.com/Elyg/rega"
 # Everything in a function, called on the last line: piped into bash, a
 # download cut short runs nothing rather than half a script.
 main() {
-    local os arch platform version dir
+    local os arch platform version dir doc
     os=$(uname -s)
     arch=$(uname -m)
     case "$os/$arch" in
@@ -35,10 +37,12 @@ main() {
     version="${version#v}"
 
     dir="${REGA_BIN_DIR:-$HOME/.local/bin}"
-    mkdir -p "$dir"
+    doc="${XDG_DATA_HOME:-$HOME/.local/share}/doc/rega"
+    mkdir -p "$dir" "$doc"
     echo "[install] rega $version ($platform) → $dir"
     curl -fsSL "$repo/releases/download/v$version/rega-$version-$platform.tar.gz" |
-        tar -xz -C "$dir" rega
+        tar -xz -C "$doc"
+    mv -f "$doc/rega" "$dir/rega"
 
     case ":$PATH:" in
         *":$dir:"*) ;;
