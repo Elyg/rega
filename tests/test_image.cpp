@@ -1170,3 +1170,30 @@ TEST(ImageService, DiffsTwoFilesAndReportsAMissingSide)
 	}
 	EXPECT_TRUE(svc.diffError(gone, b).has_value());
 }
+
+// A header can name any size: the loaders ask before they allocate.
+TEST(FrameSize, OrdinaryFramesPass)
+{
+	EXPECT_NO_THROW(rega::checkFrameSize(1, 1, 1));
+	EXPECT_NO_THROW(rega::checkFrameSize(4096, 2160, 4));
+	EXPECT_NO_THROW(rega::checkFrameSize(16384, 16384, 12)); // 268 MP x 12
+}
+
+TEST(FrameSize, EmptyOrNegativeIsRefused)
+{
+	EXPECT_THROW(rega::checkFrameSize(0, 10, 3), rega::LoadError);
+	EXPECT_THROW(rega::checkFrameSize(10, -1, 3), rega::LoadError);
+}
+
+TEST(FrameSize, TooManyPixelsOrPlanesIsRefused)
+{
+	const int64_t limit = rega::frameSizeLimit();
+	EXPECT_NO_THROW(rega::checkFrameSize(limit, 1, 4));
+	EXPECT_THROW(rega::checkFrameSize(limit + 1, 1, 1), rega::LoadError);
+	EXPECT_THROW(rega::checkFrameSize(limit, 1, 5), rega::LoadError);
+	// Sides whose product does not fit in 64 bits.
+	EXPECT_THROW(rega::checkFrameSize(INT64_MAX, INT64_MAX, 1),
+	             rega::LoadError);
+	EXPECT_THROW(rega::checkFrameSize(int64_t(1) << 31, int64_t(1) << 31, 1),
+	             rega::LoadError);
+}

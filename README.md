@@ -56,6 +56,10 @@ on macOS. To pin a release or pick another folder, set them for `bash`:
 `… | REGA_VERSION=0.0.15 REGA_BIN_DIR=~/bin bash`. On NixOS, use the flake instead
 (below).
 
+The script checks the download against the release's `SHA256SUMS` before installing
+anything. Each release also carries a build provenance attestation: to check a tarball
+yourself, `gh attestation verify rega-<version>-<platform>.tar.gz -R Elyg/rega`.
+
 Nix, Home Manager and pinning a release: [Install](https://elyg.github.io/rega/install.html).
 
 ## Setup

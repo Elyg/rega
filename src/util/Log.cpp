@@ -45,7 +45,10 @@ void redirectToFile(std::string file)
 		}
 		else
 		{
-			file = "/tmp/rega.log";
+			// No home: a fixed name in a directory everyone shares is no
+			// place for a log of what is being viewed.
+			spdlog::set_level(spdlog::level::off);
+			return;
 		}
 	}
 	std::error_code ec;
@@ -65,6 +68,18 @@ void redirectToFile(std::string file)
 			l->flush_on(l->level());
 		}
 		spdlog::set_default_logger(l);
+		// One kept from an older rega may be readable by others; so may the
+		// one before it (rega.1.log).
+		namespace fs = std::filesystem;
+		fs::path older = file;
+		older.replace_filename(older.stem().string() + ".1" +
+		                       older.extension().string());
+		for(const fs::path& f : {fs::path(file), older})
+		{
+			fs::permissions(f,
+			                fs::perms::owner_read | fs::perms::owner_write,
+			                ec);
+		}
 	}
 	catch(const spdlog::spdlog_ex&)
 	{

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <string>
 
 namespace rega
@@ -61,6 +62,45 @@ splitMovieFrame(const std::filesystem::path& p)
 		return {p, 0};
 	}
 	return {std::move(file), std::stoi(s.substr(at + 1))};
+}
+
+int64_t frameSizeLimit()
+{
+	static const int64_t LIMIT = []
+	{
+		int64_t megapixels = 1024;
+		if(const char* env = std::getenv("REGA_MAX_MEGAPIXELS"); env && *env)
+		{
+			char* end = nullptr;
+			const long long v = std::strtoll(env, &end, 10);
+			// Up to 1e9 megapixels: the products below stay inside int64.
+			if(*end == '\0' && v > 0 && v <= 1'000'000'000)
+			{
+				megapixels = v;
+			}
+		}
+		return megapixels * 1'000'000;
+	}();
+	return LIMIT;
+}
+
+void checkFrameSize(int64_t width, int64_t height, size_t channels)
+{
+	if(width <= 0 || height <= 0)
+	{
+		throw LoadError("image has no size");
+	}
+	const int64_t limit = frameSizeLimit();
+	// Each side within the limit first, so the product cannot overflow.
+	if(width > limit || height > limit || width > limit / height ||
+	   static_cast<int64_t>(channels) > 4 * limit / (width * height))
+	{
+		throw LoadError("image too large: " + std::to_string(width) + "x" +
+		                std::to_string(height) + ", " +
+		                std::to_string(channels) + " channels (limit " +
+		                std::to_string(limit / 1'000'000) +
+		                " megapixels; REGA_MAX_MEGAPIXELS raises it)");
+	}
 }
 
 ImageInfo probeImage(const std::filesystem::path& p)

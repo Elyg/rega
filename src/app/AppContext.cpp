@@ -2,6 +2,7 @@
 
 #include "term/ImageView.h"
 #include "util/Clipboard.h"
+#include "util/Sandbox.h"
 #include "util/Ui.h"
 
 #include <ftxui/screen/terminal.hpp>
@@ -23,7 +24,8 @@ void AppContext::copyText(std::string_view text)
 {
 	constexpr size_t MAX_SHOWN = 60;
 	m_message =
-	    !copyToClipboard(text, m_caps.m_tmux) ? "copy failed"
+	    !copyToClipboard(text, m_caps.m_tmux)
+	        ? (localOnly() ? "copy is off (REGA_LOCAL_ONLY)" : "copy failed")
 	    : text.size() > MAX_SHOWN
 	        ? "copied: " + std::string(text.substr(0, MAX_SHOWN - 1)) + "…"
 	        : "copied: " + std::string(text);

@@ -2,6 +2,7 @@
 
 #include "term/Kitty.h"
 #include "term/Output.h"
+#include "util/Sandbox.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -19,14 +20,22 @@ std::string osc52(std::string_view text)
 
 bool copyToClipboard(std::string_view text, bool tmux)
 {
+	// -w also sends the buffer to the terminal's clipboard (OSC 52).
+	const bool local = localOnly();
 	if(tmux)
 	{
-		if(FILE* f = popen("tmux load-buffer -w - 2>/dev/null", "w"))
+		if(FILE* f = popen(local ? "tmux load-buffer - 2>/dev/null"
+		                         : "tmux load-buffer -w - 2>/dev/null",
+		                   "w"))
 		{
 			std::fwrite(text.data(), 1, text.size(), f);
 			return pclose(f) == 0;
 		}
 		return false;
+	}
+	if(local)
+	{
+		return false; // the terminal's clipboard is the only one there is
 	}
 	term::writeRaw(osc52(text), true);
 	return true;

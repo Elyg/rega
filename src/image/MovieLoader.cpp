@@ -362,6 +362,7 @@ void Movie::describe(const std::string& path)
 	{
 		throw LoadError("movie has no picture size");
 	}
+	checkFrameSize(m_width, m_height, 4);
 	const auto pix = static_cast<AVPixelFormat>(par->format);
 	const AVPixFmtDescriptor* desc = av_pix_fmt_desc_get(pix);
 	if(desc)

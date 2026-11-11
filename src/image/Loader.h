@@ -2,6 +2,7 @@
 
 #include "image/ImageBuffer.h"
 
+#include <cstdint>
 #include <filesystem>
 #include <stdexcept>
 #include <utility>
@@ -29,6 +30,14 @@ std::filesystem::path movieFramePath(const std::filesystem::path& file,
 /// path, (p, 0) for anything else.
 std::pair<std::filesystem::path, int>
 splitMovieFrame(const std::filesystem::path& p);
+
+/// Throws LoadError unless a `width` x `height` frame of `channels` planes is
+/// one rega will allocate: sides positive, at most frameSizeLimit() pixels, and
+/// at most four times that across the planes. A header can name any size; the
+/// loaders ask before they allocate.
+void checkFrameSize(int64_t width, int64_t height, size_t channels);
+/// Most pixels in a frame: 1024 megapixels, or $REGA_MAX_MEGAPIXELS.
+int64_t frameSizeLimit();
 
 /// Read headers / layer structure only. Throws LoadError.
 ImageInfo probeImage(const std::filesystem::path& p);

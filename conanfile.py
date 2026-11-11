@@ -16,15 +16,15 @@ class RegaConan(ConanFile):
     def requirements(self):
         self.requires("ftxui/6.1.9")
         self.requires("spdlog/1.16.0")
-        self.requires("openexr/3.4.14")
-        self.requires("stb/cci.20240531")
-        self.requires("libtiff/4.7.1")
-        self.requires("zlib/1.3.1")
+        self.requires("openexr/3.4.18")
+        self.requires("stb/cci.20261021")
+        self.requires("libtiff/4.7.2")
+        self.requires("zlib/1.3.2")
         # Same range as openexr, so both resolve to one libdeflate.
         self.requires("libdeflate/[>=1.19 <2]")
         self.requires("cli11/2.6.0")
         self.requires("opencolorio/2.5.2")
-        self.requires("ffmpeg/9.0.1")
+        self.requires("ffmpeg/9.0.2")
         self.requires("gtest/1.17.0")
 
     def configure(self):

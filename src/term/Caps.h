@@ -145,6 +145,11 @@ TerminalReply parseTerminalReply(std::string_view in);
 /// (m_answered false) without a terminal, or after 2 s.
 TerminalReply queryTerminal();
 
+/// Whether the terminal is on another machine, reached over ssh. Outside tmux
+/// the SSH_* variables say; inside it they only say how the server was
+/// started, so the attached clients do (tmuxClientOverSsh()).
+bool remoteSession();
+
 /// `forced` is "auto" | "kitty" | "halfblock". `transfer` is "auto" | "direct"
 /// | "shm" | "file"; auto: see autoTransfer().
 TermCaps detectCaps(const std::string& forced = "auto",

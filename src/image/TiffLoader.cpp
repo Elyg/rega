@@ -356,6 +356,15 @@ void readDirect(const TiffFile& f, const Page& pg, LayerImage& img)
 	{
 		throw LoadError(f.error("bad TIFF chunk size"));
 	}
+	// The tags say how a chunk is laid out, libtiff how big it is: every
+	// sample read below must lie inside one chunk and go to one of the planes.
+	if(pixelBytes == 0 ||
+	   static_cast<uint64_t>(cw) * ch >
+	       static_cast<uint64_t>(size) / pixelBytes ||
+	   pg.m_samples > img.m_planes.size())
+	{
+		throw LoadError("TIFF layout does not match its chunk size");
+	}
 	std::vector<uint8_t> buf(static_cast<size_t>(size));
 
 	const bool invert = pg.m_photometric == PHOTOMETRIC_MINISWHITE;
@@ -604,6 +613,7 @@ LayerImage loadTiffLayer(const ImageInfo& info, int layerIndex)
 	{
 		throw LoadError("TIFF page changed since it was read");
 	}
+	checkFrameSize(pg.m_width, pg.m_height, pg.m_channels.size());
 	LayerImage img;
 	img.m_info = l;
 	img.m_width = static_cast<int>(pg.m_width);

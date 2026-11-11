@@ -10,8 +10,10 @@
 #include "term/Kitty.h"
 #include "term/Output.h"
 #include "util/Log.h"
+#include "util/Sandbox.h"
 
 #include <CLI/CLI.hpp>
+#include <sys/stat.h>
 
 #include <algorithm>
 #include <cctype>
@@ -22,6 +24,7 @@
 #include <filesystem>
 #include <map>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace fs = std::filesystem;
@@ -29,11 +32,39 @@ namespace fs = std::filesystem;
 namespace
 {
 
+/// `s` as safe to print: names and values come from the file, and a terminal
+/// acts on control characters (C0, DEL, and C1 as UTF-8), so they show as \xNN.
+std::string printable(std::string_view s)
+{
+	std::string out;
+	out.reserve(s.size());
+	for(size_t i = 0; i < s.size(); ++i)
+	{
+		const auto c = static_cast<unsigned char>(s[i]);
+		const bool c1 = c == 0xc2 && i + 1 < s.size() &&
+		                static_cast<unsigned char>(s[i + 1]) >= 0x80 &&
+		                static_cast<unsigned char>(s[i + 1]) <= 0x9f;
+		if(c1)
+		{
+			out += fmt::format("\\x{:02x}", static_cast<unsigned char>(s[++i]));
+		}
+		else if(c < 0x20 || c == 0x7f)
+		{
+			out += fmt::format("\\x{:02x}", c);
+		}
+		else
+		{
+			out += s[i];
+		}
+	}
+	return out;
+}
+
 int dump(const fs::path& path)
 {
 	auto& out = rega::log::out();
 	rega::ImageInfo info = rega::probeImage(path);
-	out.info("{}  [{}]", info.m_path, info.m_format);
+	out.info("{}  [{}]", printable(info.m_path), info.m_format);
 	if(info.m_fps)
 	{
 		out.info("fps: {}", *info.m_fps);
@@ -47,12 +78,16 @@ int dump(const fs::path& path)
 		const auto& p = info.m_parts[i];
 		out.info("\npart {}{}{}{}",
 		         i,
-		         p.m_name.empty() ? "" : fmt::format(" \"{}\"", p.m_name),
+		         p.m_name.empty() ? ""
+		                          : fmt::format(" \"{}\"", printable(p.m_name)),
 		         p.m_tiled ? " tiled" : "",
 		         p.m_deep ? " deep" : "");
 		for(const auto& a : p.m_attributes)
 		{
-			out.info("  {} ({}): {}", a.m_name, a.m_type, a.m_value);
+			out.info("  {} ({}): {}",
+			         printable(a.m_name),
+			         printable(a.m_type),
+			         printable(a.m_value));
 		}
 	}
 	out.info("\nlayers:");
@@ -65,7 +100,7 @@ int dump(const fs::path& path)
 			                     rega::LayerInfo::shortName(l.m_channels[c]),
 			                     l.m_types[c]);
 		}
-		out.info("  {}:{}", l.label(), chans);
+		out.info("  {}:{}", printable(l.label()), printable(chans));
 	}
 	return 0;
 }
@@ -334,12 +369,29 @@ int main(int argc, char** argv)
 	               "On exit, write the last directory here");
 	CLI11_PARSE(cli, argc, argv);
 	rega::log::initConsole();
+	// The log, annotations, colour state and anything else written from here
+	// on name the files being worked on: for their owner only.
+	::umask(077);
+	// Before any file is opened: rega never needs the network, and a decoder
+	// fed a hostile file must not get it either.
+	if(!rega::denyNetwork())
+	{
+		spdlog::debug("no network sandbox on this system");
+	}
 
 	try
 	{
 		if(doctor)
 		{
 			return rega::runDoctor(graphics);
+		}
+		// Everything below shows what is in the files, on the terminal.
+		if(rega::localOnly() && rega::remoteSession())
+		{
+			spdlog::error("REGA_LOCAL_ONLY is set: rega does not run over ssh "
+			              "here, where images and copied text would go to "
+			              "the machine the terminal is on");
+			return 1;
 		}
 		if(!dumpPath.empty())
 		{
@@ -424,7 +476,7 @@ int main(int argc, char** argv)
 	}
 	catch(const std::exception& e)
 	{
-		spdlog::error("{}", e.what());
+		spdlog::error("{}", printable(e.what())); // may quote the file
 		return 1;
 	}
 }

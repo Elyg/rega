@@ -4,8 +4,9 @@ on:
   push:
     tags: ["v*"]
 
+# Build jobs only read the repository; the release job alone may write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   linux-static:
@@ -19,16 +20,16 @@ jobs:
             arch: aarch64
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e # main, 2026-11-11
+      - uses: DeterminateSystems/magic-nix-cache-action@f69a2d3e148e90223fe63ab6e3f6331f2e7e33dc # main, 2026-11-11
       # Fully static musl binary: runs on any Linux. Nix can't see the tag, so pass it in.
       - run: REGA_VERSION="${GITHUB_REF_NAME#v}" nix build --impure .#static -L
       - run: |
           mkdir -p dist
           tar -czf "dist/rega-${GITHUB_REF_NAME#v}-linux-${{ matrix.arch }}.tar.gz" \
             -C result/bin rega -C "$GITHUB_WORKSPACE" LICENSE licenses
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: linux-${{ matrix.arch }}
           path: dist/*.tar.gz
@@ -36,19 +37,19 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0 # version comes from the tag
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e # main, 2026-11-11
       # No magic-nix-cache: the dev shell all comes from cache.nixos.org, and its post
       # step spent minutes re-uploading it. The conan cache below is what matters here.
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/.conan2
           key: conan-macos-arm64-${{ hashFiles('conanfile.py', 'conan-profiles/*') }}
       # Apple clang + static conan deps: depends only on system libraries.
       - run: nix develop -c just package
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: macos-arm64
           path: dist/*.tar.gz
@@ -57,14 +58,14 @@ jobs:
   ffmpeg-source:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e # main, 2026-11-11
       - run: |
           nix build .#ffmpeg-source
           mkdir -p dist
           cp -L result "dist/$(nix eval --raw .#ffmpeg-source.name)"
           cp licenses/FFMPEG-BUILD.txt dist/
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ffmpeg-source
           path: dist/*
@@ -72,12 +73,22 @@ jobs:
   release:
     needs: [linux-static, macos, ffmpeg-source]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      id-token: write # sign the provenance attestation
+      attestations: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
+      # What scripts/install.sh checks a download against.
+      - run: cd dist && sha256sum -- * > SHA256SUMS && cat SHA256SUMS
+      # Ties each tarball to this workflow run: gh attestation verify <file> -R Elyg/rega
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/*.tar.gz
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
           files: dist/*
           body: >-

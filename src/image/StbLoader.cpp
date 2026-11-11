@@ -58,6 +58,12 @@ LayerImage loadStbLayer(const ImageInfo& info, int layerIndex)
 {
 	const auto& path = info.m_path;
 	int w = 0, h = 0, comp = 0;
+	if(!stbi_info(path.c_str(), &w, &h, &comp))
+	{
+		throw LoadError(std::string("cannot read image: ") +
+		                stbi_failure_reason());
+	}
+	checkFrameSize(w, h, static_cast<size_t>(std::max(comp, 0)));
 	bool is16 = stbi_is_16_bit(path.c_str());
 	std::unique_ptr<void, void (*)(void*)> data(
 	    is16 ? static_cast<void*>(stbi_load_16(path.c_str(), &w, &h, &comp, 0))

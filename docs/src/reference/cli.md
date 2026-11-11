@@ -45,11 +45,15 @@ Quote patterns with `#` so the shell leaves them alone. A plain frame path
 | `~/.local/state/rega/annotations` | [annotations](../panes/annotations.md), between sessions |
 | `~/.local/state/rega/colour` | the [colour](../panes/colour.md) choices, per config |
 
-`$XDG_CACHE_HOME` and `$XDG_STATE_HOME` move them.
+`$XDG_CACHE_HOME` and `$XDG_STATE_HOME` move them. They, and the log
+(`~/.cache/rega/rega.log`, or `$REGA_LOG`), name the files viewed, so rega
+creates them readable by their owner only.
 
 ## Environment
 
 | Variable | Effect |
 |----------|--------|
 | `OCIO` | the OpenColorIO config to show images through |
+| `REGA_LOCAL_ONLY` | `1`: for sites where images must stay on the machine holding them. rega refuses to run over ssh, where frames and copied text go to the terminal's machine, and never copies to the terminal's clipboard (in tmux, copies stay in tmux's buffer) |
+| `REGA_MAX_MEGAPIXELS` | the largest frame rega will load, in megapixels (default 1024); a file's header can claim any size |
 | `LC_TERMINAL` | names the terminal behind a tmux on the other side of ssh (`ghostty`, `kitty`): turns kitty graphics on there |

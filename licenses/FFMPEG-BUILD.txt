@@ -8,11 +8,11 @@ version 2.1 or later (LGPL-2.1.txt). It is built without --enable-gpl or
 
 Source
 
-  Version   9.0.1
-  Tarball   ffmpeg-9.0.1.tar.xz, attached to every rega release:
+  Version   9.0.2
+  Tarball   ffmpeg-9.0.2.tar.xz, attached to every rega release:
             https://github.com/Elyg/rega/releases
-  Origin    https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz
-  SHA-256   cf38e0e28c7e5605942c4a77755349b0145804a397af37eb1fb4c77cb237f635
+  Origin    https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz
+  SHA-256   8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e
   Changes   None. rega applies no patches to FFmpeg.
 
 
@@ -29,7 +29,7 @@ Linux, built with Nix (nix/package.nix)
     --enable-parser=h264,hevc,mjpeg,mpeg4video,mpegvideo,vp9
 
 
-macOS, built with Conan (conanfile.py and ConanCenter's ffmpeg/9.0.1 recipe)
+macOS, built with Conan (conanfile.py and ConanCenter's ffmpeg/9.0.2 recipe)
 
   ./configure
     --disable-shared --enable-static --enable-pic --enable-asm --arch=aarch64

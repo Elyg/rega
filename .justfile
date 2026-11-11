@@ -102,6 +102,15 @@ demo: fetch-demos build
 test: build
     ctest --preset {{ preset }}
 
+# Fuzz the image loaders (libFuzzer + ASan/UBSan) for `seconds` each: `just fuzz 300`
+[group('test')]
+fuzz seconds="60": _deps-once
+    cmake -S . -B build/fuzz -G Ninja -DCMAKE_TOOLCHAIN_FILE="$PWD/{{ conan_dir }}/conan_toolchain.cmake" \
+        -DCMAKE_BUILD_TYPE={{ config }} -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+        -DREGA_BUILD_FUZZERS=ON -DREGA_BUILD_TESTS=OFF
+    cmake --build build/fuzz
+    ./scripts/fuzz.sh build/fuzz {{ seconds }}
+
 # Regenerate the small movies under tests/data (committed)
 [group('test')]
 test-movies:

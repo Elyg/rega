@@ -112,6 +112,7 @@ add_library(rega_core STATIC
     src/util/Fuzzy.cpp
     src/util/Log.cpp
     src/util/Parallel.cpp
+    src/util/Sandbox.cpp
     src/util/Ui.cpp)
 target_include_directories(rega_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(rega_core PUBLIC
@@ -147,6 +148,7 @@ if(REGA_BUILD_TESTS)
         tests/test_panes.cpp
         tests/test_playbar.cpp
         tests/test_player.cpp
+        tests/test_sandbox.cpp
         tests/test_sequence_kitty.cpp
         tests/test_sheet.cpp
         tests/test_tour.cpp
@@ -159,6 +161,22 @@ if(REGA_BUILD_TESTS)
         REGA_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     include(GoogleTest)
     gtest_discover_tests(rega_tests)
+endif()
+
+# libFuzzer targets for the loaders, one per format (clang only): `just fuzz`.
+option(REGA_BUILD_FUZZERS "Build the loader fuzz targets" OFF)
+if(REGA_BUILD_FUZZERS)
+    foreach(_ext exr tif png jpg mov)
+        add_executable(rega_fuzz_${_ext} tests/fuzz/fuzz_loader.cpp)
+        target_link_libraries(rega_fuzz_${_ext} PRIVATE rega_core)
+        target_compile_definitions(rega_fuzz_${_ext} PRIVATE REGA_FUZZ_EXT=".${_ext}")
+        target_compile_options(rega_fuzz_${_ext} PRIVATE -fsanitize=fuzzer,address,undefined)
+        target_link_options(rega_fuzz_${_ext} PRIVATE -fsanitize=fuzzer,address,undefined)
+    endforeach()
+    # rega's own code instrumented too, so the fuzzer sees its coverage.
+    target_compile_options(rega_core PUBLIC -fsanitize=fuzzer-no-link,address,undefined
+        -fno-omit-frame-pointer -g)
+    target_link_options(rega_core PUBLIC -fsanitize=address,undefined)
 endif()
 
 install(TARGETS rega RUNTIME DESTINATION bin)

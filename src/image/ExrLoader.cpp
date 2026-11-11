@@ -459,8 +459,10 @@ private:
 		    !check(exr_get_compression(m_ctx, m_part, &comp),
 		           "salvage",
 		           "no compression") ||
-		    (comp != EXR_COMPRESSION_ZIP && comp != EXR_COMPRESSION_ZIPS);
-		if(m_failed && comp != EXR_COMPRESSION_LAST_TYPE)
+		    (comp != EXR_COMPRESSION_ZIP && comp != EXR_COMPRESSION_ZIPS) ||
+		    !sameWindow();
+		if(m_failed && comp != EXR_COMPRESSION_LAST_TYPE &&
+		   comp != EXR_COMPRESSION_ZIP && comp != EXR_COMPRESSION_ZIPS)
 		{
 			spdlog::debug("{}: salvage: compression {} is not zip, nothing to "
 			              "salvage",
@@ -475,10 +477,39 @@ private:
 		return m_ctx != nullptr;
 	}
 
+	/// Whether the file as opened here still has the data window the planes
+	/// were sized for: it was opened once already, and may have been replaced.
+	bool sameWindow() const
+	{
+		exr_attr_box2i_t dw{};
+		const Box2i& want = m_img.m_dataWindow;
+		const bool same =
+		    exr_get_data_window(m_ctx, m_part, &dw) == EXR_ERR_SUCCESS &&
+		    dw.min.x == want.m_x0 && dw.min.y == want.m_y0 &&
+		    dw.max.x == want.m_x1 && dw.max.y == want.m_y1;
+		if(!same)
+		{
+			spdlog::warn("{}: changed while it was read; nothing salvaged",
+			             m_path);
+		}
+		return same;
+	}
+
 	/// The chunk `ci` into the layer's planes, its first pixel at (x, y).
 	bool
 	decode(const exr_chunk_info_t& ci, int x, int y, const std::string& what)
 	{
+		// The chunk must lie inside the planes it is decoded into.
+		const int64_t left = static_cast<int64_t>(x) - m_img.m_dataWindow.m_x0;
+		const int64_t top = static_cast<int64_t>(y) - m_img.m_dataWindow.m_y0;
+		if(left < 0 || top < 0 || ci.width <= 0 || ci.height <= 0 ||
+		   left + ci.width > m_img.m_width || top + ci.height > m_img.m_height)
+		{
+			spdlog::warn("{}: {} lies outside the image; not shown",
+			             m_path,
+			             what);
+			return false;
+		}
 		spdlog::debug("{}: {}: {} bytes packed, {} unpacked, {}x{} at {}, {}",
 		              m_path,
 		              what,
@@ -720,6 +751,11 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 	try
 	{
 		Imf::MultiPartInputFile file(info.m_path.c_str());
+		// Probed earlier, opened again now: the file may be another one since.
+		if(l.m_part < 0 || l.m_part >= file.parts())
+		{
+			throw LoadError("EXR changed since it was read");
+		}
 		const Imf::Header& h = file.header(l.m_part);
 		Imath::Box2i dw = h.dataWindow();
 
@@ -727,6 +763,9 @@ LayerImage loadExrLayer(const ImageInfo& info, int layerIndex)
 		img.m_info = l;
 		img.m_dataWindow = toBox(dw);
 		img.m_displayWindow = toBox(h.displayWindow());
+		checkFrameSize(static_cast<int64_t>(dw.max.x) - dw.min.x + 1,
+		               static_cast<int64_t>(dw.max.y) - dw.min.y + 1,
+		               l.m_channels.size());
 		img.m_width = dw.max.x - dw.min.x + 1;
 		img.m_height = dw.max.y - dw.min.y + 1;
 

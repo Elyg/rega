@@ -202,6 +202,11 @@ void ColourManager::saveState() const
 	std::error_code ec;
 	fs::create_directories(m_statePath.parent_path(), ec);
 	std::ofstream out(m_statePath);
+	// Config paths name shows: for the owner only, also when the file is one
+	// an older rega left readable by others.
+	fs::permissions(m_statePath,
+	                fs::perms::owner_read | fs::perms::owner_write,
+	                ec);
 	// $OCIO is picked by the environment, not remembered as the choice.
 	const char* env = std::getenv("OCIO");
 	if(!(env && *env && m_configId == env))

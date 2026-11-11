@@ -11,9 +11,9 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e # main, 2026-11-11
+      - uses: DeterminateSystems/magic-nix-cache-action@f69a2d3e148e90223fe63ab6e3f6331f2e7e33dc # main, 2026-11-11
       - name: format-check
         run: nix develop .#ci -c ./scripts/format.sh --check
       - name: lint (naming)
@@ -22,6 +22,29 @@ jobs:
             cmake -S . -B build/ci -G Ninja -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug &&
             ./scripts/lint.sh build/ci'
 
+  # The loaders read files nobody vouches for: a minute of libFuzzer on each format,
+  # with AddressSanitizer and UBSan. A crash fails the job and uploads its input.
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e # main, 2026-11-11
+      - uses: DeterminateSystems/magic-nix-cache-action@f69a2d3e148e90223fe63ab6e3f6331f2e7e33dc # main, 2026-11-11
+      - name: build fuzz targets
+        run: |
+          nix develop .#fuzz -c bash -c '
+            cmake -S . -B build/fuzz -G Ninja -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+              -DREGA_BUILD_FUZZERS=ON -DREGA_BUILD_TESTS=OFF &&
+            cmake --build build/fuzz'
+      - name: fuzz
+        run: nix develop .#fuzz -c ./scripts/fuzz.sh build/fuzz 60
+      - if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-crashes
+          path: build/fuzz/crashes
+
   build:
     strategy:
       fail-fast: false
@@ -29,9 +52,9 @@ jobs:
         os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@main
-      - uses: DeterminateSystems/magic-nix-cache-action@main
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e # main, 2026-11-11
+      - uses: DeterminateSystems/magic-nix-cache-action@f69a2d3e148e90223fe63ab6e3f6331f2e7e33dc # main, 2026-11-11
       # Builds from nixpkgs deps and runs the unit tests (doCheck).
       - run: nix build .#default -L
       - name: guide keys reference is current (just guide-keys)

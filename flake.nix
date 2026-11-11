@@ -124,6 +124,13 @@
 
         devShells.guide = pkgs.mkShellNoCC { packages = guideTools; };
 
+        # The `ci` shell with clang: libFuzzer (-fsanitize=fuzzer) is clang's. What the
+        # fuzz job in ci.yml builds the loader fuzz targets in.
+        devShells.fuzz = (pkgs.mkShell.override { stdenv = hostLlvm.stdenv; }) {
+          inputsFrom = [ rega ];
+          packages = tools;
+        };
+
         devShells.default =
           if pkgs.stdenv.hostPlatform.isDarwin then
             # On macOS build with Apple's clang (Xcode CLT) so binaries link against the system SDK.

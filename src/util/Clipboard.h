@@ -12,6 +12,8 @@ namespace rega
 /// Put text on the system clipboard. In tmux, through tmux's buffer (`-w` also
 /// sets the outer terminal's clipboard); otherwise OSC 52, which Ghostty and
 /// kitty honour.
+/// With localOnly() nothing goes to the terminal: in tmux the text stays in
+/// tmux's buffer, outside it nothing is copied (false).
 [[nodiscard]] bool copyToClipboard(std::string_view text, bool tmux);
 
 /// Move to the neighbouring tmux pane ('L','R','U','D'); false outside tmux.

@@ -509,6 +509,16 @@ bool refreshCellSize(TermCaps& caps)
 	return true;
 }
 
+bool remoteSession()
+{
+	if(!env("TMUX").empty())
+	{
+		return tmuxClientOverSsh();
+	}
+	return !env("SSH_CONNECTION").empty() || !env("SSH_TTY").empty() ||
+	       !env("SSH_CLIENT").empty();
+}
+
 TermCaps detectCaps(const std::string& forced, const std::string& transfer)
 {
 	TermCaps caps;
