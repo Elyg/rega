@@ -1,7 +1,8 @@
 # rega
 
 Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG, JPEG, MOV and MP4.
-Draws images with the kitty graphics protocol, or half-blocks on any terminal.
+Draws images with the kitty graphics protocol, or half-blocks on any terminal, or in a
+window of its own (`rega --gui`).
 
 *rega* (reh-GAH, /rʲɛˈɡɐ/): Lithuanian for "sight".
 
@@ -26,6 +27,7 @@ rega a.exr:label=top:main ...      # a label on the image (tl tc tr bl bc br, to
 rega --dump foo.exr       # print layers, channels and metadata
 rega --doctor             # check the terminal / tmux setup
 rega --tutorial           # a guided tour on sample images (rendered into ~/.cache/rega/tutorial)
+rega --gui                # a window of its own: open, paste or pick recent files to start
 ```
 
 In the browser, mark two images (space) and press `d` to diff them; with

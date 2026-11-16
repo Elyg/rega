@@ -42,7 +42,7 @@ enum class Backdrop
 {
 	GREY,   ///< the UI's own (transparent: the terminal's or window's)
 	BLACK,  ///< black, the whole view
-	CHECKER ///< a checkerboard inside the frame, alpha composited over it
+	CHECKER ///< a checkerboard, the whole view; alpha composites over it
 };
 /// "grey" / "black" / "checker", and back (nullopt: none of them).
 const char* backdropName(Backdrop b);

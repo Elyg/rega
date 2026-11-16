@@ -26,6 +26,7 @@ Quote patterns with `#` so the shell leaves them alone. A plain frame path
 | `--diff A B` | compare A with B: A, B and \|A − B\| tiled. Repeat for more pairs; paths can carry labels. See [Compare](../viewer/compare.md) |
 | `--dump FILE` | print the layers, channels and metadata, then exit |
 | `--doctor` | check the terminal and tmux setup for images and copy, then exit (1 if a check fails). See [Terminal setup](../setup.md) |
+| `--gui` | open in [a window](../window.md) of its own instead of the terminal (not in the static Linux binary; on Windows always) |
 | `--tutorial` | render the sample images into `~/.cache/rega/tutorial` (first run) and open them with a guide. See [tutorial](../tutorial.md) |
 | `--graphics MODE` | `auto` (default), `kitty` or `halfblock`. See [setup](../setup.md) |
 | `--transfer MODE` | how kitty images reach the terminal: `auto` (default) picks `shm` (shared memory) locally outside tmux, `file` (temp files) in tmux, `direct` (inline) over ssh. Change it only if images stay blank |
@@ -44,6 +45,9 @@ Quote patterns with `#` so the shell leaves them alone. A plain frame path
 | `~/.cache/rega/tutorial/` | the tutorial's images |
 | `~/.local/state/rega/annotations` | [annotations](../panes/annotations.md), between sessions |
 | `~/.local/state/rega/colour` | the [colour](../panes/colour.md) choices, per config |
+| `~/.local/state/rega/backdrop` | the [backdrop](../viewer/display.md#backdrop) |
+| `~/.local/state/rega/window` | [the window](../window.md)'s size, text size and last folder |
+| `~/.local/state/rega/recent` | the window's recent items |
 
 `$XDG_CACHE_HOME` and `$XDG_STATE_HOME` move them. They, and the log
 (`~/.cache/rega/rega.log`, or `$REGA_LOG`), name the files viewed, so rega

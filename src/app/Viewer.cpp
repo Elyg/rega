@@ -1302,6 +1302,34 @@ bool Viewer::event(Event e)
 	return e.is_mouse() ? mouseEvent(e, info) : keyEvent(e, info);
 }
 
+bool Viewer::wheelZoom(double notches, int x, int y)
+{
+	if(m_goto || m_state.m_sources.empty() || notches == 0)
+	{
+		return false;
+	}
+	const bool overSide = (rightPanelOpen() && inside(m_sideBox, x, y)) ||
+	                      (leftPanelOpen() && inside(m_leftBox, x, y));
+	const bool onPlaybar = m_state.frameCount() > 1 && m_playbar.contains(x, y);
+	if(overSide || onPlaybar)
+	{
+		return false;
+	}
+	const double f = std::pow(WHEEL_ZOOM_STEP, notches);
+	if(m_tile)
+	{
+		zoomSheet(f,
+		          m_ctx.m_svc.info(m_state.currentFramePath()),
+		          std::pair(x - m_sheetBox.x_min + 0.5,
+		                    y - m_sheetBox.y_min + 0.5));
+	}
+	else
+	{
+		zoomBy(f, m_viewSlot->imageCoordAt(x, y));
+	}
+	return true;
+}
+
 bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 {
 	auto m = e.mouse();
@@ -1527,6 +1555,12 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 	{
 		m_scrubX = m.x;
 		m_scrubCarry = 0;
+	}
+	else if(pressed && !overSide && m.button == Mouse::Left && !m.control)
+	{
+		// Nothing to scrub (a still, tiles of stills): a left drag pans,
+		// as the right one does. The click still selects a tile.
+		m_dragPan = pointerAt(m);
 	}
 	if(!pressed || (m.button != Mouse::Left && !pick))
 	{
@@ -2251,12 +2285,26 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 	const int sel = selectedTile(info);
 	Elements children;
 	std::vector<Box> boxes;
-	for(const auto& [i, p] : visible)
+	// The window draws pixels, not cells: each tile's image goes exactly
+	// where the sheet has it, its box the cells around that. Fitted to
+	// boxes rounded to cells, tiles grew and shrank a cell at a time as
+	// the sheet zoomed smoothly, unevenly.
+	const bool exact = m_ctx.window();
+	for(const auto& [i, placed] : visible)
 	{
+		TilePlacement p = placed;
+		if(exact)
+		{
+			p.m_boxX0 = std::max(0, static_cast<int>(std::floor(p.m_x0)));
+			p.m_boxY0 = std::max(0, static_cast<int>(std::floor(p.m_y0)));
+			p.m_boxX1 = std::min(area.m_w, static_cast<int>(std::ceil(p.m_x1)));
+			p.m_boxY1 = std::min(area.m_h, static_cast<int>(std::ceil(p.m_y1)));
+		}
 		Tile& t = m_tiles.at(i);
 		ImageSlot& slot = *t.m_slot;
 		slot.setMaxPixels(pixelCap());
 		slot.setTerminalCache(m_player.playing() || scrubbing());
+		slot.setFill(true);
 		const TileRef& ref = m_tileRefs[i];
 		const ImageInfoPtr& ti = infos[i];
 		// All of it on a fitted sheet: fit, as ever. Otherwise the zoom
@@ -2265,7 +2313,7 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 		ViewParams view;
 		view.m_fitFrame = true;
 		t.m_zoom = 0;
-		const bool whole = m_sheetView.m_zoom <= 1.0 &&
+		const bool whole = !exact && m_sheetView.m_zoom <= 1.0 &&
 		                   p.m_boxX0 == std::lround(p.m_x0) &&
 		                   p.m_boxX1 == std::lround(p.m_x1) &&
 		                   p.m_boxY0 == std::lround(p.m_y0) &&
@@ -2300,8 +2348,10 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 			// single view does (see render()).
 			li = slot.shown();
 		}
+		// Still rendering: its box, so the sheet keeps its shape.
+		const Color fill = Color::RGB(TILE_FILL[0], TILE_FILL[1], TILE_FILL[2]);
 		Element img = err ? text("error") | color(Color::Red) | center
-		                  : text("…") | dim | center;
+		                  : text("…") | dim | center | bgcolor(fill);
 		if(li)
 		{
 			// A contact sheet shows the frame outline at most.
@@ -2327,13 +2377,37 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 				// `T`: what the tile is, under any annotations there. Files
 				// numbered as tiled: versions of one file in folders of
 				// their own share a name. A layer's name says it all.
+				// Fitted to the image in the tile (the overlay's room, the
+				// letterbox aside): a small one keeps its number and the end
+				// of its name, a tiny one nothing.
+				int frameCols = p.m_boxX1 - p.m_boxX0;
+				int frameRows = p.m_boxY1 - p.m_boxY0;
+				if(ti)
+				{
+					const Box2i dw = ti->displayWindow();
+					const double k = std::min((p.m_x1 - p.m_x0) * pxX /
+					                              std::max(1, dw.width()),
+					                          (p.m_y1 - p.m_y0) * pxY /
+					                              std::max(1, dw.height()));
+					frameCols =
+					    std::min(frameCols,
+					             static_cast<int>(dw.width() * k / pxX));
+					frameRows =
+					    std::min(frameRows,
+					             static_cast<int>(dw.height() * k / pxY));
+				}
 				const std::string name =
-				    bySource
-				        ? tileNameLabel(i,
-				                        m_state.m_sources[src].m_entry.m_name)
-				    : ref.m_layer.empty() ? std::string("rgba")
-				                          : ref.m_layer;
-				over[static_cast<int>(Slot::BL)].push_back({{name}});
+				    fitTileLabel(bySource ? i : -1,
+				                 bySource
+				                     ? m_state.m_sources[src].m_entry.m_name
+				                 : ref.m_layer.empty() ? std::string("rgba")
+				                                       : ref.m_layer,
+				                 frameCols,
+				                 frameRows);
+				if(!name.empty())
+				{
+					over[static_cast<int>(Slot::BL)].push_back({{name}});
+				}
 			}
 			addLabels(over, src, lookup, decoded);
 			markIncomplete(over, li);

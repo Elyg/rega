@@ -682,12 +682,26 @@ Rgba8Image renderLayer(const LayerImage& img,
 			}
 		}
 	}
-	// `B` black: the whole view, around the frame too.
-	if(disp.m_backdrop == Backdrop::BLACK)
+	// `B` black or checker: the whole view, around the frame too.
+	if(disp.m_backdrop != Backdrop::GREY)
 	{
-		for(size_t i = 3; i < out.m_pixels.size(); i += 4)
+		for(int y = 0; y < out.m_height; ++y)
 		{
-			out.m_pixels[i] = 255; // RGB is 0 where nothing was drawn
+			uint8_t* row =
+			    &out.m_pixels[static_cast<size_t>(y) * out.m_width * 4];
+			for(int x = 0; x < out.m_width; ++x)
+			{
+				uint8_t* px = &row[x * 4];
+				if(px[3] == 0)
+				{
+					// RGB is 0 where nothing was drawn: black as it is.
+					if(checker)
+					{
+						px[0] = px[1] = px[2] = checkerAt(x, y);
+					}
+					px[3] = 255;
+				}
+			}
 		}
 	}
 	if(m.m_scale >= PIXEL_GRID_MIN_SCALE)

@@ -29,7 +29,8 @@ up (`rgba (1/6)`). `T` writes the layer's name on the image.
 
 `t` tiles every layer side by side: the quickest way to see what a render wrote. The top
 line names the selected tile; `T` writes each tile's name on it. In the tiled view, `+` /
-`-` and the wheel zoom all the tiles together, `hjkl` pans, `f` fits and `z` goes 1:1.
+`-` and the wheel zoom all the tiles together, `hjkl` or a drag pans, `f` fits and `z`
+goes 1:1.
 Click a tile to select it; `Enter` opens it on its own. `t` again, or `q`, goes back to
 one image.
 
@@ -38,7 +39,9 @@ The [layers pane](../panes/layers.md) (`5`) lists them all.
 ## Several images
 
 Open several images (marked in the browser, or named on the command line) and `n` / `p`
-step between them. `t` tiles the images instead of the layers.
+step between them. `t` tiles the images instead of the layers; there `T` numbers each
+name (`[1] comp.exr`, `[2] comp.exr`), for versions that differ only by folder. Small
+tiles keep the number and the end of the name, or just the number.
 
 <video src="../media/viewer-tiles.mp4" autoplay loop muted playsinline></video>
 

@@ -28,8 +28,10 @@
 #include <cstring>
 #include <deque>
 #include <filesystem>
+#include <fstream>
 #include <functional>
 #include <mutex>
+#include <sstream>
 #include <stb_image.h> // its code is in StbLoader.cpp
 #include <string>
 #include <unordered_map>
@@ -325,6 +327,19 @@ public:
 				                    static_cast<float>(p.m_at->m_w),
 				                    static_cast<float>(p.m_at->m_h)};
 				SDL_SetRenderClipRect(m_r, &clip);
+				if(p.m_fill)
+				{
+					SDL_SetRenderDrawColor(m_r,
+					                       TILE_FILL[0],
+					                       TILE_FILL[1],
+					                       TILE_FILL[2],
+					                       255);
+					const SDL_FRect box{static_cast<float>(clip.x),
+					                    static_cast<float>(clip.y),
+					                    static_cast<float>(clip.w),
+					                    static_cast<float>(clip.h)};
+					SDL_RenderFillRect(m_r, &box);
+				}
 				SDL_RenderTexture(m_r, tex, nullptr, &dst);
 				SDL_SetRenderClipRect(m_r, nullptr);
 			}
@@ -608,6 +623,46 @@ void dialogDone(void* userdata, const char* const* files, int /*filter*/)
 
 } // namespace
 
+namespace
+{
+
+/// One `--gui-script` line: its command and words.
+struct ScriptLine
+{
+	std::string m_op;
+	std::vector<std::string> m_args;
+};
+
+std::vector<ScriptLine> loadScript(const std::string& file)
+{
+	std::vector<ScriptLine> out;
+	std::ifstream in(file);
+	std::string line;
+	while(std::getline(in, line))
+	{
+		std::istringstream words(line);
+		ScriptLine l;
+		if(!(words >> l.m_op) || l.m_op.starts_with('#'))
+		{
+			continue;
+		}
+		for(std::string w; words >> w;)
+		{
+			l.m_args.push_back(w);
+		}
+		out.push_back(std::move(l));
+	}
+	return out;
+}
+
+float scriptNumber(const ScriptLine& l, size_t i)
+{
+	return i < l.m_args.size() ? std::strtof(l.m_args[i].c_str(), nullptr)
+	                           : 0.0f;
+}
+
+} // namespace
+
 int run(const AppOptions& given, const GuiOptions& gui)
 {
 	log::redirectToFile();
@@ -627,13 +682,18 @@ int run(const AppOptions& given, const GuiOptions& gui)
 	const fs::path settingsPath = Settings::defaultPath();
 	Settings settings = Settings::load(settingsPath);
 	const bool shot = !gui.m_screenshot.empty();
+	// --gui-script: input and frames from a file, offscreen as a shot is.
+	const std::vector<ScriptLine> script = gui.m_script.empty()
+	                                           ? std::vector<ScriptLine>{}
+	                                           : loadScript(gui.m_script);
+	const bool scripted = !gui.m_script.empty();
 	SDL_WindowFlags flags =
 	    SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY;
-	if(settings.m_maximized && !shot)
+	if(settings.m_maximized && !shot && !scripted)
 	{
 		flags |= SDL_WINDOW_MAXIMIZED;
 	}
-	if(shot)
+	if(shot || scripted)
 	{
 		flags |= SDL_WINDOW_HIDDEN;
 	}
@@ -718,7 +778,7 @@ int run(const AppOptions& given, const GuiOptions& gui)
 	// last time (from a launcher the current directory is the install
 	// folder, or /), else home.
 	AppOptions opts = given;
-	if(!shot && !opts.m_tutorial)
+	if(!shot && !scripted && !opts.m_tutorial)
 	{
 		opts.m_recentFile = Recent::defaultPath();
 	}
@@ -771,6 +831,11 @@ int run(const AppOptions& given, const GuiOptions& gui)
 		SDL_StartTextInput(window);
 
 		std::vector<std::string> dropped;
+		size_t scriptPc = 0;
+		bool scriptDone = false;
+		auto scriptAt = std::chrono::steady_clock::now();
+		std::string scriptShot, scriptFramesDir;
+		int scriptFramesLeft = 0, scriptFrame = 0;
 		std::string title;
 		bool dirty = true;
 		auto lastActivity = std::chrono::steady_clock::now();
@@ -797,9 +862,10 @@ int run(const AppOptions& given, const GuiOptions& gui)
 		while(!host.quitting())
 		{
 			SDL_Event ev;
-			bool got = dirty  ? SDL_PollEvent(&ev)
-			           : shot ? SDL_WaitEventTimeout(&ev, 50)
-			                  : SDL_WaitEvent(&ev);
+			bool got = dirty      ? SDL_PollEvent(&ev)
+			           : scripted ? SDL_WaitEventTimeout(&ev, 4)
+			           : shot     ? SDL_WaitEventTimeout(&ev, 50)
+			                      : SDL_WaitEvent(&ev);
 			bool closing = false;
 			while(got)
 			{
@@ -888,7 +954,20 @@ int run(const AppOptions& given, const GuiOptions& gui)
 						}
 						break;
 					case SDL_EVENT_MOUSE_WHEEL:
+					{
 						pointer(ev.wheel.mouse_x, ev.wheel.mouse_y);
+						// Over the image: zoom by what was turned (a touchpad's
+						// fractions too), smoothly; else notches, as a
+						// terminal sends them.
+						const auto [cx, cy] =
+						    mouse.cells(ev.wheel.mouse_x, ev.wheel.mouse_y);
+						if(app.wheelZoom(ev.wheel.y,
+						                 static_cast<int>(std::floor(cx)),
+						                 static_cast<int>(std::floor(cy))))
+						{
+							dirty = true;
+							break;
+						}
 						for(const auto& m : mouse.wheel(ev.wheel.y,
 						                                ev.wheel.mouse_x,
 						                                ev.wheel.mouse_y,
@@ -897,6 +976,7 @@ int run(const AppOptions& given, const GuiOptions& gui)
 							send(ftxui::Event::Mouse("", m));
 						}
 						break;
+					}
 					case SDL_EVENT_DROP_BEGIN:
 						dropped.clear();
 						break;
@@ -969,6 +1049,82 @@ int run(const AppOptions& given, const GuiOptions& gui)
 				}
 				lastActivity = std::chrono::steady_clock::now();
 			}
+			// --gui-script: the next line once the last wait is over.
+			if(scripted && frames > 0 && !scriptDone &&
+			   std::chrono::steady_clock::now() >= scriptAt)
+			{
+				if(scriptPc >= script.size())
+				{
+					scriptDone = true;
+					host.quit();
+				}
+				else
+				{
+					const ScriptLine& l = script[scriptPc++];
+					const SDL_WindowID id = SDL_GetWindowID(window);
+					auto push = [&](SDL_Event e) { SDL_PushEvent(&e); };
+					if(l.m_op == "wait")
+					{
+						scriptAt = std::chrono::steady_clock::now() +
+						           std::chrono::milliseconds(
+						               static_cast<int>(scriptNumber(l, 0)));
+					}
+					else if(l.m_op == "wheel")
+					{
+						SDL_Event e{};
+						e.type = SDL_EVENT_MOUSE_WHEEL;
+						e.wheel.windowID = id;
+						e.wheel.mouse_x = scriptNumber(l, 0);
+						e.wheel.mouse_y = scriptNumber(l, 1);
+						e.wheel.y = scriptNumber(l, 2);
+						push(e);
+					}
+					else if(l.m_op == "drag" || l.m_op == "rdrag")
+					{
+						const float x0 = scriptNumber(l, 0),
+						            y0 = scriptNumber(l, 1),
+						            x1 = scriptNumber(l, 2),
+						            y1 = scriptNumber(l, 3);
+						const int steps =
+						    std::max(1, static_cast<int>(scriptNumber(l, 4)));
+						SDL_Event e{};
+						e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+						e.button.windowID = id;
+						e.button.button = l.m_op == "rdrag" ? SDL_BUTTON_RIGHT
+						                                    : SDL_BUTTON_LEFT;
+						e.button.down = true;
+						e.button.x = x0;
+						e.button.y = y0;
+						push(e);
+						for(int k = 1; k <= steps; ++k)
+						{
+							SDL_Event m{};
+							m.type = SDL_EVENT_MOUSE_MOTION;
+							m.motion.windowID = id;
+							m.motion.x = x0 + (x1 - x0) * k / steps;
+							m.motion.y = y0 + (y1 - y0) * k / steps;
+							push(m);
+						}
+						e.type = SDL_EVENT_MOUSE_BUTTON_UP;
+						e.button.down = false;
+						e.button.x = x1;
+						e.button.y = y1;
+						push(e);
+					}
+					else if(l.m_op == "shot" && !l.m_args.empty())
+					{
+						scriptShot = l.m_args[0];
+						dirty = true;
+					}
+					else if(l.m_op == "frames" && l.m_args.size() >= 2)
+					{
+						scriptFramesDir = l.m_args[0];
+						scriptFramesLeft = static_cast<int>(scriptNumber(l, 1));
+						std::error_code ec;
+						fs::create_directories(scriptFramesDir, ec);
+					}
+				}
+			}
 			// --gui-screenshot: once nothing has happened for a moment (the
 			// pictures are in), or at the latest after 20 s.
 			const auto now = std::chrono::steady_clock::now();
@@ -996,6 +1152,28 @@ int run(const AppOptions& given, const GuiOptions& gui)
 				SDL_SetWindowTitle(window, title.c_str());
 			}
 
+			// --gui-script: what it asked to see.
+			if(!scriptShot.empty() || scriptFramesLeft > 0)
+			{
+				std::vector<uint8_t> rgba;
+				int w = 0, h = 0;
+				if(painter.read(rgba, w, h))
+				{
+					std::string out = scriptShot;
+					if(out.empty())
+					{
+						char name[16];
+						std::snprintf(name,
+						              sizeof name,
+						              "%04d.png",
+						              scriptFrame++);
+						out = (fs::path(scriptFramesDir) / name).string();
+						--scriptFramesLeft;
+					}
+					stbi_write_png(out.c_str(), w, h, 4, rgba.data(), w * 4);
+				}
+				scriptShot.clear();
+			}
 			if(takeShot)
 			{
 				std::vector<uint8_t> rgba;
@@ -1024,7 +1202,7 @@ int run(const AppOptions& given, const GuiOptions& gui)
 
 		SDL_StopTextInput(window);
 		// Remember the window as it was left.
-		if(!shot)
+		if(!shot && !scripted)
 		{
 			const SDL_WindowFlags f = SDL_GetWindowFlags(window);
 			settings.m_maximized = (f & SDL_WINDOW_MAXIMIZED) != 0;

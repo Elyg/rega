@@ -37,7 +37,7 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 | `+ / - / wheel` | zoom |
 | `f / z` | fit / 1:1 |
 | `hjkl ←↓↑→ HJKL` | pan (shift = faster) |
-| `right drag` | pan (middle button too) |
+| `right drag` | pan (middle button too; left on a still or tiles) |
 | `t` | tiles: all layers, or all marked images |
 | `+- wheel hjkl` | tiles: zoom / pan the tiled view (f fit, z 1:1) |
 | `click` | select tile / focus pane |

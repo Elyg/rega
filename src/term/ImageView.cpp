@@ -996,7 +996,8 @@ void ImageSlot::draw(ftxui::Screen& screen,
 				                       cols,
 				                       rows,
 				                       m_native,
-				                       nativeRect(key, *img));
+				                       nativeRect(key, *img),
+				                       m_fill);
 			}
 			else
 			{

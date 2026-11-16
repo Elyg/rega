@@ -331,6 +331,17 @@ void App::open(const std::vector<OpenArg>& given,
 	}
 }
 
+bool App::wheelZoom(double notches, int x, int y)
+{
+	if(m_mode != Mode::VIEWER || m_help || m_stats ||
+	   !m_viewer.wheelZoom(notches, x, y))
+	{
+		return false;
+	}
+	m_host.redraw();
+	return true;
+}
+
 void App::pasteText(std::string_view text)
 {
 	if(m_help)

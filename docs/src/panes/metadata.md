@@ -34,7 +34,8 @@ it; matching rows stay under their part. `Enter` keeps the filter, `Esc` clears 
 ## Copying
 
 `y` copies the line (`name: value`), `Y` only the value. `v` selects lines from the
-cursor; a mouse drag or `Ctrl+click` selects rows too. Then `y` / `Y` copy them all.
+cursor; a mouse drag or `Ctrl+click` selects rows too. Then `y` / `Y` copy them all. A
+click on the selected row again, or below the rows, unselects.
 
 ## On a comparison
 

@@ -6,6 +6,7 @@
 
 - [Install](install.md)
 - [Terminal setup](setup.md)
+- [The window](window.md)
 - [First run: the tutorial](tutorial.md)
 
 # Using rega

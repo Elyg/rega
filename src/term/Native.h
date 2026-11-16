@@ -46,6 +46,9 @@ public:
 		/// picture made for the view before, moved and scaled to the view
 		/// now until its own is ready: a pan follows the pointer at once).
 		std::optional<Rect> m_at;
+		/// With m_at: the box filled first (TILE_FILL), as a tile still
+		/// rendering looks.
+		bool m_fill = false;
 	};
 
 	/// A frame starts: forget the last one's placements (UI thread).
@@ -65,7 +68,8 @@ public:
 	           int shownCols,
 	           int shownRows,
 	           std::shared_ptr<const Rgba8Image> bitmap,
-	           std::optional<Rect> at = std::nullopt);
+	           std::optional<Rect> at = std::nullopt,
+	           bool fill = false);
 	[[nodiscard]] const std::vector<Placement>& placements() const noexcept
 	{
 		return m_placed;
@@ -80,6 +84,9 @@ private:
 	std::vector<Placement> m_placed;
 	uint32_t m_nextId = 0;
 };
+
+/// A tile's box while its picture renders (a shade above the window's grey).
+inline constexpr uint8_t TILE_FILL[3] = {40, 42, 47};
 
 /// The character a cell under a native picture holds (U+100000, private use).
 inline const std::string NATIVE_CELL = "\xF4\x80\x80\x80";

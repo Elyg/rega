@@ -2,6 +2,8 @@
 
 #include "util/Ui.h"
 
+#include <ftxui/screen/string.hpp>
+
 #include <algorithm>
 #include <cmath>
 #include <iterator>
@@ -119,6 +121,33 @@ std::string sourceKey(const Source& s)
 std::string tileNameLabel(int tile, const std::string& name)
 {
 	return "[" + std::to_string(tile + 1) + "] " + name;
+}
+
+std::string fitTileLabel(int tile, const std::string& name, int cols, int rows)
+{
+	// A label line is a cell high, with a cell of margin either side.
+	constexpr int MIN_ROWS = 3, MIN_COLS = 5, MIN_NAME = 6;
+	if(rows < MIN_ROWS || cols < MIN_COLS)
+	{
+		return {};
+	}
+	const int room = cols - 2;
+	const std::string whole = tile < 0 ? name : tileNameLabel(tile, name);
+	if(ftxui::string_width(whole) <= room)
+	{
+		return whole;
+	}
+	if(tile < 0)
+	{
+		return room >= MIN_NAME ? ui::ellipsizeEnd(name, room) : std::string();
+	}
+	const std::string num = "[" + std::to_string(tile + 1) + "]";
+	const int rest = room - static_cast<int>(num.size()) - 1;
+	if(rest >= MIN_NAME)
+	{
+		return num + " " + ui::ellipsizeStart(name, rest);
+	}
+	return static_cast<int>(num.size()) <= room ? num : std::string();
 }
 
 std::vector<OpenItem> openItems(const std::vector<OpenArg>& args,

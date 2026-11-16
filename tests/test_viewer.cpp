@@ -3,11 +3,14 @@
 #include "app/Viewer.h"
 #include "image/Loader.h"
 #include "image/Sequence.h"
+#include "term/Native.h"
 
 #include <ftxui/dom/node.hpp>
 #include <ftxui/screen/screen.hpp>
 #include <ftxui/screen/terminal.hpp>
 #include <gtest/gtest.h>
+
+#include <cmath>
 
 using namespace rega;
 using namespace regatest;
@@ -787,6 +790,230 @@ TEST_F(ViewerTest, TNumbersTiledFilesButNotLayers)
 	EXPECT_EQ(out.find("] rgba"), std::string::npos);
 	EXPECT_EQ(out.find("] diffuse"), std::string::npos);
 	EXPECT_EQ(tileNameLabel(0, "a.exr"), "[1] a.exr");
+}
+
+TEST(TileLabels, FitTheTile)
+{
+	// Room for it all; else the number and the name's end; else the number.
+	EXPECT_EQ(fitTileLabel(0, "shot.1001.exr", 40, 10), "[1] shot.1001.exr");
+	EXPECT_EQ(fitTileLabel(44, "shot.1045.exr", 15, 4), "[45] …045.exr");
+	EXPECT_EQ(fitTileLabel(44, "shot.1045.exr", 8, 4), "[45]");
+	EXPECT_EQ(fitTileLabel(44, "shot.1045.exr", 40, 2), "");  // too short
+	EXPECT_EQ(fitTileLabel(-1, "diffuse", 20, 4), "diffuse"); // a layer
+	EXPECT_EQ(fitTileLabel(-1, "specular_indirect", 10, 4), "specula…");
+	EXPECT_EQ(fitTileLabel(-1, "specular", 6, 4), "");
+}
+
+TEST_F(ViewerTest, TheWindowsWheelZoomsByWhatWasTurned)
+{
+	m_v.open({layersEntry()});
+	draw();
+	ASSERT_TRUE(m_v.wheelZoom(1.0, 40, 10));
+	const double one = state().m_view.m_zoom;
+	ASSERT_TRUE(m_v.wheelZoom(0.25, 40, 10)); // a touchpad's quarter notch
+	EXPECT_NEAR(state().m_view.m_zoom,
+	            one * std::pow(Viewer::WHEEL_ZOOM_STEP, 0.25),
+	            1e-9);
+	ASSERT_TRUE(m_v.wheelZoom(-1.25, 40, 10));
+	EXPECT_NEAR(state().m_view.m_zoom, one / Viewer::WHEEL_ZOOM_STEP, 1e-9);
+}
+
+TEST_F(ViewerTest, TheWheelZoomsTheSheetSteadily)
+{
+	std::vector<Entry> entries;
+	for(int i = 0; i < 30; ++i)
+	{
+		const fs::path f = m_dir / ("f" + std::to_string(100 + i) + ".exr");
+		writeExr(f, {"R", "G", "B"}, 16, 9);
+		entries.push_back(entryForPath(f));
+	}
+	m_v.open(entries, true);
+	drawSheet();
+	auto drawn = [&]
+	{
+		ftxui::Screen screen(80, 24);
+		ftxui::Render(screen, m_v.render());
+	};
+	// In, then out past fit, each step on from the last, at a corner.
+	double last = m_v.sheetView().m_zoom;
+	for(int k = 0; k < 12; ++k)
+	{
+		ASSERT_TRUE(m_v.wheelZoom(1.0, 60, 5));
+		drawn();
+		EXPECT_GE(m_v.sheetView().m_zoom, last) << "in, step " << k;
+		last = m_v.sheetView().m_zoom;
+	}
+	for(int k = 0; k < 30; ++k)
+	{
+		ASSERT_TRUE(m_v.wheelZoom(-1.0, 60, 5));
+		drawn();
+		EXPECT_LE(m_v.sheetView().m_zoom, last) << "out, step " << k;
+		last = m_v.sheetView().m_zoom;
+	}
+}
+
+TEST(ViewerNative, AStandInTileLandsWhereItsOwnPictureWill)
+{
+	Context c;
+	NativeImages native;
+	c.m_caps.m_graphics = GraphicsMode::NATIVE;
+	c.m_caps.m_native = &native;
+	c.m_caps.m_cellW = 9;
+	c.m_caps.m_cellH = 19;
+	const fs::path dir = freshDir("native-tiles");
+	std::vector<Entry> entries;
+	for(int i = 0; i < 30; ++i)
+	{
+		const fs::path f = dir / ("f" + std::to_string(100 + i) + ".exr");
+		writeExr(f, {"R", "G", "B"}, 64, 36);
+		entries.push_back(entryForPath(f));
+	}
+	std::atomic<int> redraws{0};
+	c.m_ctx.m_redraw = [&] { ++redraws; };
+	Viewer v{c.m_ctx, [] {}};
+	v.open(entries, true);
+	ftxui::Screen screen(120, 40);
+	auto draw = [&]
+	{
+		native.begin();
+		ftxui::Render(screen, v.render());
+	};
+	// Drawn until every tile shows its own picture (no stand-ins).
+	auto settle = [&]
+	{
+		for(int k = 0; k < 400; ++k)
+		{
+			draw();
+			const bool own =
+			    !native.placements().empty() &&
+			    std::ranges::none_of(native.placements(),
+			                         [](const auto& p)
+			                         { return p.m_at.has_value(); });
+			if(own && c.m_svc.pendingJobs() == 0)
+			{
+				draw();
+				return true;
+			}
+			std::this_thread::sleep_for(std::chrono::milliseconds(5));
+		}
+		return false;
+	};
+	// Where the image is in a placement, window px: its opaque pixels.
+	struct R
+	{
+		double x0, y0, x1, y1;
+	};
+	auto imageRect = [&](const NativeImages::Placement& p)
+	{
+		const Rgba8Image& b = *p.m_bitmap;
+		int x0 = b.m_width, y0 = b.m_height, x1 = -1, y1 = -1;
+		for(int y = 0; y < b.m_height; ++y)
+		{
+			for(int x = 0; x < b.m_width; ++x)
+			{
+				if(b.m_pixels[(static_cast<size_t>(y) * b.m_width + x) * 4 + 3])
+				{
+					x0 = std::min(x0, x);
+					x1 = std::max(x1, x + 1);
+					y0 = std::min(y0, y);
+					y1 = std::max(y1, y + 1);
+				}
+			}
+		}
+		const double bx = p.m_x * 9.0, by = p.m_y * 19.0;
+		double sx = p.m_cols * 9.0 / b.m_width,
+		       sy = p.m_rows * 19.0 / b.m_height;
+		double ox = bx, oy = by;
+		if(p.m_at)
+		{
+			sx = p.m_at->m_w / b.m_width;
+			sy = p.m_at->m_h / b.m_height;
+			ox = bx + p.m_at->m_x;
+			oy = by + p.m_at->m_y;
+		}
+		// As drawn: clipped to the box.
+		const double bw = p.m_cols * 9.0, bh = p.m_rows * 19.0;
+		return R{std::clamp(ox + x0 * sx, bx, bx + bw),
+		         std::clamp(oy + y0 * sy, by, by + bh),
+		         std::clamp(ox + x1 * sx, bx, bx + bw),
+		         std::clamp(oy + y1 * sy, by, by + bh)};
+	};
+	ASSERT_TRUE(settle());
+	for(double step : {-1.0, -1.0, 2.0, 3.0, -2.0})
+	{
+		ASSERT_TRUE(v.wheelZoom(step, 70, 10));
+		draw(); // stand-ins, before the tiles render again
+		std::map<uint32_t, R> standIn;
+		for(const auto& p : native.placements())
+		{
+			if(p.m_at)
+			{
+				standIn[p.m_id] = imageRect(p);
+			}
+		}
+		ASSERT_TRUE(settle());
+		int compared = 0;
+		for(const auto& p : native.placements())
+		{
+			if(auto it = standIn.find(p.m_id); it != standIn.end())
+			{
+				const R own = imageRect(p);
+				const R& s = it->second;
+				// Inside it: a stand-in has only what showed before (a tile
+				// partly off screen, part of it), where it will be.
+				constexpr double PX = 3; // rounding to output pixels
+				EXPECT_GE(s.x0, own.x0 - PX)
+				    << "step " << step << " id " << p.m_id;
+				EXPECT_GE(s.y0, own.y0 - PX)
+				    << "step " << step << " id " << p.m_id;
+				EXPECT_LE(s.x1, own.x1 + PX)
+				    << "step " << step << " id " << p.m_id;
+				EXPECT_LE(s.y1, own.y1 + PX)
+				    << "step " << step << " id " << p.m_id;
+				// And where both have it, the same place: the far edges
+				// of a whole stand-in meet its own picture's.
+				if(s.x1 - s.x0 > own.x1 - own.x0 - 2 * PX)
+				{
+					EXPECT_NEAR(s.x0, own.x0, PX) << "step " << step;
+				}
+				++compared;
+			}
+		}
+		EXPECT_GT(compared, 0) << "step " << step;
+	}
+}
+
+TEST_F(ViewerTest, ALeftDragPansTilesOfStills)
+{
+	std::vector<Entry> entries;
+	for(int i = 0; i < 12; ++i)
+	{
+		const fs::path f = m_dir / ("s" + std::to_string(100 + i) + ".exr");
+		writeExr(f, {"R", "G", "B"}, 16, 9);
+		entries.push_back(entryForPath(f));
+	}
+	m_v.open(entries, true);
+	drawSheet();
+	for(int k = 0; k < 4; ++k)
+	{
+		ASSERT_TRUE(m_v.wheelZoom(1.0, 40, 12)); // in, so there is room
+	}
+	drawSheet();
+	auto mouse = [&](int x, int y, ftxui::Mouse::Motion motion)
+	{
+		ftxui::Mouse m;
+		m.button = ftxui::Mouse::Left;
+		m.motion = motion;
+		m.x = x;
+		m.y = y;
+		press(Event::Mouse("", m));
+	};
+	const double cx = m_v.sheetView().m_cx;
+	mouse(40, 12, ftxui::Mouse::Pressed);
+	mouse(30, 12, ftxui::Mouse::Moved); // the sheet follows: further right
+	mouse(30, 12, ftxui::Mouse::Released);
+	EXPECT_GT(m_v.sheetView().m_cx, cx);
+	EXPECT_FALSE(m_v.playing());
 }
 
 TEST_F(ViewerTest, BCyclesTheBackdropAndZeroKeepsIt)

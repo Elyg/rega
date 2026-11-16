@@ -16,7 +16,8 @@ void NativeImages::place(ftxui::Screen& screen,
                          int shownCols,
                          int shownRows,
                          std::shared_ptr<const Rgba8Image> bitmap,
-                         std::optional<Rect> at)
+                         std::optional<Rect> at,
+                         bool fill)
 {
 	if(cols <= 0 || rows <= 0 || shownCols <= 0 || shownRows <= 0 || !bitmap)
 	{
@@ -37,7 +38,7 @@ void NativeImages::place(ftxui::Screen& screen,
 			px.foreground_color = fg;
 		}
 	}
-	m_placed.push_back({id, x, y, cols, rows, std::move(bitmap), at});
+	m_placed.push_back({id, x, y, cols, rows, std::move(bitmap), at, fill});
 }
 
 uint32_t nativeCellId(uint8_t r, uint8_t g, uint8_t b) noexcept

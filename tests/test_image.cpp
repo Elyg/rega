@@ -454,7 +454,8 @@ TEST(Render, BackdropsGreyBlackAndChecker)
 
 	d.m_backdrop = rega::Backdrop::CHECKER; // half of it through the image
 	out = rega::renderLayer(img, 4, 6, {}, d);
-	EXPECT_EQ(at(out, 0, 0)[3], 0); // outside the frame: as grey
+	EXPECT_EQ(at(out, 0, 0)[3], 255); // around the frame too
+	EXPECT_TRUE(at(out, 0, 0)[0] == 56 || at(out, 0, 0)[0] == 84);
 	const int shown = at(out, 0, 2)[0];
 	EXPECT_TRUE(shown == 28 || shown == 42) << shown; // 56 / 84, halved
 	EXPECT_EQ(at(out, 0, 2)[3], 255);

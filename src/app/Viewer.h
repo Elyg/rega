@@ -52,6 +52,12 @@ public:
 	}
 	/// Handle an event; true when consumed.
 	[[nodiscard]] bool event(ftxui::Event e);
+	/// The window's wheel, `notches` turned (fractions from a touchpad, up
+	/// positive) at cell (`x`, `y`): over the image or the tiles it zooms by
+	/// as much, smoothly (true); elsewhere it is left to the wheel's events.
+	[[nodiscard]] bool wheelZoom(double notches, int x, int y);
+	/// Zoom per notch of the window's smooth wheel (`+` / `-` step 1.25).
+	static constexpr double WHEEL_ZOOM_STEP = 1.12;
 	[[nodiscard]] ftxui::Element render();
 	/// A playback tick (the ticker woke the UI). True if the frame advanced.
 	bool tick();

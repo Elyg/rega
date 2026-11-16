@@ -12,6 +12,7 @@ rega --tutorial
 ```
 
 The first run renders the images (a few seconds); later runs open them straight away.
+In [the window](window.md), the start screen's **Tutorial** does the same.
 rega opens in the [browser](browser.md), on the tutorial folder. A card in the
 bottom-right corner gives one step at a time. Each step names its keys; they turn green
 as you press them, and the step ticks off when all of them are done.

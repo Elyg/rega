@@ -9,7 +9,8 @@ multi-layer OpenEXR files and sequences, plus TIFF, PNG, JPEG, MOV and MP4.
 
 Use it on your own machine, or on one you reach through a terminal, such as a farm node
 or a remote workstation: log in there with ssh from Ghostty or kitty, run rega on that
-machine, and the images show in your terminal.
+machine, and the images show in your terminal. Or run `rega --gui` for
+[a window](window.md) of its own, no terminal needed.
 
 ## Where to start
 
@@ -63,4 +64,5 @@ press the keys shown in the corner of each clip.
 In [Ghostty](https://ghostty.org) and [kitty](https://sw.kovidgoyal.net/kitty/), images
 are full resolution, also through tmux and ssh. Every other terminal shows half-blocks,
 a coarser picture ([side by side](setup.md#other-terminals-half-blocks)).
-[Terminal setup](setup.md) has the details.
+[Terminal setup](setup.md) has the details. [The window](window.md) is always full
+resolution.

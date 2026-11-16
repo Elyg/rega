@@ -19,6 +19,13 @@ struct GuiOptions
 	/// Hidden `--gui-keys <text>`: typed once the window is up, as if at the
 	/// keyboard ("\n" is Enter, "\e" Escape), for screenshots of a state.
 	std::string m_keys;
+	/// Hidden `--gui-script <file>`: after --gui-keys, timed input and
+	/// frames saved, for looking at motion (zooming, panning) frame by
+	/// frame. One command a line: `wait MS`, `wheel X Y DY` (window
+	/// coordinates; DY notches, fractions too), `drag X0 Y0 X1 Y1 STEPS`
+	/// (left button), `shot PNG`, `frames DIR N` (the next N frames as
+	/// DIR/NNNN.png). It quits at the end.
+	std::string m_script;
 };
 
 /// Run rega in a window of its own until it is closed or quits; returns the

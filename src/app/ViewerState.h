@@ -57,6 +57,11 @@ std::string sourceKey(const Source& s);
 /// `T`'s label on the tile of a file, tile `tile` (from 0) of the sheet:
 /// "[1] comp.exr".
 std::string tileNameLabel(int tile, const std::string& name);
+/// `T`'s label fitted to a tile `cols` x `rows` cells: tileNameLabel()
+/// whole when it fits (`tile` < 0: just `name`, a layer's); else the number
+/// and the end of the name ("[45] …1045.exr", where frames and versions
+/// differ); else the number alone; on a tile too small to read, nothing.
+std::string fitTileLabel(int tile, const std::string& name, int cols, int rows);
 
 /// Something to view: an image or sequence, or with `m_b`, a diff pair.
 struct OpenItem

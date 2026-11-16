@@ -420,6 +420,7 @@ int main(int argc, char** argv)
 	// Hidden: draw the window once things settle, save it as a PNG, quit.
 	cli.add_option("--gui-screenshot", guiOpts.m_screenshot)->group("");
 	cli.add_option("--gui-keys", guiOpts.m_keys)->group("");
+	cli.add_option("--gui-script", guiOpts.m_script)->group("");
 #endif
 	CLI11_PARSE(cli, argc, argv);
 #if defined(__APPLE__) && defined(REGA_GUI)

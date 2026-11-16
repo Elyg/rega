@@ -42,6 +42,8 @@ lines.
 With the mouse: a click selects, a double-click opens, a click in the parent column goes
 there. Drag the column dividers to resize them.
 
+In [the window](window.md), `q` goes back to the start screen instead of quitting.
+
 `.` shows hidden files.
 
 ## Filter
@@ -71,7 +73,10 @@ stays a file.
 Marking picks images to open together, like a selection that stays as you move between
 folders. `space` marks the selected image (again: unmarks it); `a` marks every image in
 the folder (again: unmarks them). Marked rows show in yellow, in the order you marked
-them. `Esc` clears every mark (after the filter, if one is set).
+them. `Esc` clears every mark (after the filter, if one is set). With the mouse,
+`Shift+click` marks the images from the selected row to the clicked one, `Ctrl+click`
+marks or unmarks one (many terminals keep `Shift+click` for themselves; the window
+doesn't).
 
 With marks, `Enter` or `l` on any image opens the marked images, not the one under the
 cursor:

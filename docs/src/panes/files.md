@@ -17,8 +17,9 @@ The files pane, at the bottom left, lists the viewer's sources. A source is one 
 this list: a single image, or a whole sequence. `j` / `k` move the cursor; `Enter` (or a
 click) shows the source under it.
 
-`J` / `K` move a source down or up the list. The list's order is also the order of the
-tiled view and of `n` / `p`. `d` drops a source from the viewer.
+`J` / `K` move a source down or up the list, or drag it with the mouse. The list's order
+is also the order of the tiled view and of `n` / `p`. `d` drops a source from the
+viewer.
 
 `e` turns a sequence into one source per frame (up to 500), for example to tile frames
 side by side, and back.

@@ -89,6 +89,10 @@ public:
 	/// The window's Ctrl+V: on the start screen, paths for its list; while
 	/// typing, the text; else paths to open, as a drop would.
 	void pasteText(std::string_view text);
+	/// The window's wheel, `notches` turned at cell (`x`, `y`): the viewer
+	/// zooms by as much when over the image (true), else the caller sends
+	/// the wheel's events as a terminal would.
+	bool wheelZoom(double notches, int x, int y);
 	/// The window's cell size changed (font size, display scale).
 	void setCellSize(int w, int h);
 	/// The directory the browser shows.

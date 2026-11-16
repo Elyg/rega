@@ -119,6 +119,13 @@ public:
 	{
 		m_maxPixels = n;
 	}
+	/// The window: a tile's box shows as a box under a stand-in picture
+	/// (one made for the view before), so the sheet keeps its shape while
+	/// its tiles render again.
+	void setFill(bool fill) noexcept
+	{
+		m_fill = fill;
+	}
 	[[nodiscard]] int maxPixels() const noexcept
 	{
 		return m_maxPixels;
@@ -314,6 +321,7 @@ private:
 	double m_quality = 1.0; ///< output px per terminal px
 	int m_areaW = 0, m_areaH = 0;
 	int m_maxPixels = 4'000'000;
+	bool m_fill = false; ///< see setFill()
 
 	/// The slot's encode thread (kitty with `ready` only; started on first
 	/// use). Newest request wins: one waiting, one being prepared, one done.

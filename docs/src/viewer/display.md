@@ -6,7 +6,7 @@
 > **TL;DR** `c` shows colour; `r` `g` `b` `a` show one channel as grey; `u` shows luma.
 > `e` / `E` change exposure by half a stop, `y` / `Y` change gamma, `0` resets the
 > display. `s` turns the view transform off and on. `w` outlines the display and data
-> windows. `!` paints NaN and inf pixels.
+> windows. `!` paints NaN and inf pixels. `B` changes the backdrop.
 
 The display settings change how the image looks, never the file. They stay as you step
 between images and frames.
@@ -72,6 +72,17 @@ selection, the windows plus the selection, the windows, none.
 `!` paints NaN pixels magenta and infinite ones cyan, so a broken render shows where it
 broke. The [inspector](../panes/inspector.md) counts them per layer; step through the
 layers (`[` / `]`) to find the one that broke.
+
+## Backdrop
+
+`B` cycles what shows around the image:
+
+1. **grey**, the screen's own (where it starts)
+2. **black**, the whole view
+3. **checker**, a checkerboard; transparent pixels show it through their alpha
+
+It holds for the viewer, tiles and the browser's preview, `0` leaves it, and rega
+remembers it next time.
 
 ## Annotations
 
