@@ -4,8 +4,12 @@
 
 #include <algorithm>
 #include <charconv>
+#include <cmath>
+#include <cstdlib>
 #include <fstream>
+#include <string>
 #include <string_view>
+#include <type_traits>
 
 namespace fs = std::filesystem;
 
@@ -29,11 +33,26 @@ std::string_view trim(std::string_view s)
 template <typename T>
 void number(std::string_view v, T& out)
 {
-	T x{};
-	const auto [p, ec] = std::from_chars(v.data(), v.data() + v.size(), x);
-	if(ec == std::errc() && p == v.data() + v.size())
+	if constexpr(std::is_floating_point_v<T>)
 	{
-		out = x;
+		// Not from_chars: Apple's libc++ has it for floats only from macOS 26.
+		// strtod in the "C" locale (rega never calls setlocale): '.' decimals.
+		const std::string s(v);
+		char* end = nullptr;
+		const double x = std::strtod(s.c_str(), &end);
+		if(!s.empty() && end == s.c_str() + s.size() && std::isfinite(x))
+		{
+			out = static_cast<T>(x);
+		}
+	}
+	else
+	{
+		T x{};
+		const auto [p, ec] = std::from_chars(v.data(), v.data() + v.size(), x);
+		if(ec == std::errc() && p == v.data() + v.size())
+		{
+			out = x;
+		}
 	}
 }
 
