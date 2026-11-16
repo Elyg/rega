@@ -49,6 +49,9 @@ TEST(GuiInput, CtrlLetterIsItsControlCharacter)
 	EXPECT_EQ(keyEvent(SDLK_U, SDL_KMOD_RCTRL), Event::CtrlU);
 	EXPECT_EQ(keyEvent(SDLK_N, SDL_KMOD_LCTRL), Event::CtrlN);
 	EXPECT_EQ(keyEvent(SDLK_P, SDL_KMOD_LCTRL), Event::CtrlP);
+	EXPECT_EQ(keyEvent(SDLK_C, SDL_KMOD_LCTRL), Event::CtrlC); // copies
+	EXPECT_EQ(command(SDLK_C, SDL_KMOD_LCTRL), Command::NONE);
+	EXPECT_EQ(command(SDLK_V, SDL_KMOD_LCTRL), Command::PASTE);
 }
 
 TEST(GuiInput, TypingKeysComeAsText)
@@ -95,8 +98,14 @@ TEST(GuiInput, MouseInCellsAtTheWindowsPixelDensity)
 	EXPECT_EQ(press->motion, Mouse::Pressed);
 	EXPECT_TRUE(press->control);
 
-	// Moving within the cell says nothing; into the next, a drag of Left.
-	EXPECT_FALSE(m.moved(13.0f, 26.0f, SDL_KMOD_NONE));
+	// Dragging, every move counts, within the cell too (a pan follows the
+	// pointer finer than a cell); cells() has the fraction.
+	auto within = m.moved(13.0f, 26.0f, SDL_KMOD_NONE);
+	ASSERT_TRUE(within);
+	EXPECT_EQ(within->x, 2);
+	EXPECT_EQ(within->button, Mouse::Left);
+	EXPECT_DOUBLE_EQ(m.cells(13.0f, 26.0f).first, 2.6);
+	EXPECT_DOUBLE_EQ(m.cells(13.0f, 26.0f).second, 2.6);
 	auto drag = m.moved(15.0f, 26.0f, SDL_KMOD_NONE);
 	ASSERT_TRUE(drag);
 	EXPECT_EQ(drag->x, 3);
@@ -110,6 +119,8 @@ TEST(GuiInput, MouseInCellsAtTheWindowsPixelDensity)
 	auto hover = m.moved(30.0f, 26.0f, SDL_KMOD_NONE);
 	ASSERT_TRUE(hover);
 	EXPECT_EQ(hover->button, Mouse::None);
+	// Hovering, only into another cell.
+	EXPECT_FALSE(m.moved(31.0f, 26.0f, SDL_KMOD_NONE));
 	EXPECT_FALSE(m.button(SDL_BUTTON_X1, true, 0, 0, SDL_KMOD_NONE));
 }
 

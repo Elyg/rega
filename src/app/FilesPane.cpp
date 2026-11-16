@@ -24,22 +24,70 @@ void FilesPane::show()
 	m_state.m_focus = Focus::FILES;
 }
 
-void FilesPane::click(int y)
+int FilesPane::rowAt(int y) const
+{
+	if(y < m_listBox.y_min || y > m_listBox.y_max)
+	{
+		return NO_ROW;
+	}
+	for(size_t i = 0; i < m_rowBoxes.size(); ++i)
+	{
+		if(y >= m_rowBoxes[i].y_min && y <= m_rowBoxes[i].y_max)
+		{
+			return static_cast<int>(i) - 1;
+		}
+	}
+	return NO_ROW;
+}
+
+bool FilesPane::click(int y)
 {
 	// A row below the title: a file to show, or an annotation row.
 	m_state.m_focus = Focus::FILES;
-	const int row = y - m_box.y_min - 1;
 	if(m_ann.isOpen())
 	{
-		m_ann.click(row);
+		m_ann.click(y - m_box.y_min - 1);
+		return false;
 	}
-	else if(row == 0)
+	const int row = rowAt(y);
+	if(row == -1)
 	{
 		m_cursor = -1; // the global row
 	}
-	else if(row > 0 && row <= static_cast<int>(m_state.m_sources.size()))
+	else if(row >= 0 && row < static_cast<int>(m_state.m_sources.size()))
 	{
-		m_cursor = m_state.m_current = row - 1;
+		m_cursor = m_state.m_current = row;
+		return true;
+	}
+	return false;
+}
+
+void FilesPane::dragTo(int y)
+{
+	const int n = static_cast<int>(m_state.m_sources.size());
+	if(m_ann.isOpen() || m_cursor < 0 || m_cursor >= n)
+	{
+		return;
+	}
+	int to = rowAt(y);
+	if(y < m_listBox.y_min)
+	{
+		to = m_cursor - 1; // above: the list scrolls up a row at a time
+	}
+	else if(y > m_listBox.y_max)
+	{
+		to = m_cursor + 1;
+	}
+	else if(to == NO_ROW)
+	{
+		return;
+	}
+	to = std::clamp(to, 0, n - 1); // the global row stays first
+	while(m_cursor != to)
+	{
+		const int next = m_cursor + (to > m_cursor ? 1 : -1);
+		moveSource(m_cursor, next);
+		m_cursor = next;
 	}
 }
 
@@ -61,6 +109,7 @@ Element FilesPane::render()
 	// Names are cut to fit it, as a row too wide makes ftxui squeeze all of
 	// its cells (the numbers vanished).
 	const int width = m_state.leftPanelWidth() - 1;
+	m_rowBoxes.assign(static_cast<size_t>(n) + 1, Box{});
 	Elements rows;
 	{
 		Element row = hbox(
@@ -71,7 +120,7 @@ Element FilesPane::render()
 		{
 			row = row | inverted | ftxui::focus;
 		}
-		rows.push_back(row);
+		rows.push_back(row | reflect(m_rowBoxes[0]));
 	}
 	for(int i = 0; i < n; ++i)
 	{
@@ -99,13 +148,13 @@ Element FilesPane::render()
 		{
 			row = row | inverted | ftxui::focus;
 		}
-		rows.push_back(row);
+		rows.push_back(row | reflect(m_rowBoxes[static_cast<size_t>(i) + 1]));
 	}
 	return vbox({
 	           text(ui::paneTitle("─[3]─Files", m_state.leftPanelWidth())) |
 	               (focus ? color(Color::Green) | bold : dim),
 	           vbox(std::move(rows)) | vscroll_indicator | yframe |
-	               size(HEIGHT, LESS_THAN, m_rows),
+	               size(HEIGHT, LESS_THAN, m_rows) | reflect(m_listBox),
 	           focus ? ui::paneHints("", {{"l", "text"}, {"D", "clear all"}})
 	                 : ui::paneHints("", {{"3", "focus"}}),
 	       }) |

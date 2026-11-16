@@ -42,7 +42,7 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 | `click` | select tile / focus pane |
 | `drag` | pane edges: width; files title: height |
 | `Enter (tile)` | open the selected tile |
-| `T` | layer name on the image (tiles: each tile's) |
+| `T` | layer name on the image (tiles: each tile's;<br>tiled files numbered: [1] name, [2] name, …) |
 | `Ctrl+click` | pick colour<br>[x, y] as in Nuke: from the bottom-left |
 <!-- ANCHOR_END: viewer-image -->
 
@@ -59,7 +59,7 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 | `left drag` | scrub (on the image or the playbar) |
 | `playbar` | click: go to frame, wheel: step |
 | `F` | cycle playback fps |
-| `P` | playback: capped resolution (keeps up) / full res |
+| `P` | playback: capped resolution (keeps up) / full res<br>the window plays at full res until P caps it |
 | `S` | stats: link, picture cost, caches (anywhere) |
 <!-- ANCHOR_END: viewer-sequence -->
 
@@ -99,6 +99,7 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 | `wheel { }` | scroll |
 | `/  click` | filter (Esc clear) / move there |
 | `v  drag` | select rows (Ctrl+click: to there) |
+| `click` | the selected row again, or below the rows: none |
 | `y  Y` | copy line / value |
 | `d` | diff tile: differences / both whole |
 <!-- ANCHOR_END: pane-metadata -->
@@ -110,6 +111,7 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 |-----|------|
 | `j k  Enter` | move / show that source |
 | `J / K  d` | move it down / up, drop it |
+| `drag` | a file up or down the list: it moves there |
 | `e` | sequence ⇄ its frames (up to 500) |
 | `l / h` | into a row's annotations / back |
 | `D D` | clear all annotations (in a row: its own) |
@@ -169,8 +171,30 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 | `Ctrl+O` | open images or movies (the system's dialog) |
 | `Ctrl+Shift+O` | open a folder |
 | `drop` | files or folders on the window: open them |
+| `q (browser)` | back to the start screen (Q quits) |
+| `Ctrl+C` | copy: the path (browser, image), the rows (2, 4) |
+| `Ctrl+V` | paste: into what is typed, else paths to open |
 | `Ctrl+= / -` | bigger / smaller text |
 | `Ctrl+0` | text size back to the default |
 | `F11` | full screen<br>on macOS, ⌘ works as Ctrl here |
 <!-- ANCHOR_END: window -->
+
+<!-- ANCHOR: start -->
+### Start screen
+
+| Key | Does |
+|-----|------|
+| `o` | open images or movies (the system's dialog) |
+| `f` | open a folder |
+| `b` | browse: the file browser, where it was left |
+| `t` | the tutorial: a tour on sample images |
+| `Ctrl+V` | paste paths, one a line: listed to open together |
+| `a` | type a path (Enter adds it, Esc done) |
+| `x  X` | remove the selected path / clear the list |
+| `1 … 9` | open a recent one again |
+| `j/k ↑/↓` | move (the pointer too) |
+| `Enter  click` | open what is selected |
+| `x` | a recent one: forget it |
+| `q / Q` | quit |
+<!-- ANCHOR_END: start -->
 

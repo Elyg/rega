@@ -116,6 +116,11 @@ std::string sourceKey(const Source& s)
 	return s.m_diffA ? key + " - " + sourceKey(Source{*s.m_diffA}) : key;
 }
 
+std::string tileNameLabel(int tile, const std::string& name)
+{
+	return "[" + std::to_string(tile + 1) + "] " + name;
+}
+
 std::vector<OpenItem> openItems(const std::vector<OpenArg>& args,
                                 std::vector<std::string>& missing)
 {

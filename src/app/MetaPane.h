@@ -142,6 +142,9 @@ private:
 	bool m_open = false;
 	int m_cursor = 0;
 	int m_anchor = -1; ///< visual-line selection start, -1 = none
+	/// The cursor's rows are selected (a click on them, or off the rows,
+	/// unselects: nothing is highlighted or copied until the next move).
+	bool m_selected = true;
 	bool m_pendingG = false;
 	int m_scroll = 0;         ///< first visible row
 	bool m_filtering = false; ///< `/`: typing the filter

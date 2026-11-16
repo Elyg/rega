@@ -175,7 +175,20 @@ Element statusLine(StatusLine line, int width)
 	}
 	if(!hintText.empty() && string_width(hintText) <= room)
 	{
-		parts.push_back(text(hintText) | dim);
+		const size_t at =
+		    line.m_lit.empty() ? std::string::npos : hintText.find(line.m_lit);
+		if(at == std::string::npos)
+		{
+			parts.push_back(text(hintText) | dim);
+		}
+		else
+		{
+			parts.push_back(text(hintText.substr(0, at)) | dim);
+			parts.push_back(text(std::string(line.m_lit)) | bold |
+			                color(Color::Yellow));
+			parts.push_back(text(hintText.substr(at + line.m_lit.size())) |
+			                dim);
+		}
 	}
 	if(withTail)
 	{

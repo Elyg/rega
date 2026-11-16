@@ -88,7 +88,9 @@ add_library(rega_core STATIC
     src/app/MetaPane.cpp
     src/app/Playbar.cpp
     src/app/Player.cpp
+    src/app/Recent.cpp
     src/app/Sheet.cpp
+    src/app/StartScreen.cpp
     src/app/Tour.cpp
     src/app/Tutorial.cpp
     src/app/Viewer.cpp
@@ -195,6 +197,7 @@ if(REGA_BUILD_TESTS)
         tests/test_player.cpp
         tests/test_sequence_kitty.cpp
         tests/test_sheet.cpp
+        tests/test_start.cpp
         tests/test_tour.cpp
         tests/test_tutorial.cpp
         tests/test_util_ui.cpp

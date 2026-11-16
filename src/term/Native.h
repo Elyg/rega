@@ -6,6 +6,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -28,6 +29,11 @@ using ScreenCell =
 class NativeImages
 {
 public:
+	/// Where a picture goes, in window pixels from its box's top-left.
+	struct Rect
+	{
+		double m_x = 0, m_y = 0, m_w = 0, m_h = 0;
+	};
 	/// One picture on screen this frame.
 	struct Placement
 	{
@@ -36,6 +42,10 @@ public:
 		int m_cols = 0, m_rows = 0;
 		/// Pixels, m_cols x m_rows cells of TermCaps::m_cellW x m_cellH.
 		std::shared_ptr<const Rgba8Image> m_bitmap;
+		/// Set: the bitmap drawn there instead, clipped to the box (a
+		/// picture made for the view before, moved and scaled to the view
+		/// now until its own is ready: a pan follows the pointer at once).
+		std::optional<Rect> m_at;
 	};
 
 	/// A frame starts: forget the last one's placements (UI thread).
@@ -54,7 +64,8 @@ public:
 	           int rows,
 	           int shownCols,
 	           int shownRows,
-	           std::shared_ptr<const Rgba8Image> bitmap);
+	           std::shared_ptr<const Rgba8Image> bitmap,
+	           std::optional<Rect> at = std::nullopt);
 	[[nodiscard]] const std::vector<Placement>& placements() const noexcept
 	{
 		return m_placed;

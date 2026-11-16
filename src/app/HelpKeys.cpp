@@ -5,6 +5,31 @@
 namespace rega::help
 {
 
+const std::vector<Section>& start()
+{
+	static const std::vector<Section> SECTIONS{
+	    {.m_id = "start",
+	     .m_title = "Start screen",
+	     .m_heading = false,
+	     .m_rows =
+	         {
+	             {"o", "open images or movies (the system's dialog)"},
+	             {"f", "open a folder"},
+	             {"b", "browse: the file browser, where it was left"},
+	             {"t", "the tutorial: a tour on sample images"},
+	             {"Ctrl+V", "paste paths, one a line: listed to open together"},
+	             {"a", "type a path (Enter adds it, Esc done)"},
+	             {"x  X", "remove the selected path / clear the list"},
+	             {"1 … 9", "open a recent one again"},
+	             {"j/k ↑/↓", "move (the pointer too)"},
+	             {"Enter  click", "open what is selected"},
+	             {"x", "a recent one: forget it"},
+	             {"q / Q", "quit"},
+	         }},
+	};
+	return SECTIONS;
+}
+
 const std::vector<Section>& browser()
 {
 	static const std::vector<Section> SECTIONS{
@@ -54,7 +79,8 @@ const std::vector<Section>& viewer()
 	             {"click", "select tile / focus pane"},
 	             {"drag", "pane edges: width; files title: height"},
 	             {"Enter (tile)", "open the selected tile"},
-	             {"T", "layer name on the image (tiles: each tile's)"},
+	             {"T", "layer name on the image (tiles: each tile's;"},
+	             {"", "tiled files numbered: [1] name, [2] name, …)"},
 	             {"Ctrl+click", "pick colour"},
 	             {"", "[x, y] as in Nuke: from the bottom-left"},
 	         }},
@@ -73,6 +99,7 @@ const std::vector<Section>& viewer()
 	             {"playbar", "click: go to frame, wheel: step"},
 	             {"F", "cycle playback fps"},
 	             {"P", "playback: capped resolution (keeps up) / full res"},
+	             {"", "the window plays at full res until P caps it"},
 	             {"S", "stats: link, picture cost, caches (anywhere)"},
 	         }},
 	    {.m_id = "viewer-display",
@@ -111,6 +138,7 @@ const std::vector<Section>& viewer()
 	             {"wheel { }", "scroll"},
 	             {"/  click", "filter (Esc clear) / move there"},
 	             {"v  drag", "select rows (Ctrl+click: to there)"},
+	             {"click", "the selected row again, or below the rows: none"},
 	             {"y  Y", "copy line / value"},
 	             {"d", "diff tile: differences / both whole"},
 	         }},
@@ -121,6 +149,7 @@ const std::vector<Section>& viewer()
 	         {
 	             {"j k  Enter", "move / show that source"},
 	             {"J / K  d", "move it down / up, drop it"},
+	             {"drag", "a file up or down the list: it moves there"},
 	             {"e", "sequence ⇄ its frames (up to 500)"},
 	             {"l / h", "into a row's annotations / back"},
 	             {"D D", "clear all annotations (in a row: its own)"},
@@ -228,6 +257,9 @@ const std::vector<Section>& window()
 	             {"Ctrl+O", "open images or movies (the system's dialog)"},
 	             {"Ctrl+Shift+O", "open a folder"},
 	             {"drop", "files or folders on the window: open them"},
+	             {"q (browser)", "back to the start screen (Q quits)"},
+	             {"Ctrl+C", "copy: the path (browser, image), the rows (2, 4)"},
+	             {"Ctrl+V", "paste: into what is typed, else paths to open"},
 	             {"Ctrl+= / -", "bigger / smaller text"},
 	             {"Ctrl+0", "text size back to the default"},
 	             {"F11", "full screen"},
@@ -248,6 +280,7 @@ std::string markdown()
 	appendSections(out, "Browser", browser());
 	appendSections(out, "Viewer", viewer());
 	appendSections(out, "Window", window());
+	appendSections(out, "Start screen", start());
 	out.pop_back(); // one newline at the end
 	return out;
 }

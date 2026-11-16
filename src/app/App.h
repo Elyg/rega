@@ -5,6 +5,8 @@
 #include "app/Browser.h"
 #include "app/FileWatcher.h"
 #include "app/Host.h"
+#include "app/Recent.h"
+#include "app/StartScreen.h"
 #include "app/Tour.h"
 #include "app/Viewer.h"
 #include "image/ImageService.h"
@@ -41,6 +43,12 @@ struct AppOptions
 	/// Decoded-image cache budget.
 	std::uint64_t m_cacheBytes = ImageService::DEFAULT_BUDGET;
 	bool m_tutorial = false; ///< show the tutorial tour (see Tour)
+	/// The window, given nothing to open: the start screen first (the
+	/// browser, at m_paths, one key away).
+	bool m_start = false;
+	/// The window: where what is opened is remembered for the start screen
+	/// (empty: nowhere; the terminal never remembers).
+	std::filesystem::path m_recentFile;
 	/// Inline transfer: bytes a second the link carries (0: unpaced).
 	double m_linkRate = kitty::Transmitter::DEFAULT_LINK_RATE;
 	/// Terminal image memory played frames may keep (inline only; 0 none).
@@ -72,19 +80,46 @@ public:
 	/// images, sequences in the viewer): files dropped on the window, or
 	/// picked in its Open dialog.
 	void openPaths(const std::vector<std::string>& paths);
+	/// The window: the pointer is at (`x`, `y`) cells, fractions kept; the
+	/// next mouse event is there.
+	void setPointer(double x, double y)
+	{
+		m_ctx.m_pointer = std::pair(x, y);
+	}
+	/// The window's Ctrl+V: on the start screen, paths for its list; while
+	/// typing, the text; else paths to open, as a drop would.
+	void pasteText(std::string_view text);
 	/// The window's cell size changed (font size, display scale).
 	void setCellSize(int w, int h);
 	/// The directory the browser shows.
 	[[nodiscard]] std::filesystem::path browserDir() const;
+	/// What the window may remember (recent list, last folder): not the
+	/// tutorial's images.
+	[[nodiscard]] bool rememberable(const std::string& path) const;
 	/// What the window's title shows: the image or directory open.
 	[[nodiscard]] std::string title() const;
 
 private:
 	enum class Mode
 	{
+		START, ///< the window's start screen
 		BROWSER,
 		VIEWER
 	};
+
+	/// The start screen's Tutorial: render its images unless they are there
+	/// (in the background, progress in the status bar), then browse them
+	/// with the tour.
+	void startTutorial();
+	/// The window's Ctrl+C: copy what is selected (see onEvent).
+	void copyShortcut();
+	/// Show the viewer; closing it comes back to where this was.
+	void toViewer();
+	/// Show the start screen (re-listing what still exists).
+	void toStart();
+	/// Remember `entries` opened (Recent): their paths, sequences as
+	/// patterns; too many as their folder.
+	void remember(const std::vector<Entry>& entries);
 
 	[[nodiscard]] ftxui::Element renderHelp();
 	/// `S`: what the link carries, what a picture costs, what is cached.
@@ -114,6 +149,9 @@ private:
 	ColourManager m_colour;
 	AppContext m_ctx;
 	Mode m_mode = Mode::BROWSER;
+	Mode m_back = Mode::BROWSER; ///< where closing the viewer goes
+	Recent m_recent;
+	bool m_remember = false; ///< opens now go to m_recent
 	bool m_help = false;
 	bool m_stats = false;    ///< `S`: the link and cache overlay
 	int m_helpScroll = 0;    ///< first help line shown (short terminals)
@@ -121,12 +159,15 @@ private:
 
 	Browser m_browser;
 	Viewer m_viewer;
+	StartScreen m_start;
 	std::optional<Tour> m_tour; ///< --tutorial only
 	std::vector<std::filesystem::path> m_watched;
 	/// --transfer auto in tmux: re-checks the clients attached.
 	std::jthread m_clientCheck;
-	std::jthread m_linkPoll; ///< in tmux: what it sent clients over ssh
-	FileWatcher m_watcher;   ///< last: stops before the rest goes
+	std::jthread m_linkPoll;    ///< in tmux: what it sent clients over ssh
+	std::jthread m_tutorialJob; ///< rendering the tutorial's images
+	bool m_tutorialBusy = false;
+	FileWatcher m_watcher; ///< last: stops before the rest goes
 };
 
 } // namespace rega

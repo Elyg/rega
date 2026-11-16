@@ -104,6 +104,22 @@ TEST(Ui, StatusLineShowsHintsAndTailWhenTheyFit)
 	EXPECT_EQ(row, " frame 1              q quit  cache 1/2 ");
 }
 
+TEST(Ui, StatusLineLightsTheHintThatApplies)
+{
+	// The lit part bold and not dim, the rest dim.
+	Element el =
+	    ui::statusLine({.m_hints = "e expand  q quit", .m_lit = "e expand"},
+	                   30);
+	Screen screen(30, 1);
+	Render(screen, el);
+	const int x =
+	    30 - static_cast<int>(std::string("e expand  q quit ").size());
+	EXPECT_EQ(screen.PixelAt(x, 0).character, "e");
+	EXPECT_TRUE(screen.PixelAt(x, 0).bold);
+	EXPECT_FALSE(screen.PixelAt(x, 0).dim);
+	EXPECT_TRUE(screen.PixelAt(x + 10, 0).dim); // "q quit"
+}
+
 TEST(Ui, StatusLineDropsHintsFirstThenTheTail)
 {
 	auto line = [](int width)

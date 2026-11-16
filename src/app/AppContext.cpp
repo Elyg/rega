@@ -17,7 +17,10 @@ namespace rega
 
 std::unique_ptr<ImageSlot> newSlot(AppContext& ctx)
 {
-	return std::make_unique<ImageSlot>(ctx.m_caps, ctx.m_kitty, ctx.m_redraw);
+	auto slot =
+	    std::make_unique<ImageSlot>(ctx.m_caps, ctx.m_kitty, ctx.m_redraw);
+	slot->setMaxPixels(ctx.pixelBudget());
+	return slot;
 }
 
 void AppContext::copyText(std::string_view text)
@@ -40,13 +43,15 @@ bool AppContext::tmuxSelectPane(char dir) const
 
 Element AppContext::statusLine(std::string_view hints,
                                Elements status,
-                               std::string_view tail) const
+                               std::string_view tail,
+                               std::string_view lit) const
 {
 	return ui::statusLine({.m_message = m_message,
 	                       .m_hints = hints,
 	                       .m_status = std::move(status),
 	                       .m_tail = tail,
-	                       .m_warning = m_caps.m_note},
+	                       .m_warning = m_caps.m_note,
+	                       .m_lit = lit},
 	                      ui::screenSize().dimx);
 }
 

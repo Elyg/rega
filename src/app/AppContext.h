@@ -27,6 +27,9 @@ std::unique_ptr<ImageSlot> newSlot(AppContext& ctx);
 /// Pixels sent to the terminal per draw (kitty), shared by the images on
 /// screen.
 constexpr int TOTAL_PIXEL_BUDGET = 4'000'000;
+/// The window's: nothing crosses a link, its pictures are its own pixels.
+/// Bounded only so a runaway size can't exhaust memory (8K is 33 Mpx).
+constexpr int WINDOW_PIXEL_BUDGET = 64'000'000;
 
 /// What the browser and the viewer share: the services, the status message and
 /// the way back to the event loop. Owned by App; handed down by reference.
@@ -46,18 +49,35 @@ struct AppContext
 	std::function<void()> m_quit;
 	/// One line in the bottom bar; cleared by the next key.
 	std::string m_message;
+	/// The window: where the pointer is, in cells with their fractions, as
+	/// of the last mouse event (a drag pans by it, smoother than by whole
+	/// cells). The terminal: none.
+	std::optional<std::pair<double, double>> m_pointer = {};
 	/// The window's clipboard (`--gui`); empty: the terminal's (tmux / OSC 52).
 	std::function<bool(std::string_view)> m_clipboard = {};
 
+	/// Pixels a draw may make: TOTAL_PIXEL_BUDGET, the window's own in it.
+	[[nodiscard]] int pixelBudget() const noexcept
+	{
+		return m_caps.m_graphics == GraphicsMode::NATIVE ? WINDOW_PIXEL_BUDGET
+		                                                 : TOTAL_PIXEL_BUDGET;
+	}
+	/// The window (`--gui`): everything at full resolution.
+	[[nodiscard]] bool window() const noexcept
+	{
+		return m_caps.m_graphics == GraphicsMode::NATIVE;
+	}
 	/// Clipboard + status message ("copied: …" / "copy failed").
 	void copyText(std::string_view text);
 	/// Move to the neighbouring tmux pane; false outside tmux.
 	bool tmuxSelectPane(char dir) const;
 	/// The bottom bar at the terminal's width, with m_message and the setup
 	/// warning (see ui::statusLine).
+	/// `lit`: the part of `hints` that applies now, shown lit.
 	[[nodiscard]] ftxui::Element statusLine(std::string_view hints,
 	                                        ftxui::Elements status = {},
-	                                        std::string_view tail = {}) const;
+	                                        std::string_view tail = {},
+	                                        std::string_view lit = {}) const;
 	/// Decode reduction (1 = full resolution) for showing `bounds` in `slot`:
 	/// fitted when `zoom` is empty, else at `zoom` terminal px per image px.
 	/// With kitty, the slot renders at most `pixelCap` pixels, so less is

@@ -1,10 +1,12 @@
 #include "app/App.h"
 
 #include "app/HelpKeys.h"
+#include "app/Tutorial.h"
 #include "image/Loader.h"
 #include "term/Kitty.h"
 #include "term/Output.h"
 #include "util/Log.h"
+#include "util/Paths.h"
 #include "util/Ui.h"
 
 #include <ftxui/component/component.hpp>
@@ -33,6 +35,13 @@ constexpr auto CLIENT_CHECK_INTERVAL = std::chrono::seconds(3);
 // How often, sending inline through tmux, what it wrote to the clients over
 // ssh is read: what is still on its way to them is known this late.
 constexpr auto LINK_POLL_INTERVAL = std::chrono::milliseconds(100);
+
+std::int64_t nowSeconds()
+{
+	return std::chrono::duration_cast<std::chrono::seconds>(
+	           std::chrono::system_clock::now().time_since_epoch())
+	    .count();
+}
 } // namespace
 
 App::App(const AppOptions& opts, Host& host, std::optional<TermCaps> caps)
@@ -58,20 +67,40 @@ App::App(const AppOptions& opts, Host& host, std::optional<TermCaps> caps)
                                               [this](std::string_view text)
                                               { return m_host.copyText(text); })
                                         : nullptr},
+      m_recent(opts.m_recentFile),
       m_browser(
           m_ctx,
           opts.m_chooserFile,
           [this](std::vector<Entry> entries, bool tile)
           {
+	          remember(entries);
 	          m_viewer.open(std::move(entries), tile);
-	          m_mode = Mode::VIEWER;
+	          toViewer();
           },
           [this](std::vector<Entry> marked)
           {
 	          m_viewer.openItems(pairItems(std::move(marked)));
-	          m_mode = Mode::VIEWER;
+	          toViewer();
           }),
-      m_viewer(m_ctx, [this] { m_mode = Mode::BROWSER; }),
+      m_viewer(m_ctx,
+               [this]
+               {
+	               if(m_back == Mode::START)
+	               {
+		               toStart();
+	               }
+	               else
+	               {
+		               m_mode = Mode::BROWSER;
+	               }
+               }),
+      m_start(m_ctx,
+              m_recent,
+              {.m_dialog = [this](bool folder) { m_host.openDialog(folder); },
+               .m_browse = [this] { m_mode = Mode::BROWSER; },
+               .m_tutorial = [this] { startTutorial(); },
+               .m_open = [this](const std::vector<std::string>& paths)
+               { openPaths(paths); }}),
       m_watcher(POLL_INTERVAL,
                 [this](std::vector<fs::path> changed)
                 {
@@ -194,7 +223,27 @@ App::App(const AppOptions& opts, Host& host, std::optional<TermCaps> caps)
 		m_ctx.m_message = "OCIO: " + m_colour.error();
 	}
 
+	// What the command line opens is remembered; the folder the window
+	// browses when given nothing is not.
+	m_recent.load();
+	// Kept before the tutorial's images were left out: drop them now.
+	for(size_t i = m_recent.items().size(); i-- > 0;)
+	{
+		const auto& paths = m_recent.items()[i].m_paths;
+		if(std::ranges::any_of(paths,
+		                       [this](const std::string& p)
+		                       { return !rememberable(p); }))
+		{
+			m_recent.remove(i);
+		}
+	}
+	m_remember = m_recent.enabled() && !opts.m_start;
 	open(opts.m_args, opts.m_paths);
+	m_remember = m_recent.enabled();
+	if(opts.m_start)
+	{
+		toStart();
+	}
 	updateWatch();
 	if(opts.m_tutorial)
 	{
@@ -209,9 +258,15 @@ void App::open(const std::vector<OpenArg>& given,
 	if(given.empty() &&
 	   (paths.empty() || (paths.size() == 1 && fs::is_directory(paths[0], ec))))
 	{
-		m_browser.openDirectory(
+		const fs::path dir =
 		    paths.empty() ? fs::current_path()
-		                  : fs::absolute(paths[0], ec).lexically_normal());
+		                  : fs::absolute(paths[0], ec).lexically_normal();
+		m_browser.openDirectory(dir);
+		m_mode = Mode::BROWSER;
+		if(m_remember && rememberable(dir.string()))
+		{
+			m_recent.add({dir.string()}, nowSeconds());
+		}
 	}
 	else
 	{
@@ -257,14 +312,176 @@ void App::open(const std::vector<OpenArg>& given,
 			{
 				m_browser.mark(entries);
 			}
+			if(!pairs)
+			{
+				remember(entries);
+			}
 			m_viewer.openItems(std::move(items));
-			m_mode = Mode::VIEWER;
+			toViewer();
 			if(!missing.empty())
 			{
 				m_ctx.m_message = "not found: " + missing.front();
 			}
 		}
 	}
+}
+
+void App::pasteText(std::string_view text)
+{
+	if(m_help)
+	{
+		return;
+	}
+	if(m_mode == Mode::START)
+	{
+		m_start.paste(text);
+		m_host.redraw();
+		return;
+	}
+	const bool typing = m_browser.typing() || m_viewer.typing();
+	if(typing)
+	{
+		// Into what is being typed (a filter, a note): one line of it.
+		const std::string_view line =
+		    text.substr(0, text.find_first_of("\r\n"));
+		for(const auto& g : Utf8ToGlyphs(std::string(line)))
+		{
+			if(!g.empty())
+			{
+				(void)onEvent(Event::Character(g));
+			}
+		}
+		return;
+	}
+	// Else paths: open them, as if dropped.
+	const std::vector<std::string> paths = pastedPaths(text, paths::home());
+	if(paths.empty())
+	{
+		return;
+	}
+	openPaths(paths);
+}
+
+void App::copyShortcut()
+{
+	if(m_mode == Mode::BROWSER)
+	{
+		(void)m_browser.event(Event::Character('c'));
+		(void)m_browser.event(Event::Character('c'));
+		return;
+	}
+	if(m_mode != Mode::VIEWER)
+	{
+		return;
+	}
+	const ViewerState& s = m_viewer.state();
+	if(s.m_focus == Focus::META || s.m_focus == Focus::INSPECT)
+	{
+		(void)m_viewer.event(Event::Character('y'));
+	}
+	else if(!s.m_sources.empty())
+	{
+		const Source& src = s.m_sources[static_cast<size_t>(std::clamp(
+		    s.m_current, 0, static_cast<int>(s.m_sources.size()) - 1))];
+		m_ctx.copyText(entryCopyText(src.m_entry, 'c'));
+	}
+}
+
+bool App::rememberable(const std::string& path) const
+{
+	const fs::path dir = tutorial::defaultDir();
+	if(dir.empty())
+	{
+		return true;
+	}
+	const fs::path rel = fs::path(path).lexically_relative(dir);
+	return rel.empty() || *rel.begin() == "..";
+}
+
+void App::startTutorial()
+{
+	const fs::path dir = tutorial::defaultDir();
+	if(m_tutorialBusy || dir.empty())
+	{
+		return;
+	}
+	auto begin = [this, dir]
+	{
+		m_tutorialBusy = false;
+		m_ctx.m_message.clear();
+		open({}, {dir.string()});
+		if(!m_tour)
+		{
+			m_tour.emplace();
+		}
+		updateWatch();
+		m_host.redraw();
+	};
+	m_tutorialBusy = true;
+	m_ctx.m_message = "the tutorial: getting its images ready…";
+	m_tutorialJob = std::jthread(
+	    [this, dir, begin]
+	    {
+		    tutorial::ensure(dir,
+		                     {},
+		                     [this](int done, int total)
+		                     {
+			                     m_host.post(
+			                         [this, done, total]
+			                         {
+				                         m_ctx.m_message = fmt::format(
+				                             "rendering the tutorial: {}/{}",
+				                             done,
+				                             total);
+				                         m_host.redraw();
+			                         });
+		                     });
+		    m_host.post(begin);
+	    });
+}
+
+void App::toViewer()
+{
+	if(m_mode != Mode::VIEWER)
+	{
+		m_back = m_mode;
+	}
+	m_mode = Mode::VIEWER;
+}
+
+void App::toStart()
+{
+	m_start.show();
+	m_mode = Mode::START;
+	m_back = Mode::START;
+}
+
+void App::remember(const std::vector<Entry>& entries)
+{
+	if(!m_remember || entries.empty())
+	{
+		return;
+	}
+	if(!rememberable(fs::absolute(entries.front().m_path).string()))
+	{
+		return;
+	}
+	std::vector<std::string> paths;
+	if(entries.size() > Recent::MAX_PATHS)
+	{
+		paths.push_back(fs::absolute(entries.front().m_path)
+		                    .parent_path()
+		                    .make_preferred()
+		                    .string());
+	}
+	else
+	{
+		for(const Entry& e : entries)
+		{
+			paths.push_back(entryCopyText(e, 'c'));
+		}
+	}
+	m_recent.add(std::move(paths), nowSeconds());
 }
 
 App::~App()
@@ -283,7 +500,11 @@ App::~App()
 
 void App::updateWatch()
 {
-	std::vector<fs::path> dirs = m_browser.shownDirs();
+	std::vector<fs::path> dirs;
+	if(m_mode != Mode::START)
+	{
+		dirs = m_browser.shownDirs();
+	}
 	if(m_mode == Mode::VIEWER)
 	{
 		for(auto& d : m_viewer.shownDirs())
@@ -365,8 +586,9 @@ Element App::render()
 	{
 		spdlog::info("cell size now {}x{}px", m_caps.m_cellW, m_caps.m_cellH);
 	}
-	Element body =
-	    m_mode == Mode::BROWSER ? m_browser.render() : m_viewer.render();
+	Element body = m_mode == Mode::START     ? m_start.render(m_browser.cwd())
+	               : m_mode == Mode::BROWSER ? m_browser.render()
+	                                         : m_viewer.render();
 	if(m_tour && !m_tour->hidden())
 	{
 		// Bottom-right, clear of the playbar and the status bar.
@@ -554,7 +776,12 @@ Element App::renderHelp()
 	};
 	std::string title;
 	Element body;
-	if(m_mode == Mode::BROWSER)
+	if(m_mode == Mode::START)
+	{
+		title = " rega start keys ";
+		body = column(withWindow(help::start(), 0), 0);
+	}
+	else if(m_mode == Mode::BROWSER)
 	{
 		title = " rega browser keys ";
 		body = column(withWindow(help::browser(), 0), 0);
@@ -741,7 +968,8 @@ bool App::onEvent(Event e)
 		return helpEvent(e);
 	}
 	// Shift+Q quits from anywhere (except while typing a filter or text).
-	const bool typing = m_browser.typing() || m_viewer.typing();
+	const bool typing = m_browser.typing() || m_viewer.typing() ||
+	                    (m_mode == Mode::START && m_start.typing());
 	if(e == Event::Character('Q') && !typing)
 	{
 		m_ctx.m_quit();
@@ -783,8 +1011,25 @@ bool App::onEvent(Event e)
 	{
 		m_tour->press(e);
 	}
-	const bool used =
-	    m_mode == Mode::BROWSER ? m_browser.event(e) : m_viewer.event(e);
+	// The window: Ctrl+C (⌘C) copies what the keys would: the browser's
+	// path (`cc`), the metadata or inspector rows (`y`), else the shown
+	// file's path.
+	if(m_host.gui() && e == Event::CtrlC && !typing)
+	{
+		copyShortcut();
+		return true;
+	}
+	// In the window `q` in the browser goes back to the start screen (the
+	// window's close button, or Q, quits).
+	if(m_host.gui() && m_mode == Mode::BROWSER && !typing &&
+	   !m_browser.previewFocused() && e == Event::Character('q'))
+	{
+		toStart();
+		return true;
+	}
+	const bool used = m_mode == Mode::START     ? m_start.event(e)
+	                  : m_mode == Mode::BROWSER ? m_browser.event(e)
+	                                            : m_viewer.event(e);
 	if(m_tour)
 	{
 		m_tour->update(tourView());
@@ -835,6 +1080,10 @@ std::string App::title() const
 		       " — rega";
 	}
 	const fs::path& dir = m_browser.cwd();
+	if(m_mode == Mode::START)
+	{
+		return "rega";
+	}
 	return (dir.empty() ? std::string("rega") : dir.string() + " — rega");
 }
 

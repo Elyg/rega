@@ -79,11 +79,13 @@ struct NativeSlot
 		m_slot =
 		    std::make_unique<ImageSlot>(m_caps, m_tx, [this] { ++m_ready; });
 	}
-	void draw(const LayerImagePtr& img, ftxui::Box box = {0, 9, 0, 3})
+	void draw(const LayerImagePtr& img,
+	          ftxui::Box box = {0, 9, 0, 3},
+	          const ViewParams& view = {})
 	{
 		m_screen.Clear();
 		m_native.begin();
-		m_slot->draw(m_screen, box, img, {}, {});
+		m_slot->draw(m_screen, box, img, view, {});
 	}
 };
 
@@ -156,7 +158,7 @@ TEST(Native, SameDrawHandsOverTheSamePicture)
 	EXPECT_EQ(s.m_native.placements()[0].m_bitmap, first);
 }
 
-TEST(Native, ShrunkBoxShowsTheOldPictureInWhatItCoversUntilTheNewOne)
+TEST(Native, ResizedBoxShowsTheOldPictureScaledUntilTheNewOne)
 {
 	NativeSlot s;
 	const auto img = grey(0.5f);
@@ -166,13 +168,52 @@ TEST(Native, ShrunkBoxShowsTheOldPictureInWhatItCoversUntilTheNewOne)
 	const int before = s.m_ready;
 	s.draw(img, {0, 4, 0, 3}); // half as wide
 	ASSERT_EQ(s.m_native.placements().size(), 1u);
-	EXPECT_EQ(s.m_native.placements()[0].m_cols, 10); // still the old one
+	{
+		// The old picture, scaled to where the new box fits the image: the
+		// 4 px image was 5 px a pixel in 30 x 20, now 3.75 in 15 x 20.
+		const auto& p = s.m_native.placements()[0];
+		EXPECT_EQ(p.m_cols, 5);
+		EXPECT_EQ(p.m_bitmap->m_width, 30);
+		ASSERT_TRUE(p.m_at);
+		EXPECT_DOUBLE_EQ(p.m_at->m_x, -3.75);
+		EXPECT_DOUBLE_EQ(p.m_at->m_y, 2.5);
+		EXPECT_DOUBLE_EQ(p.m_at->m_w, 22.5);
+		EXPECT_DOUBLE_EQ(p.m_at->m_h, 15.0);
+	}
 	EXPECT_EQ(s.m_screen.PixelAt(4, 0).character, NATIVE_CELL);
 	EXPECT_NE(s.m_screen.PixelAt(5, 0).character, NATIVE_CELL);
 	ASSERT_TRUE(waitFor([&] { return s.m_ready > before; }));
 	s.draw(img, {0, 4, 0, 3});
 	EXPECT_EQ(s.m_native.placements()[0].m_cols, 5);
 	EXPECT_EQ(s.m_native.placements()[0].m_bitmap->m_width, 15);
+	EXPECT_FALSE(s.m_native.placements()[0].m_at); // its own: as made
+}
+
+TEST(Native, APanMovesTheLastPictureAtOnce)
+{
+	NativeSlot s;
+	const auto img = grey(0.5f);
+	ViewParams view;
+	view.m_fit = false;
+	view.m_zoom = 5.0;
+	view.m_centerX = view.m_centerY = 2.0;
+	s.draw(img, {0, 9, 0, 3}, view);
+	ASSERT_TRUE(waitFor([&] { return s.m_ready > 0; }));
+	s.draw(img, {0, 9, 0, 3}, view);
+	const auto made = s.m_native.placements()[0].m_bitmap;
+	EXPECT_FALSE(s.m_native.placements()[0].m_at);
+
+	// One image pixel right: before its own picture is ready, the last one
+	// drawn 5 window pixels to the left.
+	view.m_centerX = 3.0;
+	s.draw(img, {0, 9, 0, 3}, view);
+	const auto& p = s.m_native.placements()[0];
+	EXPECT_EQ(p.m_bitmap, made);
+	ASSERT_TRUE(p.m_at);
+	EXPECT_DOUBLE_EQ(p.m_at->m_x, -5.0);
+	EXPECT_DOUBLE_EQ(p.m_at->m_y, 0.0);
+	EXPECT_DOUBLE_EQ(p.m_at->m_w, 30.0);
+	EXPECT_DOUBLE_EQ(p.m_at->m_h, 20.0);
 }
 
 TEST(Native, BitmapSlotPaintsAtScreenPixels)

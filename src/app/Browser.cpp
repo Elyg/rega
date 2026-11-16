@@ -1061,7 +1061,7 @@ Element Browser::renderPreview()
 	int reduce = m_ctx.reduceFor(*m_previewSlot,
 	                             info->fitBounds(label),
 	                             std::nullopt,
-	                             TOTAL_PIXEL_BUDGET);
+	                             m_ctx.pixelBudget());
 	LayerImagePtr img = m_ctx.m_svc.layerBestEffort(p, label, reduce);
 
 	const auto& part = info->m_parts.front();
@@ -1252,10 +1252,20 @@ Element Browser::render()
 	{
 		right += fmt::format("{} marked  ", m_marks.size());
 	}
-	right +=
-	    fmt::format("{}/{}   / filter  e expand  space mark  ? help  q quit",
-	                vis.empty() ? 0 : m_sel + 1,
-	                vis.size());
+	// In the window `q` goes back to its start screen (see App).
+	const bool window = m_ctx.m_caps.m_graphics == GraphicsMode::NATIVE;
+	// `e` lit when it does something here: a sequence to expand, a frame
+	// to fold back into its sequence.
+	const Entry* sel = selectedEntry();
+	const bool folds = sel && !sel->m_expandedFrom.empty();
+	const bool expands = sel && sel->m_kind == Entry::Kind::SEQUENCE;
+	const std::string_view expand = folds ? "e collapse" : "e expand";
+	right += fmt::format(
+	    "{}/{}   enter open  / filter  {}  space mark  ? help  q {}",
+	    vis.empty() ? 0 : m_sel + 1,
+	    vis.size(),
+	    expand,
+	    window ? "back" : "quit");
 
 	return vbox({
 	    topBar,
@@ -1266,7 +1276,7 @@ Element Browser::render()
 	        separator(),
 	        renderPreview() | flex,
 	    }) | flex,
-	    m_ctx.statusLine(right),
+	    m_ctx.statusLine(right, {}, {}, folds || expands ? expand : ""),
 	});
 }
 

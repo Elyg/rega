@@ -111,6 +111,8 @@ Viewer::Viewer(AppContext& ctx, std::function<void()> onClose)
 	              });
           })
 {
+	// The window plays at full resolution (`P` still caps it).
+	m_playbackCap = !ctx.window();
 }
 
 // --- open / close ---
@@ -278,7 +280,7 @@ int Viewer::reduceFor(const ImageInfo& info, const ImageSlot& slot) const
 
 int Viewer::playbackPixelCap() const
 {
-	return m_playbackCap ? cappedBudget() : TOTAL_PIXEL_BUDGET;
+	return m_playbackCap ? cappedBudget() : m_ctx.pixelBudget();
 }
 
 int Viewer::playbackReduce(const ImageInfo& info, const ImageSlot& slot) const
@@ -412,7 +414,7 @@ std::vector<bool> Viewer::storedElsewhere()
 
 int Viewer::cappedBudget() const
 {
-	int cap = TOTAL_PIXEL_BUDGET;
+	int cap = m_ctx.pixelBudget();
 	if(!m_tile)
 	{
 		cap /= 2;
@@ -475,7 +477,7 @@ int Viewer::pixelCap() const
 	// Scrubbing too: frames go by as fast, and inline each crosses the link.
 	const int cap = (m_player.playing() || scrubbing()) && m_playbackCap
 	                    ? cappedBudget()
-	                    : TOTAL_PIXEL_BUDGET;
+	                    : m_ctx.pixelBudget();
 	// Tiles share the budget: the ones on screen, so zooming into the sheet
 	// makes each sharper.
 	return m_tile ? cap / std::max<int>(1, static_cast<int>(m_tiles.size()))
@@ -617,6 +619,15 @@ void Viewer::fitView(const ImageInfoPtr& info)
 	    (aw / 2.0 - (leftPx + visibleW / 2.0)) / m_state.m_view.m_zoom;
 	m_state.m_view.m_centerY = dw.m_y0 + dw.height() / 2.0;
 	m_fitBesidePanel = true; // re-done every draw until zoom / pan
+}
+
+std::pair<double, double> Viewer::pointerAt(const Mouse& m) const
+{
+	if(m_ctx.m_pointer)
+	{
+		return *m_ctx.m_pointer;
+	}
+	return {m.x, m.y};
 }
 
 void Viewer::pan(double dxCells, double dyCells)
@@ -1388,6 +1399,19 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 		}
 		return true;
 	}
+	// Drag a file in the files pane up or down the list: it moves there.
+	if(m_dragSource)
+	{
+		if(m.motion == Mouse::Released)
+		{
+			m_dragSource = false;
+		}
+		else if(m.motion == Mouse::Moved)
+		{
+			m_files.dragTo(m.y);
+		}
+		return true;
+	}
 	// Drag over the metadata rows: select them (as `v`), for y / Y. Shift
 	// +click rarely arrives (terminals keep it for their own selection).
 	if(m_dragMeta)
@@ -1439,8 +1463,9 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 		}
 		else if(m.motion == Mouse::Moved)
 		{
-			const int dx = m.x - m_dragPan->first, dy = m.y - m_dragPan->second;
-			if(dx || dy)
+			const auto [x, y] = pointerAt(m);
+			const double dx = x - m_dragPan->first, dy = y - m_dragPan->second;
+			if(dx != 0 || dy != 0)
 			{
 				if(m_tile)
 				{
@@ -1451,7 +1476,7 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 					pan(-dx, -dy);
 				}
 			}
-			m_dragPan = std::pair(m.x, m.y);
+			m_dragPan = std::pair(x, y);
 		}
 		return true;
 	}
@@ -1492,7 +1517,7 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 	if(pressed && !overSide &&
 	   (m.button == Mouse::Right || m.button == Mouse::Middle))
 	{
-		m_dragPan = std::pair(m.x, m.y);
+		m_dragPan = pointerAt(m);
 		m_state.m_focus = Focus::IMAGE;
 		return true;
 	}
@@ -1510,7 +1535,8 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 	{
 		if(overFiles)
 		{
-			m_files.click(m.y);
+			// Dragged from a file: it moves along (sorting by hand).
+			m_dragSource = m_files.click(m.y);
 		}
 		else if(overInfo)
 		{
@@ -1788,10 +1814,10 @@ bool Viewer::keyEvent(const Event& e, const ImageInfoPtr& info)
 		// Tiles on this machine keep the pixels: only the decode is softer.
 		m_ctx.m_message =
 		    !m_playbackCap ? std::string("playback: full res")
-		    : cappedBudget() < TOTAL_PIXEL_BUDGET
+		    : cappedBudget() < m_ctx.pixelBudget()
 		        ? fmt::format("playback: capped at {:g} Mpx (full {:g})",
 		                      cappedBudget() / 1e6,
-		                      TOTAL_PIXEL_BUDGET / 1e6)
+		                      m_ctx.pixelBudget() / 1e6)
 		        : std::string("playback: capped (softer decode)");
 	}
 	else if(ch("F"))
@@ -2293,9 +2319,13 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 			                lookup);
 			if(m_names)
 			{
-				// `T`: what the tile is, under any annotations there.
+				// `T`: what the tile is, under any annotations there. Files
+				// numbered as tiled: versions of one file in folders of
+				// their own share a name. A layer's name says it all.
 				const std::string name =
-				    bySource ? m_state.m_sources[src].m_entry.m_name
+				    bySource
+				        ? tileNameLabel(i,
+				                        m_state.m_sources[src].m_entry.m_name)
 				    : ref.m_layer.empty() ? std::string("rgba")
 				                          : ref.m_layer;
 				over[static_cast<int>(Slot::BL)].push_back({{name}});

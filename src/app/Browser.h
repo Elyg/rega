@@ -63,6 +63,11 @@ public:
 	{
 		return m_cwd;
 	}
+	/// The text preview has the keys (`q` / Esc leave it).
+	bool previewFocused() const noexcept
+	{
+		return m_previewFocus;
+	}
 	const std::vector<Entry>& entries() const noexcept
 	{
 		return m_entries;

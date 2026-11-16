@@ -66,6 +66,10 @@ std::optional<Event> keyEvent(SDL_Keycode key, SDL_Keymod mod)
 	const bool shift = (mod & SDL_KMOD_SHIFT) != 0;
 	const bool ctrl = (mod & SDL_KMOD_CTRL) != 0;
 	const bool alt = (mod & SDL_KMOD_ALT) != 0;
+	if(key == SDLK_C && shortcut(mod) && !shift && !alt)
+	{
+		return Event::CtrlC; // copy (⌘C on macOS)
+	}
 	switch(key)
 	{
 		case SDLK_ESCAPE:
@@ -169,6 +173,8 @@ Command command(SDL_Keycode key, SDL_Keymod mod)
 		case SDLK_O:
 			return (mod & SDL_KMOD_SHIFT) ? Command::OPEN_FOLDER
 			                              : Command::OPEN_FILES;
+		case SDLK_V:
+			return (mod & SDL_KMOD_SHIFT) ? Command::NONE : Command::PASTE;
 		default:
 			return Command::NONE;
 	}
@@ -192,10 +198,16 @@ Mouse MouseCells::at(float x, float y, SDL_Keymod mod) const
 	return m;
 }
 
+std::pair<double, double> MouseCells::cells(float x, float y) const
+{
+	return {static_cast<double>(x) * m_density / m_cellW,
+	        static_cast<double>(y) * m_density / m_cellH};
+}
+
 std::optional<Mouse> MouseCells::moved(float x, float y, SDL_Keymod mod)
 {
 	Mouse m = at(x, y, mod);
-	if(m.x == m_lastX && m.y == m_lastY)
+	if(m_held == Mouse::None && m.x == m_lastX && m.y == m_lastY)
 	{
 		return std::nullopt;
 	}

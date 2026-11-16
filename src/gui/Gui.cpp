@@ -3,6 +3,7 @@
 #include "BuildInfo.h"
 #include "app/App.h"
 #include "app/Host.h"
+#include "app/Recent.h"
 #include "gui/Font.h"
 #include "gui/Input.h"
 #include "gui/Settings.h"
@@ -218,6 +219,18 @@ public:
 	{
 		return SDL_SetClipboardText(std::string(text).c_str());
 	}
+	void openDialog(bool folder) override
+	{
+		if(m_dialog)
+		{
+			m_dialog(folder);
+		}
+	}
+	/// What openDialog() does (set once the window and the app are up).
+	void setDialog(std::function<void(bool folder)> dialog)
+	{
+		m_dialog = std::move(dialog);
+	}
 
 	[[nodiscard]] bool quitting() const noexcept
 	{
@@ -256,6 +269,7 @@ private:
 	std::atomic<bool> m_quit{false};
 	std::mutex m_mu;
 	std::deque<std::function<void()>> m_tasks;
+	std::function<void(bool)> m_dialog;
 };
 
 /// Draws a frame of cells and pictures with SDL's renderer.
@@ -297,7 +311,24 @@ public:
 		{
 			SDL_Texture* tex = picture(p.m_id, p.m_bitmap);
 			used[p.m_id] = true;
-			if(tex)
+			if(tex && p.m_at)
+			{
+				// Moved and scaled into the box, nothing outside it.
+				const SDL_Rect clip{p.m_x * cw,
+				                    p.m_y * ch,
+				                    p.m_cols * cw,
+				                    p.m_rows * ch};
+				const SDL_FRect dst{static_cast<float>(p.m_x * cw +
+				                                       p.m_at->m_x),
+				                    static_cast<float>(p.m_y * ch +
+				                                       p.m_at->m_y),
+				                    static_cast<float>(p.m_at->m_w),
+				                    static_cast<float>(p.m_at->m_h)};
+				SDL_SetRenderClipRect(m_r, &clip);
+				SDL_RenderTexture(m_r, tex, nullptr, &dst);
+				SDL_SetRenderClipRect(m_r, nullptr);
+			}
+			else if(tex)
 			{
 				const SDL_FRect dst{static_cast<float>(p.m_x * cw),
 				                    static_cast<float>(p.m_y * ch),
@@ -683,11 +714,17 @@ int run(const AppOptions& given, const GuiOptions& gui)
 	};
 	ui::setScreenSize(cellsNow());
 
-	// Nothing to open: where the browser was last time (from a launcher the
-	// current directory is the install folder, or /), else home.
+	// Nothing to open: the start screen, the browser behind it where it was
+	// last time (from a launcher the current directory is the install
+	// folder, or /), else home.
 	AppOptions opts = given;
+	if(!shot && !opts.m_tutorial)
+	{
+		opts.m_recentFile = Recent::defaultPath();
+	}
 	if(opts.m_paths.empty() && opts.m_args.empty())
 	{
+		opts.m_start = true;
 		std::error_code ec;
 		if(!settings.m_lastDir.empty() &&
 		   fs::is_directory(settings.m_lastDir, ec))
@@ -707,6 +744,30 @@ int run(const AppOptions& given, const GuiOptions& gui)
 		App app(opts, host, caps);
 		DialogTarget dialog{&host, &app};
 		std::string dialogDir; // outlives the dialog
+		host.setDialog(
+		    [&](bool folder)
+		    {
+			    static const SDL_DialogFileFilter FILTERS[] = {
+			        {"Images and movies", "exr;tif;tiff;png;jpg;jpeg;mov;mp4"},
+			        {"All files", "*"},
+			    };
+			    dialogDir = app.browserDir().string();
+			    const char* at =
+			        dialogDir.empty() ? nullptr : dialogDir.c_str();
+			    if(folder)
+			    {
+				    SDL_ShowOpenFolderDialog(dialogDone,
+				                             &dialog,
+				                             window,
+				                             at,
+				                             false);
+			    }
+			    else
+			    {
+				    SDL_ShowOpenFileDialog(
+				        dialogDone, &dialog, window, FILTERS, 2, at, true);
+			    }
+		    });
 		SDL_StartTextInput(window);
 
 		std::vector<std::string> dropped;
@@ -720,6 +781,11 @@ int run(const AppOptions& given, const GuiOptions& gui)
 		{
 			(void)app.onEvent(e);
 			dirty = true;
+		};
+		auto pointer = [&](float x, float y)
+		{
+			const auto [cx, cy] = mouse.cells(x, y);
+			app.setPointer(cx, cy);
 		};
 		auto refont = [&]
 		{
@@ -766,38 +832,19 @@ int run(const AppOptions& given, const GuiOptions& gui)
 								refont();
 								break;
 							case Command::OPEN_FILES:
+								host.openDialog(false);
+								break;
 							case Command::OPEN_FOLDER:
-							{
-								static const SDL_DialogFileFilter FILTERS[] = {
-								    {"Images and movies",
-								     "exr;tif;tiff;png;jpg;jpeg;mov;mp4"},
-								    {"All files", "*"},
-								};
-								dialogDir = app.browserDir().string();
-								const char* at = dialogDir.empty()
-								                     ? nullptr
-								                     : dialogDir.c_str();
-								if(command(ev.key.key, ev.key.mod) ==
-								   Command::OPEN_FILES)
+								host.openDialog(true);
+								break;
+							case Command::PASTE:
+								if(char* t = SDL_GetClipboardText())
 								{
-									SDL_ShowOpenFileDialog(dialogDone,
-									                       &dialog,
-									                       window,
-									                       FILTERS,
-									                       2,
-									                       at,
-									                       true);
-								}
-								else
-								{
-									SDL_ShowOpenFolderDialog(dialogDone,
-									                         &dialog,
-									                         window,
-									                         at,
-									                         false);
+									app.pasteText(t);
+									SDL_free(t);
+									dirty = true;
 								}
 								break;
-							}
 							case Command::FULLSCREEN:
 								SDL_SetWindowFullscreen(
 								    window,
@@ -820,6 +867,7 @@ int run(const AppOptions& given, const GuiOptions& gui)
 						}
 						break;
 					case SDL_EVENT_MOUSE_MOTION:
+						pointer(ev.motion.x, ev.motion.y);
 						if(auto m = mouse.moved(ev.motion.x, ev.motion.y, mod))
 						{
 							send(ftxui::Event::Mouse("", *m));
@@ -827,6 +875,7 @@ int run(const AppOptions& given, const GuiOptions& gui)
 						break;
 					case SDL_EVENT_MOUSE_BUTTON_DOWN:
 					case SDL_EVENT_MOUSE_BUTTON_UP:
+						pointer(ev.button.x, ev.button.y);
 						if(auto m =
 						       mouse.button(ev.button.button,
 						                    ev.type ==
@@ -839,6 +888,7 @@ int run(const AppOptions& given, const GuiOptions& gui)
 						}
 						break;
 					case SDL_EVENT_MOUSE_WHEEL:
+						pointer(ev.wheel.mouse_x, ev.wheel.mouse_y);
 						for(const auto& m : mouse.wheel(ev.wheel.y,
 						                                ev.wheel.mouse_x,
 						                                ev.wheel.mouse_y,
@@ -860,6 +910,13 @@ int run(const AppOptions& given, const GuiOptions& gui)
 						app.openPaths(dropped);
 						dropped.clear();
 						dirty = true;
+						break;
+					case SDL_EVENT_DROP_TEXT: // text dragged in: as pasted
+						if(ev.drop.data)
+						{
+							app.pasteText(ev.drop.data);
+							dirty = true;
+						}
 						break;
 					case SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED:
 						refont();
@@ -977,7 +1034,9 @@ int run(const AppOptions& given, const GuiOptions& gui)
 				                  &settings.m_width,
 				                  &settings.m_height);
 			}
-			if(!app.browserDir().empty())
+			// The tutorial's folder is no place to come back to.
+			if(!app.browserDir().empty() &&
+			   app.rememberable(app.browserDir().string()))
 			{
 				settings.m_lastDir = app.browserDir();
 			}

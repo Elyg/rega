@@ -356,10 +356,16 @@ private:
 	ftxui::Box m_sideBox{}; ///< the right column (clicks there skip the image)
 	ftxui::Box m_leftBox{}; ///< the left column
 	int m_dragDivider = 0;  ///< being dragged: 1 = left column's, 2 = right's
-	bool m_dragFiles = false; ///< the files pane's title is being dragged
-	bool m_dragMeta = false;  ///< selecting metadata rows with a drag
+	bool m_dragFiles = false;  ///< the files pane's title is being dragged
+	bool m_dragMeta = false;   ///< selecting metadata rows with a drag
+	bool m_dragSource = false; ///< moving a source in the files pane
 	/// Panning with a right / middle drag: where the mouse last was.
-	std::optional<std::pair<int, int>> m_dragPan;
+	/// Where mouse event `m` is, in cells: the window's finer position
+	/// (AppContext::m_pointer), else the cell's.
+	[[nodiscard]] std::pair<double, double>
+	pointerAt(const ftxui::Mouse& m) const;
+	/// Where a right / middle drag last was, in cells (finer in the window).
+	std::optional<std::pair<double, double>> m_dragPan;
 	/// Scrubbing with a left drag on the image: the column the mouse was
 	/// at, and the part of a frame not stepped yet.
 	std::optional<int> m_scrubX;

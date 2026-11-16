@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <map>
 #include <string>
+#include <vector>
 
 namespace rega
 {
@@ -77,13 +78,21 @@ public:
 	/// Open and focus it, the cursor on the shown source.
 	void show();
 	/// A click at screen row `y` (over the pane): focus it, pick that row.
-	void click(int y);
+	/// True when it landed on a source (one a drag then moves).
+	bool click(int y);
+	/// A drag from a click on a source, now at screen row `y`: the source
+	/// moves to that row (past the list's ends, a row further each time).
+	void dragTo(int y);
 
 	[[nodiscard]] ftxui::Element render();
 	[[nodiscard]] bool event(const ftxui::Event& e);
 
 private:
 	void moveSource(int from, int to);
+	/// The list row at screen row `y`: -1 the global row, a source's index,
+	/// or NO_ROW (scrolled out of sight, or not a row).
+	[[nodiscard]] int rowAt(int y) const;
+	static constexpr int NO_ROW = -2;
 	/// `e`: a sequence ⇄ one source per frame (like the browser).
 	void toggleSourceExpand();
 
@@ -98,6 +107,8 @@ private:
 	/// Sequences expanded here, by sourceKey, to fold their frames back.
 	std::map<std::string, Entry> m_expandedSources;
 	ftxui::Box m_box{};
+	ftxui::Box m_listBox{};             ///< the rows on screen
+	std::vector<ftxui::Box> m_rowBoxes; ///< global, then each source
 };
 
 } // namespace rega

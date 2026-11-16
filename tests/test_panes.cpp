@@ -457,6 +457,39 @@ TEST_F(Panes, MetaClickMovesTheCursorAndShiftClickSelects)
 	          "copied " + std::to_string(p.items(i).size() - 3) + " lines");
 }
 
+TEST_F(Panes, MetaClickOnTheSelectionOrOffTheRowsUnselects)
+{
+	MuteCout mute;
+	MetaPane p(m_state, m_c.m_ctx);
+	const auto i = info({""});
+	const auto rows = drawMeta(p, i);
+	int y = -1;
+	for(int r = 0; r < static_cast<int>(rows.size()); ++r)
+	{
+		if(rows[r].starts_with("  compression"))
+		{
+			y = r;
+		}
+	}
+	ASSERT_GE(y, 0);
+	p.click(y, false);
+	p.click(y, false); // the selected row again
+	EXPECT_TRUE(p.event(key("y"), i));
+	EXPECT_EQ(m_c.m_ctx.m_message, "nothing selected");
+	p.click(y, false); // and again: selected
+	EXPECT_TRUE(p.event(key("y"), i));
+	EXPECT_EQ(m_c.m_ctx.m_message, "copied: compression: zip");
+
+	// A range, then a click below the rows: none of it.
+	p.click(y + 1, true);
+	p.click(1000, false);
+	EXPECT_TRUE(p.event(key("Y"), i));
+	EXPECT_EQ(m_c.m_ctx.m_message, "nothing selected");
+	EXPECT_TRUE(p.event(key("k"), i)); // a move selects again
+	EXPECT_TRUE(p.event(key("y"), i));
+	EXPECT_EQ(m_c.m_ctx.m_message, "copied: compression: zip");
+}
+
 TEST_F(Panes, MetaNamesAndValuesKeepTheirColumns)
 {
 	WideTerminal wide;

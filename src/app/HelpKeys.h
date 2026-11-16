@@ -23,6 +23,8 @@ struct Section
 	std::vector<Row> m_rows;
 };
 
+/// The window's start screen's keys (`--gui`, given nothing to open).
+const std::vector<Section>& start();
 /// The browser's keys.
 const std::vector<Section>& browser();
 /// The viewer's keys.

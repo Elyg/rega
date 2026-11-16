@@ -438,8 +438,9 @@ Element MetaPane::render(const ImageInfoPtr& info)
 		                    : itemLines(all[i], nameCol, false);
 		for(auto& line : item)
 		{
-			lines.push_back(focus && i >= selLo && i <= selHi ? line | inverted
-			                                                  : line);
+			lines.push_back(focus && m_selected && i >= selLo && i <= selHi
+			                    ? line | inverted
+			                    : line);
 			m_lineItems.push_back(i);
 		}
 	}
@@ -498,6 +499,11 @@ void MetaPane::copy(const ImageInfoPtr& info, bool valuesOnly)
 	const auto all = shown(info);
 	if(all.empty())
 	{
+		return;
+	}
+	if(!m_selected)
+	{
+		m_ctx.m_message = "nothing selected";
 		return;
 	}
 	int lo = m_anchor < 0 ? m_cursor : std::min(m_anchor, m_cursor);
@@ -623,12 +629,26 @@ bool MetaPane::filterEvent(const Event& e, const ImageInfoPtr& info)
 void MetaPane::click(int y, bool extend)
 {
 	const int line = y - m_box.y_min - 1; // under the title
+	const bool wasFocused = m_state.m_focus == Focus::META;
 	m_state.m_focus = Focus::META;
 	if(line < 0 || line >= static_cast<int>(m_lineItems.size()))
 	{
+		// Off the rows: nothing selected.
+		if(line >= 0)
+		{
+			m_anchor = -1;
+			m_selected = false;
+		}
 		return;
 	}
 	const int row = m_lineItems[line];
+	// The one selected row clicked again: unselected.
+	if(!extend && wasFocused && m_selected && m_anchor < 0 && row == m_cursor)
+	{
+		m_selected = false;
+		return;
+	}
+	m_selected = true;
 	if(extend)
 	{
 		if(m_anchor < 0)
@@ -657,6 +677,10 @@ void MetaPane::dragTo(int y)
 	{
 		m_anchor = m_cursor; // the row the drag started on
 	}
+	if(row != m_cursor)
+	{
+		m_selected = true;
+	}
 	m_cursor = row;
 }
 
@@ -671,6 +695,11 @@ bool MetaPane::event(const Event& e, const ImageInfoPtr& info)
 	auto ch = [&](const char* c) { return e == Event::Character(c); };
 	bool wasG = m_pendingG;
 	m_pendingG = false;
+	// A key selects again (copying says there is nothing to copy).
+	if(!ch("y") && !ch("Y") && e != Event::Escape)
+	{
+		m_selected = true;
+	}
 
 	if(ch("j") || e == Event::ArrowDown)
 	{

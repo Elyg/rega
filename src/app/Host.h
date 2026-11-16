@@ -32,6 +32,11 @@ public:
 	{
 		return false;
 	}
+	/// Show the system's Open dialog for files (or a `folder`); what is
+	/// picked comes back through App::openPaths(). The terminal has none.
+	virtual void openDialog(bool /*folder*/)
+	{
+	}
 };
 
 } // namespace rega

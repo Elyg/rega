@@ -31,6 +31,7 @@ enum class Command
 	FONT_RESET,   ///< Ctrl+0
 	OPEN_FILES,   ///< Ctrl+O: the system's Open dialog
 	OPEN_FOLDER,  ///< Ctrl+Shift+O
+	PASTE,        ///< Ctrl+V: the clipboard's text (App::pasteText)
 	FULLSCREEN,   ///< F11
 };
 [[nodiscard]] Command command(SDL_Keycode key, SDL_Keymod mod);
@@ -45,7 +46,12 @@ public:
 	/// (SDL_GetWindowPixelDensity).
 	void setGeometry(int cellW, int cellH, float density) noexcept;
 
-	/// The pointer moved to (`x`, `y`), window coordinates.
+	/// Where (`x`, `y`), window coordinates, is in cells, the fractions
+	/// kept: what a drag pans by, finer than a cell.
+	[[nodiscard]] std::pair<double, double> cells(float x, float y) const;
+	/// The pointer moved to (`x`, `y`), window coordinates: hovering, when
+	/// it enters another cell; dragging, every move (the cell may be the
+	/// same, cells() is not).
 	[[nodiscard]] std::optional<ftxui::Mouse> moved(float x,
 	                                                float y,
 	                                                SDL_Keymod mod);

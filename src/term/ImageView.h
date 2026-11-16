@@ -3,6 +3,7 @@
 #include "image/Overlay.h"
 #include "image/Render.h"
 #include "term/Caps.h"
+#include "term/Native.h"
 
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
@@ -264,6 +265,13 @@ private:
 	void releaseUnsent(const Prepared& p) const;
 	/// Whether `a` and `b` differ in the image only.
 	static bool sameView(Key a, const Key& b);
+	/// Whether `a` and `b` differ in the image and the view (zoom, pan)
+	/// only: the window moves and scales one picture into the other's place.
+	static bool sameButView(Key a, const Key& b);
+	/// GraphicsMode::NATIVE: where the picture on screen (m_native, made
+	/// for m_mapping) lands in the view `key` asks for, `img` shown.
+	[[nodiscard]] NativeImages::Rect nativeRect(const Key& key,
+	                                            const LayerImage& img) const;
 
 	/// Render (and with kitty, encode) a request. Any thread; reads only
 	/// m_caps and the transmitter.

@@ -51,6 +51,8 @@ struct StatusLine
 	ftxui::Elements m_status;
 	std::string_view m_tail;
 	std::string_view m_warning;
+	/// A part of m_hints that applies right now: shown lit, not dim.
+	std::string_view m_lit = {};
 };
 /// Render `line` (see StatusLine) in `width` cells.
 [[nodiscard]] ftxui::Element statusLine(StatusLine line, int width);

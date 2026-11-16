@@ -54,6 +54,9 @@ private:
 /// Key of a source in the annotations state file: absolute dir / display name
 /// ("/shots/a.####.exr"); a diff's adds " - " and A's.
 std::string sourceKey(const Source& s);
+/// `T`'s label on the tile of a file, tile `tile` (from 0) of the sheet:
+/// "[1] comp.exr".
+std::string tileNameLabel(int tile, const std::string& name);
 
 /// Something to view: an image or sequence, or with `m_b`, a diff pair.
 struct OpenItem

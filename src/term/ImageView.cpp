@@ -527,6 +527,35 @@ bool ImageSlot::sameView(Key a, const Key& b)
 	return a == b;
 }
 
+bool ImageSlot::sameButView(Key a, const Key& b)
+{
+	a.m_img = b.m_img;
+	a.m_view = b.m_view;
+	return a == b;
+}
+
+NativeImages::Rect ImageSlot::nativeRect(const Key& key,
+                                         const LayerImage& img) const
+{
+	const auto [pw, ph, quality] = pictureSize(key);
+	ViewParams scaled = key.m_view;
+	scaled.m_zoom *= quality;
+	const ViewMapping to =
+	    resolveView(key.m_view.m_fitFrame ? img.m_displayWindow
+	                                      : img.fitBounds(),
+	                pw,
+	                ph,
+	                scaled);
+	// Output pixels of the view asked for are window pixels times its
+	// quality; image coordinates are the same in both.
+	const double winPerImage = to.m_scale / quality;
+	const ViewMapping& from = m_mapping;
+	return {(from.m_originX - to.m_originX) * winPerImage,
+	        (from.m_originY - to.m_originY) * winPerImage,
+	        m_native->m_width / from.m_scale * winPerImage,
+	        m_native->m_height / from.m_scale * winPerImage};
+}
+
 bool ImageSlot::sameCachedView(Key a, const Key& b)
 {
 	a.m_img = b.m_img;
@@ -917,6 +946,19 @@ void ImageSlot::draw(ftxui::Screen& screen,
 			                 {
 				                 return p.m_fromDraw && sameView(p.m_key, key);
 			                 });
+			// The window places any picture where the view now has it: the
+			// newest one made for the view before beats an older one.
+			if(newer == m_done.rend() &&
+			   m_caps.m_graphics == GraphicsMode::NATIVE)
+			{
+				newer = std::find_if(m_done.rbegin(),
+				                     m_done.rend(),
+				                     [&](const Prepared& p)
+				                     {
+					                     return p.m_fromDraw &&
+					                            sameButView(p.m_key, key);
+				                     });
+			}
 			if(newer != m_done.rend() &&
 			   m_tx.linkBacklog() < MAX_INTERIM_BACKLOG)
 			{
@@ -941,17 +983,33 @@ void ImageSlot::draw(ftxui::Screen& screen,
 	{
 		if(m_native && m_caps.m_native)
 		{
-			// Until a resized picture is ready, the last one in what it
-			// covered of the new box.
-			m_caps.m_native->place(screen,
-			                       m_id,
-			                       box.x_min,
-			                       box.y_min,
-			                       m_cols,
-			                       m_rows,
-			                       cols,
-			                       rows,
-			                       m_native);
+			if(m_last && !(*m_last == key))
+			{
+				// Until the picture for this view is ready, the last one
+				// moved and scaled to where this view has it.
+				m_caps.m_native->place(screen,
+				                       m_id,
+				                       box.x_min,
+				                       box.y_min,
+				                       cols,
+				                       rows,
+				                       cols,
+				                       rows,
+				                       m_native,
+				                       nativeRect(key, *img));
+			}
+			else
+			{
+				m_caps.m_native->place(screen,
+				                       m_id,
+				                       box.x_min,
+				                       box.y_min,
+				                       m_cols,
+				                       m_rows,
+				                       cols,
+				                       rows,
+				                       m_native);
+			}
 		}
 		return;
 	}

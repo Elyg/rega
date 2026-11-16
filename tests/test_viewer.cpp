@@ -640,6 +640,58 @@ TEST_F(ViewerTest, DraggingTheFilesTitleShowsMoreOrFewerRows)
 	EXPECT_EQ(titleAt(m_v, "[3]─Files").first, y0);
 }
 
+TEST_F(ViewerTest, DraggingAFileSortsTheList)
+{
+	writeExr(m_dir / "a.exr", {"R", "G", "B"});
+	writeExr(m_dir / "b.exr", {"R", "G", "B"});
+	m_v.open({entryForPath(m_dir / "a.exr"),
+	          entryForPath(m_dir / "b.exr"),
+	          layersEntry()});
+	press(key("3"));
+	draw();
+	auto names = [&]
+	{
+		std::string out;
+		for(const auto& src : state().m_sources)
+		{
+			out += src.m_entry.m_name + " ";
+		}
+		return out;
+	};
+	ASSERT_EQ(names(), "a.exr b.exr layers.exr ");
+	// The pane's rows (the top bar names the shown one too).
+	const int yA = titleAt(m_v, "1 ▶ a.exr").first;
+	const int yLayers = titleAt(m_v, "3   layers.exr").first;
+	ASSERT_GT(yA, 0);
+	ASSERT_EQ(yLayers, yA + 2);
+	auto mouse = [&](int y, ftxui::Mouse::Motion motion)
+	{
+		ftxui::Mouse m;
+		m.button = ftxui::Mouse::Left;
+		m.motion = motion;
+		m.x = 6;
+		m.y = y;
+		press(Event::Mouse("", m));
+		ftxui::Screen screen(80, 24);
+		ftxui::Render(screen, m_v.render());
+	};
+	// a.exr down to the last row: it is shown, and stays shown.
+	mouse(yA, ftxui::Mouse::Pressed);
+	mouse(yA + 1, ftxui::Mouse::Moved);
+	mouse(yLayers, ftxui::Mouse::Moved);
+	mouse(yLayers, ftxui::Mouse::Released);
+	EXPECT_EQ(names(), "b.exr layers.exr a.exr ");
+	EXPECT_EQ(state().m_current, 2);
+	// Past the top of the list: first, never above the global row.
+	mouse(yLayers, ftxui::Mouse::Pressed);
+	mouse(yA - 1, ftxui::Mouse::Moved);
+	mouse(yA - 5, ftxui::Mouse::Moved);
+	mouse(yA - 5, ftxui::Mouse::Moved);
+	mouse(yA - 5, ftxui::Mouse::Released);
+	EXPECT_EQ(names(), "a.exr b.exr layers.exr ");
+	EXPECT_EQ(state().m_current, 0);
+}
+
 TEST_F(ViewerTest, DraggingTheRightDividerResizesTheColumn)
 {
 	m_v.open({layersEntry()});
@@ -698,6 +750,43 @@ TEST_F(ViewerTest, TShowsLayerNames)
 	press(key("t"));
 	press(key("T"));
 	EXPECT_EQ(m_c.m_ctx.m_message, "names: off");
+}
+
+TEST_F(ViewerTest, TNumbersTiledFilesButNotLayers)
+{
+	// Versions of one file, alike but for their folder: numbered as tiled.
+	fs::create_directories(m_dir / "v001");
+	fs::create_directories(m_dir / "v002");
+	writeExr(m_dir / "v001" / "comp.exr", {"R", "G", "B"});
+	writeExr(m_dir / "v002" / "comp.exr", {"R", "G", "B"});
+	// Drawn until `want` shows (the tiles decode one by one).
+	std::string out;
+	auto shows = [&](std::string_view want)
+	{
+		return waitFor(
+		    [&]
+		    {
+			    ftxui::Screen screen(120, 40);
+			    ftxui::Render(screen, m_v.render());
+			    out = screen.ToString();
+			    return out.find(want) != std::string::npos;
+		    });
+	};
+	m_v.open({entryForPath(m_dir / "v001" / "comp.exr"),
+	          entryForPath(m_dir / "v002" / "comp.exr")},
+	         true);
+	ASSERT_TRUE(info());
+	press(key("T"));
+	EXPECT_TRUE(shows("[1] comp.exr")) << out;
+	EXPECT_TRUE(shows("[2] comp.exr")) << out;
+
+	m_v.open({layersEntry()}, true); // a tile per layer: names say it all
+	ASSERT_TRUE(info());
+	EXPECT_TRUE(shows("diffuse")) << out;
+	EXPECT_TRUE(shows("spec")) << out;
+	EXPECT_EQ(out.find("] rgba"), std::string::npos);
+	EXPECT_EQ(out.find("] diffuse"), std::string::npos);
+	EXPECT_EQ(tileNameLabel(0, "a.exr"), "[1] a.exr");
 }
 
 TEST_F(ViewerTest, FpsCyclesUpFromTheFileRate)
