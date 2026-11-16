@@ -4,9 +4,13 @@
 # Change it with `just set-config Release`; everything else follows.
 
 set shell := ["bash", "-c"]
+# Spelled out: a plain "bash" finds the WSL launcher in System32 before Git's.
+set windows-shell := ["C:/Program Files/Git/bin/bash.exe", "-c"]
 
-# Apple Silicon on macOS, x64 elsewhere (presets: macos-arm64-*, linux-x64-*).
-arch := if os() == "macos" { "macos-arm64" } else { "linux-x64" }
+# Apple Silicon on macOS, x64 elsewhere (presets: macos-arm64-*, linux-x64-*, windows-x64-*).
+arch := if os() == "macos" { "macos-arm64" } else if os() == "windows" { "windows-x64" } else { "linux-x64" }
+# Windows has no nix: its stand-in puts llvm-mingw on PATH (scripts/windows-env.sh).
+env := if os() == "windows" { "source scripts/windows-env.sh && " } else { "" }
 
 # The active config: whatever `just set-config` last wrote, else $REGA_CONFIG, else Release.
 state_file := ".rega-config"
@@ -27,14 +31,19 @@ default:
 
 # Install conan dependencies for the active config
 [group('build')]
-deps:
-    conan install . -pr:h=./conan-profiles/conan-{{ arch }}-clang -pr:b=./conan-profiles/conan-{{ arch }}-clang \
+deps: _recipes
+    {{ env }}conan install . -pr:h=./conan-profiles/conan-{{ arch }}-clang -pr:b=./conan-profiles/conan-{{ arch }}-clang \
         -s build_type={{ config }} --output-folder={{ conan_dir }} --build=missing
+
+# conancenter recipes rega needs changed (conan-recipes/README.md), into the conan cache
+[private]
+_recipes:
+    @conan export conan-recipes/opencolorio --version 2.5.2 >/dev/null 2>&1
 
 # Configure the build tree (re-run after adding files or changing presets)
 [group('build')]
 setup: _deps-once
-    cmake --preset {{ preset }}
+    {{ env }}cmake --preset {{ preset }}
     ln -sf {{ build_dir }}/compile_commands.json compile_commands.json
 
 # Deps and configure only when missing, so plain `just build` works on a fresh clone.
@@ -49,7 +58,7 @@ configure: _deps-once
 # Build rega and the tests
 [group('build')]
 build: configure
-    cmake --build --preset {{ preset }}
+    {{ env }}cmake --build --preset {{ preset }}
 
 # --- config ------------------------------------------------------------------
 
@@ -66,6 +75,17 @@ set-config value:
 [group('run')]
 run *args: build
     ./{{ build_dir }}/rega {{ args }}
+
+# Run rega in its own window: `just gui`, `just gui demos/` (what artists get, no kitty needed)
+[group('run')]
+gui *args: build
+    ./{{ build_dir }}/rega --gui {{ args }}
+
+# Draw the window off screen and save it: `just gui-shot out.png --gui-keys 24 shot.####.exr`
+[group('run')]
+gui-shot out *args: build
+    SDL_VIDEO_DRIVER=offscreen ./{{ build_dir }}/rega --gui-screenshot {{ out }} {{ args }}
+    @echo "{{ out }}"
 
 # Download the OpenEXR test images into demos/ (gitignored)
 [group('run')]
@@ -180,6 +200,150 @@ package:
     tar -czf "dist/rega-${version#v}-{{ arch }}.tar.gz" \
         -C build/{{ arch }}-Release rega -C "$PWD" LICENSE licenses
     echo "dist/rega-${version#v}-{{ arch }}.tar.gz"
+
+# The window's download for this OS in dist/: AppImage (Linux), .dmg (macOS), zip + setup.exe (Windows)
+[group('package')]
+package-gui: _recipes
+    just _package-gui-{{ os() }}
+
+[private]
+_release-build target="rega":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ env }}true
+    [ -f "conan-build/conan-{{ arch }}-clang/Release/conan_toolchain.cmake" ] || \
+        {{ env }}conan install . -pr:h=./conan-profiles/conan-{{ arch }}-clang -pr:b=./conan-profiles/conan-{{ arch }}-clang \
+            -s build_type=Release --output-folder=conan-build/conan-{{ arch }}-clang/Release --build=missing
+    {{ env }}cmake --preset {{ arch }}-Release
+    {{ env }}cmake --build --preset {{ arch }}-Release --target {{ target }}
+
+# rega-<version>-<arch>.AppImage: the nix glibc and libstdc++ the build used go in with SDL3
+# and what it loads; AppRun starts rega through that loader, with --gui (quickrecord's way).
+[private]
+_package-gui-linux: _release-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${GLIBC_LIB_PATH:?run inside the nix devShell}"
+    VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+    export LINUXDEPLOY_OUTPUT_VERSION="${VERSION:-dev}"
+    APPDIR=build/AppDir
+    rm -rf "$APPDIR"
+    mkdir -p "$APPDIR/usr/lib" "$APPDIR/usr/bin" "$APPDIR/usr/share/licenses/rega" dist
+    # The whole glibc set (libmvec, libresolv, nss, ...), not just libc: a host's older
+    # copies of the rest are picked up from /usr/lib64 and fail on GLIBC_2.xx versions.
+    cp "$GLIBC_LIB_PATH"/*.so.[0-9]* "$APPDIR/usr/lib/"
+    # The C++ runtime is too new for most hosts' (e.g. Rocky 9 ships GCC 11), so bundle it.
+    cp "$GCC_LIB_PATH/libstdc++.so.6" "$GCC_LIB_PATH/libgcc_s.so.1" "$APPDIR/usr/lib/"
+    # Read-only (as copied from the nix store): linuxdeploy would otherwise patchelf an
+    # $ORIGIN rpath into ld-linux/libc, which makes the loader crash.
+    chmod a-w "$APPDIR"/usr/lib/*
+    cp -r LICENSE licenses/* assets/fonts/OFL.txt "$APPDIR/usr/share/licenses/rega/"
+    cp assets/icons/rega.png build/rega.png
+    linuxdeploy \
+        --appdir "$APPDIR" \
+        --executable build/linux-x64-Release/rega \
+        --custom-apprun scripts/AppRun.template \
+        --desktop-file scripts/rega.desktop \
+        --icon-file build/rega.png \
+        $APPIMAGE_LIBS_ARGS \
+        --output appimage
+    OUT="rega-$LINUXDEPLOY_OUTPUT_VERSION-$(uname -m).AppImage"
+    mv "$OUT" dist/
+    echo "dist/$OUT"
+
+# rega.app (ad-hoc signed) in rega-<version>-macos-arm64.dmg. Opening it from Finder opens
+# the window (main.cpp: inAppBundle).
+[private]
+_package-gui-macos: _release-build
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+    VERSION="${VERSION:-dev}"
+    rm -rf build/dmg build/rega.iconset
+    APP=build/dmg/rega.app
+    mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/licenses" build/rega.iconset dist
+    cp build/macos-arm64-Release/rega "$APP/Contents/MacOS/"
+    sed "s/@VERSION@/$VERSION/g" scripts/macos/Info.plist.in > "$APP/Contents/Info.plist"
+    for s in 16 32 128 256 512; do
+        rsvg-convert -w $s -h $s assets/icons/rega.svg -o build/rega.iconset/icon_${s}x${s}.png
+        rsvg-convert -w $((2 * s)) -h $((2 * s)) assets/icons/rega.svg -o build/rega.iconset/icon_${s}x${s}@2x.png
+    done
+    iconutil -c icns build/rega.iconset -o "$APP/Contents/Resources/rega.icns"
+    cp -r LICENSE licenses/* assets/fonts/OFL.txt "$APP/Contents/Resources/licenses/"
+    codesign --force --deep -s - "$APP"
+    ln -s /Applications build/dmg/Applications
+    OUT="dist/rega-$VERSION-macos-arm64.dmg"
+    rm -f "$OUT"
+    hdiutil create -volname rega -srcfolder build/dmg -ov -format UDZO "$OUT"
+    echo "$OUT"
+
+[private]
+_package-gui-windows: (_release-build "rega")
+    just _package-windows-from build/windows-x64-Release/rega.exe
+
+# The Windows zip and setup.exe in dist/ from a built rega.exe (e.g. after `just windows-check`)
+[group('package')]
+package-windows exe="build/windows-x64-Release/rega.exe": _recipes
+    just _package-windows-from {{ exe }}
+
+[private]
+_package-windows-from exe:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    {{ env }}true
+    VERSION=$(git describe --tags --abbrev=0 2>/dev/null | sed 's/^v//' || true)
+    VERSION="${VERSION:-dev}"
+    DIR=build/zip/rega
+    rm -rf build/zip
+    mkdir -p "$DIR/licenses" dist
+    cp "{{ exe }}" "$DIR/rega.exe"
+    # The symbols are half its size.
+    STRIP=$(command -v llvm-strip || command -v x86_64-w64-mingw32-strip || echo .sdk/llvm-mingw/bin/llvm-strip)
+    "$STRIP" "$DIR/rega.exe"
+    cp -r LICENSE licenses/* assets/fonts/OFL.txt "$DIR/licenses/"
+    OUT="dist/rega-$VERSION-windows-x64.zip"
+    rm -f "$OUT"
+    (cd build/zip && "$(command -v python3 || command -v python)" -m zipfile -c "../../$OUT" rega)
+    echo "$OUT"
+    just windows-installer "$DIR" "$VERSION"
+
+# The per-user Windows setup.exe in dist/ from a packaged rega/ folder (makensis runs anywhere)
+[group('package')]
+windows-installer dir version="dev":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v makensis >/dev/null || { echo "makensis not found: the nix devShell has it (or choco install nsis)"; exit 1; }
+    VERSION="{{ version }}"
+    # makensis wants four numbers here; anything but X.Y.Z (e.g. dev) gets 0.0.0.0.
+    if [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then VI_VERSION="$VERSION.0"; else VI_VERSION=0.0.0.0; fi
+    # Absolute and native (C:\… on Windows): makensis runs from the script's directory.
+    native() { (cd "$1" && (cygpath -w "$PWD" 2>/dev/null || pwd)); }
+    mkdir -p dist
+    SRC=$(native "{{ dir }}")
+    OUT="$(native dist)/rega-$VERSION-windows-x64-setup.exe"
+    [ -f "$SRC/rega.exe" ] || { echo "No rega.exe in $SRC"; exit 1; }
+    makensis -V2 -DVERSION="$VERSION" -DVI_VERSION="$VI_VERSION" -DSRC_DIR="$SRC" -DOUT_FILE="$OUT" \
+        scripts/windows-installer.nsi
+    echo "dist/$(basename "$OUT")"
+
+# Cross-compile rega.exe and its tests for Windows here (llvm-mingw into .sdk/), before a release
+[group('package')]
+windows-check: _recipes
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source scripts/windows-env.sh
+    out=conan-build/conan-windows-x64-clang/Release
+    [ -f "$out/conan_toolchain.cmake" ] || \
+        conan install . -pr:h=./conan-profiles/conan-windows-x64-clang -pr:b=./conan-profiles/conan-{{ arch }}-clang \
+            -s build_type=Release --output-folder="$out" --build=missing
+    cmake --preset windows-x64-Release
+    cmake --build --preset windows-x64-Release
+
+# Run the cross-built Windows tests under Wine (Linux; after `just windows-check`)
+[group('package')]
+windows-test:
+    nix shell nixpkgs#wineWow64Packages.stable nixpkgs#xvfb-run -c \
+        xvfb-run -a wine build/windows-x64-Release/rega_tests.exe --gtest_brief=1
 
 # --- clean -------------------------------------------------------------------
 

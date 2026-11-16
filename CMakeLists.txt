@@ -20,6 +20,9 @@ set(CMAKE_CXX_EXTENSIONS OFF) # -std=c++20, not gnu++20
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(REGA_BUILD_TESTS "Build unit tests" ON)
+# rega --gui: the same app in a window of its own (SDL3). Off for the static
+# musl build, which can't load a display's libraries.
+option(REGA_GUI "Build the --gui window (SDL3)" ON)
 
 # Dependencies come from conan (dev) or nixpkgs (nix build); target names differ slightly.
 find_package(ftxui REQUIRED)
@@ -107,11 +110,13 @@ add_library(rega_core STATIC
     src/term/ImageView.cpp
     src/term/Kitty.cpp
     src/term/LinkMeter.cpp
+    src/term/Native.cpp
     src/term/Output.cpp
     src/util/Clipboard.cpp
     src/util/Fuzzy.cpp
     src/util/Log.cpp
     src/util/Parallel.cpp
+    src/util/Paths.cpp
     src/util/Sandbox.cpp
     src/util/Ui.cpp)
 target_include_directories(rega_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
@@ -120,8 +125,48 @@ target_link_libraries(rega_core PUBLIC
     stb::stb TIFF::TIFF ZLIB::ZLIB ${REGA_FFMPEG}
     ${REGA_LIBDEFLATE} Threads::Threads)
 
+if(MINGW)
+    # One rega.exe with nothing beside it: libc++, libunwind and winpthreads in it.
+    # bcrypt: minizip-ng's (through OCIO), which its conan package doesn't list.
+    target_link_options(rega_core INTERFACE -static)
+    target_link_libraries(rega_core PUBLIC bcrypt)
+endif()
+
 add_executable(rega src/main.cpp)
 target_link_libraries(rega PRIVATE rega_core CLI11::CLI11)
+
+if(REGA_GUI)
+    find_package(SDL3 REQUIRED CONFIG)
+    # nixpkgs: SDL3::SDL3 (shared); conan: SDL3::SDL3-static as well.
+    if(TARGET SDL3::SDL3-static)
+        set(REGA_SDL3 SDL3::SDL3-static)
+    else()
+        set(REGA_SDL3 SDL3::SDL3)
+    endif()
+    include(cmake/Embed.cmake)
+    rega_embed(${CMAKE_BINARY_DIR}/generated/Fonts.cpp
+        FONT_REGULAR ${CMAKE_SOURCE_DIR}/assets/fonts/JetBrainsMonoNL-Regular.ttf
+        FONT_BOLD ${CMAKE_SOURCE_DIR}/assets/fonts/JetBrainsMonoNL-Bold.ttf
+        ICON_PNG ${CMAKE_SOURCE_DIR}/assets/icons/rega.png)
+    add_library(rega_gui STATIC
+        src/gui/Font.cpp
+        src/gui/Gui.cpp
+        src/gui/Input.cpp
+        src/gui/Settings.cpp
+        ${CMAKE_BINARY_DIR}/generated/Fonts.cpp)
+    target_link_libraries(rega_gui PUBLIC rega_core ${REGA_SDL3})
+    target_compile_definitions(rega PRIVATE REGA_GUI=1)
+    target_link_libraries(rega PRIVATE rega_gui)
+    if(WIN32)
+        # A window, never a console: --help / --version attach to the one
+        # they were typed in (main.cpp).
+        set_target_properties(rega PROPERTIES WIN32_EXECUTABLE TRUE)
+        # The exe's icon (Explorer, the taskbar, the Start menu).
+        enable_language(RC)
+        configure_file(cmake/rega.rc.in ${CMAKE_BINARY_DIR}/generated/rega.rc @ONLY)
+        target_sources(rega PRIVATE ${CMAKE_BINARY_DIR}/generated/rega.rc)
+    endif()
+endif()
 
 # Only add the bucket render demo tool if the source file exists
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tools/bucket-render.cpp")
@@ -136,7 +181,6 @@ if(REGA_BUILD_TESTS)
     add_executable(rega_tests
         tests/test_annotations.cpp
         tests/test_browser.cpp
-        tests/test_clipboard.cpp
         tests/test_colour.cpp
         tests/test_file_watcher.cpp
         tests/test_help_keys.cpp
@@ -145,22 +189,39 @@ if(REGA_BUILD_TESTS)
         tests/test_link_meter.cpp
         tests/test_log.cpp
         tests/test_movie.cpp
+        tests/test_native.cpp
         tests/test_panes.cpp
         tests/test_playbar.cpp
         tests/test_player.cpp
-        tests/test_sandbox.cpp
         tests/test_sequence_kitty.cpp
         tests/test_sheet.cpp
         tests/test_tour.cpp
-        tests/test_transfer.cpp
         tests/test_tutorial.cpp
         tests/test_util_ui.cpp
         tests/test_viewer.cpp)
+    if(NOT WIN32)
+        # The terminal's: tmux / OSC 52 copy, the seccomp sandbox, kitty's
+        # file and shared-memory transfers. Windows has only the window.
+        target_sources(rega_tests PRIVATE
+            tests/test_clipboard.cpp
+            tests/test_sandbox.cpp
+            tests/test_transfer.cpp)
+    endif()
     target_link_libraries(rega_tests PRIVATE rega_core GTest::gtest_main)
+    if(REGA_GUI)
+        target_sources(rega_tests PRIVATE tests/test_gui.cpp)
+        target_link_libraries(rega_tests PRIVATE rega_gui)
+    endif()
     target_compile_definitions(rega_tests PRIVATE
         REGA_TEST_DATA="${CMAKE_CURRENT_SOURCE_DIR}/tests/data")
     include(GoogleTest)
-    gtest_discover_tests(rega_tests)
+    # Cross-compiled (Windows from Linux): the tests can't run here to list
+    # themselves at build time; ctest asks them on the machine that runs them.
+    if(CMAKE_CROSSCOMPILING)
+        gtest_discover_tests(rega_tests DISCOVERY_MODE PRE_TEST)
+    else()
+        gtest_discover_tests(rega_tests)
+    endif()
 endif()
 
 # libFuzzer targets for the loaders, one per format (clang only): `just fuzz`.

@@ -203,7 +203,7 @@ Element AnnotationsPane::renderInput() const
 	// text with a block cursor, scrolled to keep the cursor in view; key hints
 	// on the right while they fit.
 	const Edit& ed = *m_edit;
-	const int width = Terminal::Size().dimx;
+	const int width = ui::screenSize().dimx;
 	const std::string where = fmt::format(" {} {} › ",
 	                                      ed.m_group == 0 ? "global" : "file",
 	                                      slotName(ed.m_slot));

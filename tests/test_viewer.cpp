@@ -228,7 +228,8 @@ TEST_F(ViewerTest, AMovieOpensAsFramesAndSteps)
 	m_v.open({entryForPath(movie)});
 	ASSERT_TRUE(state().m_sources[0].m_entry.isMovie());
 	EXPECT_EQ(state().frameCount(), 48);
-	EXPECT_EQ(sourceKey(state().m_sources[0]), movie.string());
+	EXPECT_EQ(fs::path(sourceKey(state().m_sources[0])).lexically_normal(),
+	          fs::absolute(movie).lexically_normal());
 
 	press(key("."));
 	EXPECT_EQ(state().m_frame, 1);

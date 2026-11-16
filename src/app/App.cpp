@@ -8,6 +8,7 @@
 #include "util/Ui.h"
 
 #include <ftxui/component/component.hpp>
+#include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/screen/string.hpp>
 #include <ftxui/screen/terminal.hpp>
 #include <spdlog/spdlog.h>
@@ -34,11 +35,12 @@ constexpr auto CLIENT_CHECK_INTERVAL = std::chrono::seconds(3);
 constexpr auto LINK_POLL_INTERVAL = std::chrono::milliseconds(100);
 } // namespace
 
-App::App(const AppOptions& opts, ScreenInteractive& screen)
-    : m_opts(opts), m_screen(screen),
-      m_caps(detectCaps(opts.m_graphics, opts.m_transfer)),
+App::App(const AppOptions& opts, Host& host, std::optional<TermCaps> caps)
+    : m_opts(opts), m_host(host),
+      m_caps(caps ? std::move(*caps)
+                  : detectCaps(opts.m_graphics, opts.m_transfer)),
       m_kitty(m_caps.tmuxLayers(), m_caps.m_transfer, &term::writeRaw),
-      m_svc([this] { m_screen.PostEvent(Event::Custom); },
+      m_svc([this] { m_host.redraw(); },
             static_cast<size_t>(opts.m_cacheBytes)),
       m_annPath(Annotations::defaultStatePath()),
       m_colour(ColourManager::defaultStatePath()),
@@ -47,11 +49,15 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
             .m_kitty = m_kitty,
             .m_ann = m_ann,
             .m_colour = m_colour,
-            .m_redraw = [this] { m_screen.PostEvent(Event::Custom); },
+            .m_redraw = [this] { m_host.redraw(); },
             .m_post = [this](std::function<void()> task)
-            { m_screen.Post(std::move(task)); },
-            .m_quit = [this] { m_screen.ExitLoopClosure()(); },
-            .m_message = {}},
+            { m_host.post(std::move(task)); },
+            .m_quit = [this] { m_host.quit(); },
+            .m_message = {},
+            .m_clipboard = m_host.gui() ? std::function<bool(std::string_view)>(
+                                              [this](std::string_view text)
+                                              { return m_host.copyText(text); })
+                                        : nullptr},
       m_browser(
           m_ctx,
           opts.m_chooserFile,
@@ -69,8 +75,8 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
       m_watcher(POLL_INTERVAL,
                 [this](std::vector<fs::path> changed)
                 {
-	                m_screen.Post([this, changed = std::move(changed)]
-	                              { filesChanged(changed); });
+	                m_host.post([this, changed = std::move(changed)]
+	                            { filesChanged(changed); });
                 })
 {
 	m_kitty.setLinkRate(opts.m_linkRate);
@@ -161,7 +167,7 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 					        autoTransfer(true,
 					                     false,
 					                     tmuxClientOverSsh(clients));
-					    m_screen.Post([this, t] { clientsChanged(t); });
+					    m_host.post([this, t] { clientsChanged(t); });
 				    }
 			    }
 		    });
@@ -188,9 +194,19 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 		m_ctx.m_message = "OCIO: " + m_colour.error();
 	}
 
+	open(opts.m_args, opts.m_paths);
+	updateWatch();
+	if(opts.m_tutorial)
+	{
+		m_tour.emplace();
+	}
+}
+
+void App::open(const std::vector<OpenArg>& given,
+               const std::vector<std::string>& paths)
+{
 	std::error_code ec;
-	const auto& paths = opts.m_paths;
-	if(opts.m_args.empty() &&
+	if(given.empty() &&
 	   (paths.empty() || (paths.size() == 1 && fs::is_directory(paths[0], ec))))
 	{
 		m_browser.openDirectory(
@@ -199,7 +215,7 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 	}
 	else
 	{
-		std::vector<OpenArg> args = opts.m_args;
+		std::vector<OpenArg> args = given;
 		if(args.empty())
 		{
 			for(const auto& p : paths)
@@ -219,7 +235,10 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 		}
 		if(entries.empty())
 		{
-			m_browser.openDirectory(fs::current_path());
+			if(m_browser.cwd().empty()) // at start; a drop leaves it be
+			{
+				m_browser.openDirectory(fs::current_path());
+			}
 			m_ctx.m_message = missing.empty() ? "no images to open"
 			                                  : "not found: " + missing.front();
 		}
@@ -245,11 +264,6 @@ App::App(const AppOptions& opts, ScreenInteractive& screen)
 				m_ctx.m_message = "not found: " + missing.front();
 			}
 		}
-	}
-	updateWatch();
-	if(opts.m_tutorial)
-	{
-		m_tour.emplace();
 	}
 }
 
@@ -315,7 +329,7 @@ void App::clientsChanged(Transfer t)
 		                      ? "a terminal attached over ssh: images go inline"
 		                      : "no terminal over ssh: images go through files";
 	}
-	m_screen.PostEvent(Event::Custom);
+	m_host.redraw();
 }
 
 void App::filesChanged(const std::vector<fs::path>& changed)
@@ -328,7 +342,7 @@ void App::filesChanged(const std::vector<fs::path>& changed)
 	redraw |= m_svc.checkForChanges(changed);
 	if(redraw)
 	{
-		m_screen.PostEvent(Event::Custom);
+		m_host.redraw();
 	}
 }
 
@@ -344,9 +358,10 @@ Element App::render()
 	if(m_caps.m_graphics == GraphicsMode::KITTY)
 	{
 		term::writeRaw("\x1b[?2026h");
-		m_screen.Post([] { term::writeRaw("\x1b[?2026l", true); });
+		m_host.post([] { term::writeRaw("\x1b[?2026l", true); });
 	}
-	if(refreshCellSize(m_caps))
+	// The window sets its own (setCellSize()).
+	if(!m_host.gui() && refreshCellSize(m_caps))
 	{
 		spdlog::info("cell size now {}x{}px", m_caps.m_cellW, m_caps.m_cellH);
 	}
@@ -524,22 +539,35 @@ Element App::renderHelp()
 		}
 		return vbox(std::move(lines));
 	};
-	// Only the keys of the mode you are in.
+	// Only the keys of the mode you are in; in the window, its own too.
+	auto withWindow = [this](std::vector<help::Section> sections, int col)
+	{
+		if(m_host.gui())
+		{
+			for(help::Section s : help::window())
+			{
+				s.m_column = col;
+				sections.push_back(std::move(s));
+			}
+		}
+		return sections;
+	};
 	std::string title;
 	Element body;
 	if(m_mode == Mode::BROWSER)
 	{
 		title = " rega browser keys ";
-		body = column(help::browser(), 0);
+		body = column(withWindow(help::browser(), 0), 0);
 	}
 	else
 	{
 		title = " rega viewer keys ";
-		Element left = column(help::viewer(), 0);
-		Element right = column(help::viewer(), 1);
+		const auto sections = withWindow(help::viewer(), 1);
+		Element left = column(sections, 0);
+		Element right = column(sections, 1);
 		// Two columns when they fit side by side, else one (scrollable).
 		constexpr int TWO_COLUMN_WIDTH = 118;
-		body = Terminal::Size().dimx >= TWO_COLUMN_WIDTH
+		body = ui::screenSize().dimx >= TWO_COLUMN_WIDTH
 		           ? hbox({left, text("   "), right})
 		           : vbox({left, text(""), right});
 	}
@@ -594,7 +622,7 @@ Element App::renderHelp()
 	// Scrollable when the terminal is still too short: ↑/↓ or wheel, a line
 	// at a time. The frame centres its focus: aim it half a view below the
 	// first line to show.
-	const int maxH = std::max(5, Terminal::Size().dimy - 6);
+	const int maxH = std::max(5, ui::screenSize().dimy - 6);
 	body->ComputeRequirement();
 	const int bodyH = body->requirement().min_y;
 	const int viewH = std::min(bodyH, maxH - 1);
@@ -643,7 +671,7 @@ bool App::helpEvent(Event e)
 	}
 	else if(e == Event::PageDown || e == Event::PageUp)
 	{
-		const int page = std::max(1, Terminal::Size().dimy - 8);
+		const int page = std::max(1, ui::screenSize().dimy - 8);
 		step = e == Event::PageDown ? page : -page;
 	}
 	if(step != 0)
@@ -764,6 +792,82 @@ bool App::onEvent(Event e)
 	return used;
 }
 
+void App::openPaths(const std::vector<std::string>& paths)
+{
+	if(paths.empty())
+	{
+		return;
+	}
+	m_help = false;
+	m_ctx.m_message.clear();
+	open({}, paths);
+	if(m_mode == Mode::BROWSER)
+	{
+		updateWatch();
+	}
+	m_host.redraw();
+}
+
+void App::setCellSize(int w, int h)
+{
+	if(w > 0 && h > 0 && (w != m_caps.m_cellW || h != m_caps.m_cellH))
+	{
+		m_caps.m_cellW = w;
+		m_caps.m_cellH = h;
+		spdlog::info("cell size now {}x{}px", w, h);
+	}
+}
+
+fs::path App::browserDir() const
+{
+	return m_browser.cwd();
+}
+
+std::string App::title() const
+{
+	const ViewerState& s = m_viewer.state();
+	if(m_mode == Mode::VIEWER && !s.m_sources.empty())
+	{
+		const Source& src = s.m_sources[static_cast<size_t>(std::clamp(
+		    s.m_current, 0, static_cast<int>(s.m_sources.size()) - 1))];
+		const std::string frame = src.frameLabel(s.m_frame);
+		return src.m_entry.m_name + (frame.empty() ? "" : " · " + frame) +
+		       " — rega";
+	}
+	const fs::path& dir = m_browser.cwd();
+	return (dir.empty() ? std::string("rega") : dir.string() + " — rega");
+}
+
+namespace
+{
+
+/// The terminal: FTXUI's own loop.
+class TerminalHost final : public Host
+{
+public:
+	explicit TerminalHost(ScreenInteractive& screen) : m_screen(screen)
+	{
+	}
+
+	void redraw() override
+	{
+		m_screen.PostEvent(Event::Custom);
+	}
+	void post(std::function<void()> task) override
+	{
+		m_screen.Post(std::move(task));
+	}
+	void quit() override
+	{
+		m_screen.ExitLoopClosure()();
+	}
+
+private:
+	ScreenInteractive& m_screen;
+};
+
+} // namespace
+
 int runApp(const AppOptions& opts)
 {
 	log::redirectToFile();
@@ -779,7 +883,8 @@ int runApp(const AppOptions& opts)
 	}
 
 	{
-		App app(opts, screen);
+		TerminalHost host(screen);
+		App app(opts, host);
 		auto root = Renderer([&] { return app.render(); });
 		root |= CatchEvent([&](Event e) { return app.onEvent(e); });
 		screen.Loop(root);

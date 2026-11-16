@@ -67,6 +67,34 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
+    },
+    {
+      "name": "windows-base",
+      "inherits": "base",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "x86_64-w64-mingw32-clang",
+        "CMAKE_CXX_COMPILER": "x86_64-w64-mingw32-clang++",
+        "CMAKE_RC_COMPILER": "x86_64-w64-mingw32-windres",
+        "CMAKE_SYSTEM_NAME": "Windows",
+        "CMAKE_CXX_FLAGS": "-Werror -Wall"
+      }
+    },
+    {
+      "name": "windows-x64-Debug",
+      "inherits": "windows-base",
+      "toolchainFile": "${sourceDir}/conan-build/conan-windows-x64-clang/Debug/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "windows-x64-Release",
+      "inherits": "windows-base",
+      "toolchainFile": "${sourceDir}/conan-build/conan-windows-x64-clang/Release/conan_toolchain.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
     }
   ],
   "buildPresets": [
@@ -85,6 +113,14 @@
     {
       "name": "macos-arm64-Release",
       "configurePreset": "macos-arm64-Release"
+    },
+    {
+      "name": "windows-x64-Debug",
+      "configurePreset": "windows-x64-Debug"
+    },
+    {
+      "name": "windows-x64-Release",
+      "configurePreset": "windows-x64-Release"
     }
   ],
   "testPresets": [

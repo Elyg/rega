@@ -1,6 +1,7 @@
 #include "image/Colour.h"
 
 #include "image/Loader.h"
+#include "util/Paths.h"
 
 #include <OpenColorIO/OpenColorIO.h>
 #include <spdlog/spdlog.h>
@@ -155,20 +156,8 @@ ColourManager::~ColourManager() = default;
 
 fs::path ColourManager::defaultStatePath()
 {
-	fs::path base;
-	if(const char* x = std::getenv("XDG_STATE_HOME"); x && *x)
-	{
-		base = x;
-	}
-	else if(const char* home = std::getenv("HOME"); home && *home)
-	{
-		base = fs::path(home) / ".local" / "state";
-	}
-	else
-	{
-		return {};
-	}
-	return base / "rega" / "colour";
+	const fs::path dir = paths::stateDir();
+	return dir.empty() ? dir : dir / "colour";
 }
 
 void ColourManager::loadState()

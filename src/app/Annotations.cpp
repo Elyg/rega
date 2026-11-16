@@ -1,5 +1,7 @@
 #include "app/Annotations.h"
 
+#include "util/Paths.h"
+
 #include <spdlog/spdlog.h>
 
 #include <algorithm>
@@ -308,20 +310,8 @@ bool Annotations::save(const fs::path& p) const
 
 fs::path Annotations::defaultStatePath()
 {
-	fs::path base;
-	if(const char* x = std::getenv("XDG_STATE_HOME"); x && *x)
-	{
-		base = x;
-	}
-	else if(const char* home = std::getenv("HOME"); home && *home)
-	{
-		base = fs::path(home) / ".local" / "state";
-	}
-	else
-	{
-		return {};
-	}
-	return base / "rega" / "annotations";
+	const fs::path dir = paths::stateDir();
+	return dir.empty() ? dir : dir / "annotations";
 }
 
 std::pair<std::string, AnnotationSet> splitLabels(const std::string& arg)

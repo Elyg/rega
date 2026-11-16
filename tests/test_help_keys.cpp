@@ -9,7 +9,8 @@ TEST(HelpKeys, SectionIdsAreUniqueAndAnchored)
 {
 	const std::string md = rega::help::markdown();
 	std::set<std::string> ids;
-	for(const auto* sections : {&rega::help::browser(), &rega::help::viewer()})
+	for(const auto* sections :
+	    {&rega::help::browser(), &rega::help::viewer(), &rega::help::window()})
 	{
 		for(const auto& s : *sections)
 		{

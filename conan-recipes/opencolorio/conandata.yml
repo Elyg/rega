@@ -1,0 +1,12 @@
+patches:
+  2.5.2:
+  - patch_description: use cci package, use PROJECT_BINARY_DIR/PROJECT_SOURCE_DIR
+    patch_file: patches/2.5.2-0001-fix-cmake-source-dir-and-targets.patch
+    patch_type: conan
+  - patch_description: open files by a wide name's c_str() (libc++ has no wstring ctor)
+    patch_file: patches/2.5.2-0002-ifstream-wide-name-c-str.patch
+    patch_type: portability
+sources:
+  2.5.2:
+    sha256: cb8b0ae38fa523be8f899a0b2d6b8ca8cbcda7bc4322c91d1ac2b6b2a0082474
+    url: https://github.com/AcademySoftwareFoundation/OpenColorIO/releases/download/v2.5.2/OpenColorIO-2.5.2.tar.gz

@@ -1,5 +1,7 @@
 #include "util/Log.h"
 
+#include "util/Paths.h"
+
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/sinks/stdout_sinks.h>
 
@@ -7,8 +9,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#ifndef _WIN32
 #include <poll.h>
 #include <unistd.h>
+#endif
 
 namespace rega::log
 {
@@ -39,10 +43,17 @@ void redirectToFile(std::string file)
 		{
 			file = env;
 		}
+#ifdef _WIN32
+		else if(const auto dir = paths::cacheDir(); !dir.empty())
+		{
+			file = (dir / "rega.log").string();
+		}
+#else
 		else if(const char* home = std::getenv("HOME"))
 		{
 			file = std::string(home) + "/.cache/rega/rega.log";
 		}
+#endif
 		else
 		{
 			// No home: a fixed name in a directory everyone shares is no
@@ -87,6 +98,7 @@ void redirectToFile(std::string file)
 	}
 }
 
+#ifndef _WIN32
 namespace
 {
 
@@ -103,9 +115,11 @@ void logLine(std::string line)
 }
 
 } // namespace
+#endif
 
 StderrToLog::StderrToLog()
 {
+#ifndef _WIN32
 	int fds[2];
 	if(::pipe(fds) != 0)
 	{
@@ -171,6 +185,7 @@ StderrToLog::StderrToLog()
 		    }
 		    emit(true);
 	    });
+#endif
 }
 
 StderrToLog::~StderrToLog()
@@ -179,12 +194,14 @@ StderrToLog::~StderrToLog()
 	{
 		return;
 	}
+#ifndef _WIN32
 	std::fflush(stderr);
 	::dup2(m_saved, STDERR_FILENO); // drops the pipe's write end
 	::close(m_saved);
 	m_stop = true;
 	m_thread.join();
 	::close(m_read);
+#endif
 }
 
 } // namespace rega::log

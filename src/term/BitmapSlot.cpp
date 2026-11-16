@@ -1,6 +1,7 @@
 #include "term/BitmapSlot.h"
 
 #include "term/Kitty.h"
+#include "term/Native.h"
 
 #include <ftxui/dom/node.hpp>
 #include <ftxui/dom/requirement.hpp>
@@ -43,12 +44,17 @@ private:
 } // namespace
 
 BitmapSlot::BitmapSlot(const TermCaps& caps, kitty::Transmitter& tx)
-    : m_caps(caps), m_tx(tx), m_id(tx.allocId())
+    : m_caps(caps), m_tx(tx),
+      m_id(caps.m_native ? caps.m_native->allocId() : tx.allocId())
 {
 }
 
 BitmapSlot::~BitmapSlot()
 {
+	if(m_caps.m_native)
+	{
+		return; // the window's id: nothing in a terminal to delete
+	}
 	if(m_transmitted)
 	{
 		m_tx.write(kitty::deleteImage(m_id, m_tx.tmux()), true);
@@ -74,6 +80,29 @@ void BitmapSlot::draw(ftxui::Screen& screen,
 		return;
 	}
 	Rgba8Image bmp = paint(cols * m_caps.m_cellW, rows * m_caps.m_cellH);
+	if(m_caps.m_graphics == GraphicsMode::NATIVE)
+	{
+		if(!m_native || cols != m_cols || rows != m_rows ||
+		   bmp.m_pixels != m_native->m_pixels)
+		{
+			m_native = std::make_shared<const Rgba8Image>(std::move(bmp));
+			m_cols = cols;
+			m_rows = rows;
+		}
+		if(m_caps.m_native)
+		{
+			m_caps.m_native->place(screen,
+			                       m_id,
+			                       box.x_min,
+			                       box.y_min,
+			                       cols,
+			                       rows,
+			                       cols,
+			                       rows,
+			                       m_native);
+		}
+		return;
+	}
 	if(!m_transmitted || cols != m_cols || rows != m_rows ||
 	   bmp.m_pixels != m_sent.m_pixels)
 	{

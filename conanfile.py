@@ -26,6 +26,10 @@ class RegaConan(ConanFile):
         self.requires("opencolorio/2.5.2")
         self.requires("ffmpeg/9.0.2")
         self.requires("gtest/1.17.0")
+        # rega --gui's window. Linux takes SDL3 from nixpkgs instead: conan's recipe
+        # needs the distro's X11 / Wayland dev packages, which NixOS doesn't have.
+        if self.settings.os != "Linux":
+            self.requires("sdl/3.4.16")
 
     def configure(self):
         self.options["*"].shared = False
@@ -52,6 +56,11 @@ class RegaConan(ConanFile):
             "vorbis", "vulkan", "xcb", "xlib",
         ):
             setattr(ffmpeg, "with_" + opt, False)
+        # SDL: the window, keyboard, mouse and file dialog only.
+        sdl = self.options["sdl"]
+        for opt in ("audio", "camera", "gpu", "haptic", "hidapi", "joystick", "power",
+                    "sensor", "tray", "vulkan"):
+            setattr(sdl, opt, False)
         ffmpeg.disable_everything = True
         ffmpeg.enable_decoders = FFMPEG_DECODERS
         ffmpeg.enable_demuxers = "mov"

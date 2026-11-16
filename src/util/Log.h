@@ -33,7 +33,7 @@ public:
 
 private:
 	int m_saved = -1; ///< the real stderr, put back on destruction
-	int m_read = -1;  ///< the pipe's end the thread reads
+	[[maybe_unused]] int m_read = -1; ///< the pipe's end the thread reads
 	std::atomic<bool> m_stop{false};
 	std::thread m_thread;
 };

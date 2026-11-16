@@ -1,8 +1,10 @@
 #pragma once
 
 #include <ftxui/dom/elements.hpp>
+#include <ftxui/screen/terminal.hpp>
 
 #include <initializer_list>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -11,6 +13,13 @@
 
 namespace rega::ui
 {
+
+/// The size of the screen the UI is drawn on, in cells: the window's under
+/// `--gui` (see setScreenSize()), else the terminal's.
+[[nodiscard]] ftxui::Dimensions screenSize();
+/// Draw on a screen of `size` cells instead of the terminal (the window
+/// sets it on each resize); nullopt goes back to the terminal.
+void setScreenSize(std::optional<ftxui::Dimensions> size);
 
 /// `name` with the bytes at `pos` (fuzzyMatch hits) highlighted.
 [[nodiscard]] ftxui::Element highlighted(std::string_view name,

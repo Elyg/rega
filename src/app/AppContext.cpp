@@ -23,8 +23,10 @@ std::unique_ptr<ImageSlot> newSlot(AppContext& ctx)
 void AppContext::copyText(std::string_view text)
 {
 	constexpr size_t MAX_SHOWN = 60;
+	const bool copied =
+	    m_clipboard ? m_clipboard(text) : copyToClipboard(text, m_caps.m_tmux);
 	m_message =
-	    !copyToClipboard(text, m_caps.m_tmux)
+	    !copied
 	        ? (localOnly() ? "copy is off (REGA_LOCAL_ONLY)" : "copy failed")
 	    : text.size() > MAX_SHOWN
 	        ? "copied: " + std::string(text.substr(0, MAX_SHOWN - 1)) + "…"
@@ -45,7 +47,7 @@ Element AppContext::statusLine(std::string_view hints,
 	                       .m_status = std::move(status),
 	                       .m_tail = tail,
 	                       .m_warning = m_caps.m_note},
-	                      Terminal::Size().dimx);
+	                      ui::screenSize().dimx);
 }
 
 int AppContext::reduceFor(const ImageSlot& slot,
@@ -57,7 +59,7 @@ int AppContext::reduceFor(const ImageSlot& slot,
 	auto [aw, ah] = slot.areaPixels();
 	if(!slot.drawn() || aw <= 0)
 	{
-		auto d = Terminal::Size();
+		auto d = ui::screenSize();
 		aw = d.dimx * slot.pxPerCellX();
 		ah = d.dimy * slot.pxPerCellY();
 	}
@@ -68,7 +70,7 @@ int AppContext::reduceFor(const ImageSlot& slot,
 	// Account for the kitty transmit cap (the slot renders below terminal
 	// resolution).
 	const double area = static_cast<double>(aw) * ah;
-	if(m_caps.m_graphics == GraphicsMode::KITTY && area > pixelCap)
+	if(drawsPixels(m_caps.m_graphics) && area > pixelCap)
 	{
 		scale *= std::sqrt(pixelCap / area);
 	}

@@ -91,8 +91,49 @@
           mdbook-mermaid
         ];
 
-        # Day to day: also the guide, and ffmpeg for just guide-record.
-        devTools = tools ++ guideTools ++ [ pkgs.ffmpeg ];
+        # Day to day: also the guide, ffmpeg for just guide-record, and what
+        # `just package-gui` / `just windows-installer` use (icons, NSIS).
+        devTools = tools ++ guideTools ++ [
+          pkgs.ffmpeg
+          pkgs.librsvg
+          pkgs.nsis
+        ];
+
+        # `just package-gui` on Linux (an AppImage, quickrecord's way): the nix glibc and C++
+        # runtime the build used go in, so it runs on hosts with older ones; the GL
+        # dispatch libraries SDL3 loads are bundled, the drivers come from the host.
+        appImageLibs = [
+          "${pkgs.libglvnd}/lib/libGL.so.1"
+          "${pkgs.libglvnd}/lib/libEGL.so.1"
+          "${pkgs.libglvnd}/lib/libGLX.so.0"
+          "${pkgs.libglvnd}/lib/libOpenGL.so.0"
+          "${pkgs.libglvnd}/lib/libGLdispatch.so.0"
+          # linuxdeploy leaves it to the host, but nixpkgs' SDL3 needs a newer one than
+          # many hosts have (wl_display_create_queue_with_name: wayland 1.23).
+          "${pkgs.wayland}/lib/libwayland-client.so.0"
+        ];
+        appImageSetup = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+          export GLIBC_LIB_PATH="${pkgs.glibc.out}/lib"
+          export GCC_LIB_PATH="${pkgs.stdenv.cc.cc.lib}/lib"
+          export APPIMAGE_LIBS_ARGS="${
+            builtins.concatStringsSep " " (map (l: "--library ${l}") appImageLibs)
+          }"
+          # linuxdeploy into .sdk/tools, extracted so it runs without FUSE.
+          if [ ! -e "$PWD/.sdk/tools/linuxdeploy" ]; then
+            ( set -e
+              mkdir -p "$PWD/.sdk/tools"
+              tmp=$(mktemp -d)
+              curl -fsSL "https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-$(uname -m).AppImage" -o "$tmp/linuxdeploy.AppImage"
+              chmod +x "$tmp/linuxdeploy.AppImage"
+              (cd "$tmp" && ./linuxdeploy.AppImage --appimage-extract >/dev/null)
+              rm -rf "$PWD/.sdk/tools/linuxdeploy-root"
+              mv "$tmp/squashfs-root" "$PWD/.sdk/tools/linuxdeploy-root"
+              ln -sf "$PWD/.sdk/tools/linuxdeploy-root/AppRun" "$PWD/.sdk/tools/linuxdeploy"
+              rm -rf "$tmp"
+            ) || echo "linuxdeploy: download failed (only just package-gui needs it)" >&2
+          fi
+          export PATH="$PWD/.sdk/tools:$PATH"
+        '';
 
         commonSetup = ''
           export SHELL_TYPE="host"
@@ -145,9 +186,14 @@
           else
             (pkgs.mkShell.override { stdenv = hostLlvm.stdenv; }) {
               packages = devTools;
-              shellHook = commonSetup + ''
+              # rega --gui's window: SDL3 from nixpkgs on Linux (conan's recipe wants the
+              # distro's X11 / Wayland dev packages); macOS and Windows get it from conan.
+              buildInputs = [ pkgs.sdl3 ];
+              shellHook = commonSetup + appImageSetup + ''
                 export CC=clang
                 export CXX=clang++
+                # find_package(SDL3) next to conan's packages (CMP0074).
+                export SDL3_ROOT=${pkgs.sdl3.dev}
               '';
             };
       }

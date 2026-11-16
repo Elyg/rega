@@ -46,6 +46,8 @@ struct AppContext
 	std::function<void()> m_quit;
 	/// One line in the bottom bar; cleared by the next key.
 	std::string m_message;
+	/// The window's clipboard (`--gui`); empty: the terminal's (tmux / OSC 52).
+	std::function<bool(std::string_view)> m_clipboard = {};
 
 	/// Clipboard + status message ("copied: …" / "copy failed").
 	void copyText(std::string_view text);

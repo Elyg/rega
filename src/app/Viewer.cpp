@@ -593,7 +593,7 @@ void Viewer::fitView(const ImageInfoPtr& info)
 	}
 	// From the terminal size, not the last draw, so it is right straight
 	// after a resize (the view spans the full width, minus HUD + status).
-	const auto term = Terminal::Size();
+	const auto term = ui::screenSize();
 	const int aw = term.dimx * m_viewSlot->pxPerCellX();
 	const int ah = std::max(0, term.dimy - 2) * m_viewSlot->pxPerCellY();
 	const int leftPx = coveredLeft() * m_viewSlot->pxPerCellX();
@@ -1079,7 +1079,11 @@ KeyLookup Viewer::keyLookup(int source,
 			{
 				const std::time_t t = std::time(nullptr);
 				std::tm tm{};
+#ifdef _WIN32
+				localtime_s(&tm, &t);
+#else
 				localtime_r(&t, &tm);
+#endif
 				return fmt::format("{:%Y-%m-%d}", tm);
 			}
 			return std::nullopt;
@@ -1299,7 +1303,7 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 			       m.y <= col.y_max;
 		};
 		// Where the widths put them (a drag moves them before the next draw).
-		const int right = Terminal::Size().dimx - coveredRight();
+		const int right = ui::screenSize().dimx - coveredRight();
 		m_dragDivider =
 		    leftPanelOpen() && onDivider(coveredLeft() - 1, m_leftBox) ? 1
 		    : rightPanelOpen() && onDivider(right, m_sideBox)          ? 2
@@ -1319,7 +1323,7 @@ bool Viewer::mouseEvent(Event e, const ImageInfoPtr& info)
 		{
 			// The divider follows the mouse: the left column ends just
 			// before it, the right one starts just after.
-			const double w = std::max(1, Terminal::Size().dimx);
+			const double w = std::max(1, ui::screenSize().dimx);
 			if(m_dragDivider == 1)
 			{
 				m_state.m_leftFrac = m.x / w;
@@ -2147,7 +2151,7 @@ Element Viewer::renderTiles(const ImageInfoPtr& info, int width)
 	// down. No captions unless `T` asks for them: the HUD names the selected
 	// one. The sheet zooms and pans as one image; only the tiles on screen
 	// are drawn.
-	const auto dims = Terminal::Size();
+	const auto dims = ui::screenSize();
 	const SheetArea area{std::max(1, width),
 	                     std::max(1, dims.dimy - 2)}; // minus HUD + status
 	const double pxX = m_viewSlot->pxPerCellX(), pxY = m_viewSlot->pxPerCellY();
@@ -2405,7 +2409,7 @@ Element Viewer::render()
 	{
 		main =
 		    renderTiles(info,
-		                Terminal::Size().dimx - coveredLeft() - coveredRight());
+		                ui::screenSize().dimx - coveredLeft() - coveredRight());
 	}
 	else
 	{
@@ -2605,7 +2609,7 @@ Element Viewer::renderPlaybar(const ImageInfoPtr& info)
 	     .m_playing = m_player.playing(),
 	     .m_fps = m_player.targetFps(info ? info->m_fps : std::nullopt),
 	     .m_measured = m_player.measuredFps()},
-	    Terminal::Size().dimx);
+	    ui::screenSize().dimx);
 }
 
 Element Viewer::renderGoto() const

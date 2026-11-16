@@ -1,6 +1,7 @@
 #include "term/ImageView.h"
 
 #include "term/Kitty.h"
+#include "term/Native.h"
 
 #include <ftxui/dom/node.hpp>
 #include <ftxui/dom/requirement.hpp>
@@ -181,7 +182,8 @@ std::vector<uint8_t> cellColors(const Rgba8Image& bmp, int cols, int rows)
 ImageSlot::ImageSlot(const TermCaps& caps,
                      kitty::Transmitter& tx,
                      std::function<void()> ready)
-    : m_caps(caps), m_tx(tx), m_ready(std::move(ready)), m_id(tx.allocId()),
+    : m_caps(caps), m_tx(tx), m_ready(std::move(ready)),
+      m_id(caps.m_native ? caps.m_native->allocId() : tx.allocId()),
       m_shownId(m_id)
 {
 }
@@ -211,6 +213,10 @@ ImageSlot::~ImageSlot()
 	while(!m_cache.empty())
 	{
 		drop(m_cache.begin());
+	}
+	if(m_caps.m_native)
+	{
+		return; // the window's id: nothing in a terminal to delete
 	}
 	if(m_transmitted)
 	{
@@ -374,11 +380,11 @@ void ImageSlot::drawOverlay(ftxui::Screen& screen,
 
 int ImageSlot::pxPerCellX() const
 {
-	return m_caps.m_graphics == GraphicsMode::KITTY ? m_caps.m_cellW : 1;
+	return drawsPixels(m_caps.m_graphics) ? m_caps.m_cellW : 1;
 }
 int ImageSlot::pxPerCellY() const
 {
-	return m_caps.m_graphics == GraphicsMode::KITTY ? m_caps.m_cellH : 2;
+	return drawsPixels(m_caps.m_graphics) ? m_caps.m_cellH : 2;
 }
 
 std::optional<std::pair<double, double>> ImageSlot::imageCoordAt(int cx,
@@ -396,11 +402,11 @@ std::optional<std::pair<double, double>> ImageSlot::imageCoordAt(int cx,
 
 std::tuple<int, int, double> ImageSlot::pictureSize(const Key& key)
 {
-	const bool kittyMode = key.m_mode == GraphicsMode::KITTY;
-	int pw = key.m_cols * (kittyMode ? key.m_cellW : 1);
-	int ph = key.m_rows * (kittyMode ? key.m_cellH : 2);
+	const bool pixels = drawsPixels(key.m_mode);
+	int pw = key.m_cols * (pixels ? key.m_cellW : 1);
+	int ph = key.m_rows * (pixels ? key.m_cellH : 2);
 	double quality = 1.0;
-	if(kittyMode && static_cast<double>(pw) * ph > key.m_maxPixels)
+	if(pixels && static_cast<double>(pw) * ph > key.m_maxPixels)
 	{
 		quality = std::sqrt(key.m_maxPixels / (static_cast<double>(pw) * ph));
 		pw = std::max(1, static_cast<int>(pw * quality));
@@ -478,7 +484,11 @@ ImageSlot::Prepared ImageSlot::prepare(Request req) const
 
 void ImageSlot::apply(Prepared p)
 {
-	if(p.m_key.m_mode == GraphicsMode::KITTY)
+	if(p.m_key.m_mode == GraphicsMode::NATIVE)
+	{
+		m_native = std::make_shared<const Rgba8Image>(std::move(p.m_bitmap));
+	}
+	else if(p.m_key.m_mode == GraphicsMode::KITTY)
 	{
 		// Replaces the picture under m_id (and, by its placement id, the
 		// placement). A new size in cells (tiles zoomed, a fold, a resize):
@@ -754,8 +764,7 @@ void ImageSlot::requestLocked(const Key& key, LayerImagePtr img, bool fromDraw)
 
 void ImageSlot::prepareAhead(LayerImagePtr img)
 {
-	if(!m_ready || !m_lastDrawn || !img ||
-	   m_lastDrawn->m_mode != GraphicsMode::KITTY)
+	if(!m_ready || !m_lastDrawn || !img || !drawsPixels(m_lastDrawn->m_mode))
 	{
 		return;
 	}
@@ -875,7 +884,7 @@ void ImageSlot::draw(ftxui::Screen& screen,
 		std::lock_guard lk(m_jobMu);
 		m_waitFor.reset();
 	}
-	else if(kittyMode && m_ready)
+	else if(drawsPixels(m_caps.m_graphics) && m_ready)
 	{
 		m_lastDrawn = key;
 		// One lock from "is it done?" to "wake me when it is", or the
@@ -928,6 +937,24 @@ void ImageSlot::draw(ftxui::Screen& screen,
 		apply(prepare({key, img}));
 	}
 
+	if(m_caps.m_graphics == GraphicsMode::NATIVE)
+	{
+		if(m_native && m_caps.m_native)
+		{
+			// Until a resized picture is ready, the last one in what it
+			// covered of the new box.
+			m_caps.m_native->place(screen,
+			                       m_id,
+			                       box.x_min,
+			                       box.y_min,
+			                       m_cols,
+			                       m_rows,
+			                       cols,
+			                       rows,
+			                       m_native);
+		}
+		return;
+	}
 	if(kittyMode)
 	{
 		if(!m_transmitted)

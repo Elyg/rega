@@ -408,8 +408,11 @@ TEST(Browser, CopyTextOfAFileAndASequence)
 	rega::Entry file;
 	file.m_path = "/renders/v2/chart.exr";
 	file.m_name = "chart.exr";
-	EXPECT_EQ(rega::entryCopyText(file, 'c'), "/renders/v2/chart.exr");
-	EXPECT_EQ(rega::entryCopyText(file, 'd'), "/renders/v2");
+	// Absolute and in the system's separators ("C:\\renders\\v2" on Windows).
+	auto native = [](const char* p)
+	{ return std::filesystem::absolute(p).make_preferred().string(); };
+	EXPECT_EQ(rega::entryCopyText(file, 'c'), native("/renders/v2/chart.exr"));
+	EXPECT_EQ(rega::entryCopyText(file, 'd'), native("/renders/v2"));
 	EXPECT_EQ(rega::entryCopyText(file, 'f'), "chart.exr");
 	EXPECT_EQ(rega::entryCopyText(file, 'n'), "chart");
 
@@ -417,7 +420,8 @@ TEST(Browser, CopyTextOfAFileAndASequence)
 	seq.m_kind = rega::Entry::Kind::SEQUENCE;
 	seq.m_path = "/renders/v2/shot.1001.exr";
 	seq.m_name = "shot.####.exr [1001-1100]";
-	EXPECT_EQ(rega::entryCopyText(seq, 'c'), "/renders/v2/shot.####.exr");
+	EXPECT_EQ(rega::entryCopyText(seq, 'c'),
+	          native("/renders/v2/shot.####.exr"));
 	EXPECT_EQ(rega::entryCopyText(seq, 'f'), "shot.####.exr");
 	EXPECT_EQ(rega::entryCopyText(seq, 'n'), "shot.####");
 

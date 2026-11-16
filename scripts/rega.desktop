@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=rega
+GenericName=Image Viewer
+Comment=View EXR, TIFF, PNG and JPEG images, sequences and movies
+Exec=rega %F
+Icon=rega
+Terminal=false
+Categories=Graphics;Viewer;2DGraphics;RasterGraphics;
+MimeType=image/x-exr;image/tiff;image/png;image/jpeg;video/quicktime;video/mp4;inode/directory;
+Keywords=exr;openexr;vfx;render;image;sequence;viewer;
+StartupWMClass=rega

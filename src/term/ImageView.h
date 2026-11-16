@@ -295,6 +295,8 @@ private:
 	    m_keepAlive; ///< the key compares raw pointers; keep the image alive
 	std::optional<Key> m_last;
 	Rgba8Image m_halfblock;
+	/// GraphicsMode::NATIVE: the picture on screen, for the window to draw.
+	std::shared_ptr<const Rgba8Image> m_native;
 	/// Per drawn cell, average RGB of the rendered image (for overlay strips).
 	std::vector<uint8_t> m_cellRgb;
 	int m_cols = 0, m_rows = 0;

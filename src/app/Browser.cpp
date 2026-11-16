@@ -431,6 +431,7 @@ std::string entryCopyText(const Entry& e, char what)
 		// The pattern the name shows ("shot.####.exr [1001-1100]").
 		path = path.parent_path() / e.m_name.substr(0, e.m_name.rfind(" ["));
 	}
+	path.make_preferred(); // one kind of separator (Windows: \)
 	switch(what)
 	{
 		case 'd':
@@ -603,7 +604,7 @@ bool Browser::mouseEvent(Event e)
 	}
 	if(m_dragDivider && m.motion == Mouse::Moved)
 	{
-		const double w = std::max(1, Terminal::Size().dimx);
+		const double w = std::max(1, ui::screenSize().dimx);
 		constexpr int MIN_COL = 6, MIN_PREVIEW = 12;
 		if(m_dragDivider == 1)
 		{
@@ -660,7 +661,7 @@ bool Browser::event(Event e)
 
 	bool wasG = m_pendingG;
 	m_pendingG = false;
-	int page = std::max(1, Terminal::Size().dimy - 4);
+	int page = std::max(1, ui::screenSize().dimy - 4);
 
 	// `c` then c / d / f / n: copy the marked entries' (else the selected
 	// one's) path, folder, file name or name, one a line. Any other key
@@ -1003,7 +1004,7 @@ Element Browser::renderPreview()
 		                       -1,
 		                       false,
 		                       nullptr,
-		                       Terminal::Size().dimx - parentW - currentW - 2,
+		                       ui::screenSize().dimx - parentW - currentW - 2,
 		                       m_previewBoxes);
 	}
 	if(!e->isImage())
@@ -1018,7 +1019,7 @@ Element Browser::renderPreview()
 		{
 			// Only the visible slice: files can be long.
 			const int total = static_cast<int>(lines->size());
-			const int visible = std::max(1, Terminal::Size().dimy - 6);
+			const int visible = std::max(1, ui::screenSize().dimy - 6);
 			m_previewScroll =
 			    std::clamp(m_previewScroll, 0, std::max(0, total - visible));
 			rows.push_back(separatorLight() |
@@ -1192,7 +1193,7 @@ std::vector<fs::path> Browser::shownDirs() const
 
 std::pair<int, int> Browser::columnWidths() const
 {
-	const int w = Terminal::Size().dimx;
+	const int w = ui::screenSize().dimx;
 	return {std::max(6, static_cast<int>(w * m_parentFrac)),
 	        std::max(6, static_cast<int>(w * m_currentFrac))};
 }

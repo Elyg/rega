@@ -4,6 +4,7 @@
 #include "app/AppContext.h"
 #include "app/Browser.h"
 #include "app/FileWatcher.h"
+#include "app/Host.h"
 #include "app/Tour.h"
 #include "app/Viewer.h"
 #include "image/ImageService.h"
@@ -11,7 +12,6 @@
 #include "term/Kitty.h"
 
 #include <ftxui/component/event.hpp>
-#include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 
 #include <cstdint>
@@ -56,7 +56,9 @@ int runApp(const AppOptions& opts);
 class App
 {
 public:
-	App(const AppOptions& opts, ftxui::ScreenInteractive& screen);
+	/// `caps`: how to draw, when the host decides (the window); else what
+	/// the terminal can do (detectCaps()).
+	App(const AppOptions& opts, Host& host, std::optional<TermCaps> caps = {});
 	~App();
 	App(const App&) = delete;
 	App& operator=(const App&) = delete;
@@ -65,6 +67,17 @@ public:
 	[[nodiscard]] ftxui::Element render();
 	/// Handle an event; true when consumed.
 	[[nodiscard]] bool onEvent(ftxui::Event e);
+
+	/// Open `paths` as the command line would (a directory in the browser;
+	/// images, sequences in the viewer): files dropped on the window, or
+	/// picked in its Open dialog.
+	void openPaths(const std::vector<std::string>& paths);
+	/// The window's cell size changed (font size, display scale).
+	void setCellSize(int w, int h);
+	/// The directory the browser shows.
+	[[nodiscard]] std::filesystem::path browserDir() const;
+	/// What the window's title shows: the image or directory open.
+	[[nodiscard]] std::string title() const;
 
 private:
 	enum class Mode
@@ -87,9 +100,12 @@ private:
 	void updateWatch();
 	/// What the tour watches, as things are now.
 	[[nodiscard]] TourView tourView() const;
+	/// Open the command line's `args` / `paths` (see AppOptions).
+	void open(const std::vector<OpenArg>& args,
+	          const std::vector<std::string>& paths);
 
 	AppOptions m_opts;
-	ftxui::ScreenInteractive& m_screen;
+	Host& m_host;
 	TermCaps m_caps;
 	kitty::Transmitter m_kitty;
 	ImageService m_svc;

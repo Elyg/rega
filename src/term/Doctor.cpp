@@ -4,12 +4,15 @@
 #include "util/Log.h"
 
 #include <spdlog/fmt/fmt.h>
+#ifndef _WIN32
 #include <sys/ioctl.h>
+
+#include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <cstdio>
 #include <cstdlib>
-#include <unistd.h>
 
 namespace rega
 {
@@ -187,9 +190,17 @@ std::vector<DoctorCheck> doctorChecks(const std::string& forced)
 	}
 	else
 	{
+#ifdef _WIN32
+		struct
+		{
+			int ws_col = 0, ws_row = 0, ws_xpixel = 0, ws_ypixel = 0;
+		} ws;
+		const bool px = false;
+#else
 		struct winsize ws{};
 		const bool px = ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 &&
 		                ws.ws_xpixel > 0 && ws.ws_col > 0;
+#endif
 		out.push_back(
 		    {px ? L::OK : (kittyTerm ? L::WARN : L::INFO),
 		     "cell size",
@@ -266,7 +277,11 @@ int runDoctor(const std::string& forced)
 {
 	using L = DoctorCheck::Level;
 	auto& out = log::out();
+#ifdef _WIN32
+	const bool color = false;
+#else
 	const bool color = isatty(STDOUT_FILENO);
+#endif
 	auto paint = [&](const char* code, const std::string& s)
 	{ return color ? fmt::format("\x1b[{}m{}\x1b[0m", code, s) : s; };
 	out.info("rega doctor");

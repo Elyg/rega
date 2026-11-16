@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+  <!-- rega: Lithuanian for "sight". An eye whose iris is a colour wheel. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a2d34"/>
+      <stop offset="1" stop-color="#17181c"/>
+    </linearGradient>
+    <clipPath id="eye">
+      <path d="M28 128 C 70 62, 186 62, 228 128 C 186 194, 70 194, 28 128 Z"/>
+    </clipPath>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="url(#bg)"/>
+  <path d="M28 128 C 70 62, 186 62, 228 128 C 186 194, 70 194, 28 128 Z" fill="#e8eaee"/>
+  <g clip-path="url(#eye)">
+    <!-- the iris: six wedges, red through magenta -->
+    <g transform="translate(128 128)">
+      <path d="M0 0 L0 -50 A50 50 0 0 1 43.3 -25 Z" fill="#e06c75"/>
+      <path d="M0 0 L43.3 -25 A50 50 0 0 1 43.3 25 Z" fill="#e5c07b"/>
+      <path d="M0 0 L43.3 25 A50 50 0 0 1 0 50 Z" fill="#98c379"/>
+      <path d="M0 0 L0 50 A50 50 0 0 1 -43.3 25 Z" fill="#56b6c2"/>
+      <path d="M0 0 L-43.3 25 A50 50 0 0 1 -43.3 -25 Z" fill="#61afef"/>
+      <path d="M0 0 L-43.3 -25 A50 50 0 0 1 0 -50 Z" fill="#c678dd"/>
+      <circle r="22" fill="#17181c"/>
+      <circle cx="-12" cy="-14" r="7" fill="#ffffff" opacity="0.9"/>
+    </g>
+  </g>
+  <path d="M28 128 C 70 62, 186 62, 228 128 C 186 194, 70 194, 28 128 Z" fill="none" stroke="#17181c" stroke-width="6"/>
+</svg>

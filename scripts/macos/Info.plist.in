@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- rega.app (just package-gui on macOS fills in @VERSION@). The binary opens its window
+     when it runs from inside the bundle (main.cpp). Open With: offered, never the default
+     (LSHandlerRank Alternate). -->
+<plist version="1.0">
+<dict>
+	<key>CFBundleName</key>
+	<string>rega</string>
+	<key>CFBundleDisplayName</key>
+	<string>rega</string>
+	<key>CFBundleIdentifier</key>
+	<string>io.github.elyg.rega</string>
+	<key>CFBundleExecutable</key>
+	<string>rega</string>
+	<key>CFBundleIconFile</key>
+	<string>rega</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@VERSION@</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>12.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.graphics-design</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Image</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.ilm.openexr-image</string>
+				<string>public.tiff</string>
+				<string>public.png</string>
+				<string>public.jpeg</string>
+			</array>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>exr</string>
+				<string>tif</string>
+				<string>tiff</string>
+				<string>png</string>
+				<string>jpg</string>
+				<string>jpeg</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Movie</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.apple.quicktime-movie</string>
+				<string>public.mpeg-4</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Folder</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.folder</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

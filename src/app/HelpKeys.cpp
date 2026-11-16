@@ -218,6 +218,25 @@ void appendSections(std::string& out,
 
 } // namespace
 
+const std::vector<Section>& window()
+{
+	static const std::vector<Section> SECTIONS{
+	    {.m_id = "window",
+	     .m_title = "Window",
+	     .m_rows =
+	         {
+	             {"Ctrl+O", "open images or movies (the system's dialog)"},
+	             {"Ctrl+Shift+O", "open a folder"},
+	             {"drop", "files or folders on the window: open them"},
+	             {"Ctrl+= / -", "bigger / smaller text"},
+	             {"Ctrl+0", "text size back to the default"},
+	             {"F11", "full screen"},
+	             {"", "on macOS, ⌘ works as Ctrl here"},
+	         }},
+	};
+	return SECTIONS;
+}
+
 std::string markdown()
 {
 	std::string out =
@@ -228,6 +247,7 @@ std::string markdown()
 	    "search.\n\n";
 	appendSections(out, "Browser", browser());
 	appendSections(out, "Viewer", viewer());
+	appendSections(out, "Window", window());
 	out.pop_back(); // one newline at the end
 	return out;
 }

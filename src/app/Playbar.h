@@ -93,7 +93,7 @@ private:
 	int m_trackX = 0; ///< columns before the track (the frame count)
 	int m_trackWidth = 1;
 	int m_frames = 1;
-	std::unique_ptr<BitmapSlot> m_picture; ///< kitty: the bar as pixels
+	std::unique_ptr<BitmapSlot> m_picture; ///< kitty, window: the bar as pixels
 };
 
 } // namespace rega

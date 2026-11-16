@@ -3,6 +3,7 @@
 #include <ftxui/screen/string.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <string>
 
@@ -10,6 +11,31 @@ using namespace ftxui;
 
 namespace rega::ui
 {
+
+namespace
+{
+// The window's size in cells (dimx << 32 | dimy); 0: the terminal's.
+std::atomic<uint64_t> SCREEN_SIZE{0};
+} // namespace
+
+Dimensions screenSize()
+{
+	const uint64_t s = SCREEN_SIZE.load(std::memory_order_relaxed);
+	if(s == 0)
+	{
+		return Terminal::Size();
+	}
+	return {static_cast<int>(s >> 32), static_cast<int>(s & 0xffffffffu)};
+}
+
+void setScreenSize(std::optional<Dimensions> size)
+{
+	SCREEN_SIZE.store(size ? (static_cast<uint64_t>(std::max(1, size->dimx))
+	                          << 32) |
+	                             static_cast<uint32_t>(std::max(1, size->dimy))
+	                       : 0,
+	                  std::memory_order_relaxed);
+}
 
 Element highlighted(std::string_view name,
                     std::span<const size_t> pos,

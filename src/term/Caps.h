@@ -10,12 +10,22 @@
 namespace rega
 {
 
+class NativeImages;
+
 /// How images are drawn.
 enum class GraphicsMode
 {
-	KITTY,     ///< kitty graphics with Unicode placeholders
-	HALF_BLOCK ///< ▀ cells, two pixels each
+	KITTY,      ///< kitty graphics with Unicode placeholders
+	HALF_BLOCK, ///< ▀ cells, two pixels each
+	NATIVE      ///< `--gui`: the window draws them (see NativeImages)
 };
+
+/// Whether images are drawn at the screen's pixel size (kitty, the window),
+/// not two pixels a cell.
+[[nodiscard]] constexpr bool drawsPixels(GraphicsMode m) noexcept
+{
+	return m != GraphicsMode::HALF_BLOCK;
+}
 
 /// How kitty image pixels reach the terminal.
 enum class Transfer
@@ -42,6 +52,8 @@ struct TermCaps
 	/// `tmux` commands can't reach it, nor terminal answers get back.
 	bool m_outerTmux = false;
 	int m_cellW = 10, m_cellH = 20; ///< pixels per cell
+	/// GraphicsMode::NATIVE: where slots hand their pictures (the window's).
+	NativeImages* m_native = nullptr;
 	std::string m_terminalName;
 	/// A misconfiguration worth a lasting warning (e.g. kitty graphics off
 	/// because tmux has no allow-passthrough). Short; `rega --doctor` has the
@@ -159,7 +171,8 @@ TermCaps detectCaps(const std::string& forced = "auto",
 /// changed.
 bool refreshCellSize(TermCaps& caps);
 
-const char* graphicsModeName(GraphicsMode m); ///< "kitty" | "halfblock"
-const char* transferName(Transfer t);         ///< "direct" | "shm" | "file"
+/// "kitty" | "halfblock" | "window"
+const char* graphicsModeName(GraphicsMode m);
+const char* transferName(Transfer t); ///< "direct" | "shm" | "file"
 
 } // namespace rega

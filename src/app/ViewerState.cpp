@@ -1,6 +1,6 @@
 #include "app/ViewerState.h"
 
-#include <ftxui/screen/terminal.hpp>
+#include "util/Ui.h"
 
 #include <algorithm>
 #include <cmath>
@@ -369,7 +369,7 @@ int askedRight(double frac, int w)
 
 int ViewerState::leftPanelWidth() const
 {
-	const int w = ftxui::Terminal::Size().dimx;
+	const int w = ui::screenSize().dimx;
 	const int asked = askedLeft(m_leftFrac, w);
 	if(m_leftFrac <= 0)
 	{
@@ -384,7 +384,7 @@ int ViewerState::leftPanelWidth() const
 
 int ViewerState::sidePanelWidth() const
 {
-	const int w = ftxui::Terminal::Size().dimx;
+	const int w = ui::screenSize().dimx;
 	const int asked = askedRight(m_rightFrac, w);
 	if(m_rightFrac <= 0)
 	{

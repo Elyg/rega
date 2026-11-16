@@ -1,0 +1,11 @@
+--- a/src/OpenColorIO/transforms/FileTransform.cpp	2026-11-14 19:43:43.451865109 -0500
++++ b/src/OpenColorIO/transforms/FileTransform.cpp	2026-11-14 19:43:43.453865083 -0500
+@@ -218,7 +218,7 @@
+ 
+     // Default behavior. Return file stream.
+     return std::unique_ptr<std::istream>(new std::ifstream(
+-        Platform::filenameToUTF(filepath), mode));
++        Platform::filenameToUTF(filepath).c_str(), mode));
+ }
+ 
+ bool CollectContextVariables(const Config &, 

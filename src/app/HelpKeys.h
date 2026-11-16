@@ -27,6 +27,8 @@ struct Section
 const std::vector<Section>& browser();
 /// The viewer's keys.
 const std::vector<Section>& viewer();
+/// The window's own keys (`--gui`), in both of its overlays.
+const std::vector<Section>& window();
 
 /// Every section as Markdown: a heading and a table each, between mdBook
 /// `ANCHOR: <id>` / `ANCHOR_END: <id>` comments for `{{#include}}`.

@@ -161,3 +161,16 @@ Every key, as the `?` overlay lists it. In the overlay, type to search.
 | `Q` | quit rega |
 <!-- ANCHOR_END: viewer-leave -->
 
+<!-- ANCHOR: window -->
+### Window
+
+| Key | Does |
+|-----|------|
+| `Ctrl+O` | open images or movies (the system's dialog) |
+| `Ctrl+Shift+O` | open a folder |
+| `drop` | files or folders on the window: open them |
+| `Ctrl+= / -` | bigger / smaller text |
+| `Ctrl+0` | text size back to the default |
+| `F11` | full screen<br>on macOS, ⌘ works as Ctrl here |
+<!-- ANCHOR_END: window -->
+

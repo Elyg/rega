@@ -19,10 +19,15 @@
   fetchurl,
   nasm,
   gtest,
+  sdl3,
   version ? "dev",
 }:
 
 let
+  # rega --gui: a window needs the display's libraries, which a static (musl) binary
+  # can't load; that one is terminal only.
+  gui = !stdenv.hostPlatform.isStatic;
+
   # expat's autotools build installs CMake files that always import libexpat.so, which
   # a static build doesn't have; point them at libexpat.a so OCIO's find_package works.
   expatStatic = expat.overrideAttrs (old: {
@@ -146,6 +151,7 @@ stdenv.mkDerivation {
     root = ../.;
     fileset = lib.fileset.unions [
       ../CMakeLists.txt
+      ../assets
       ../cmake
       ../src
       ../tests
@@ -168,12 +174,14 @@ stdenv.mkDerivation {
     cli11
     ocio
     ffmpegMovies
-  ];
+  ]
+  ++ lib.optional gui sdl3;
   checkInputs = [ gtest ];
 
   cmakeFlags = [
     (lib.cmakeFeature "REGA_VERSION" version)
     (lib.cmakeBool "REGA_BUILD_TESTS" true)
+    (lib.cmakeBool "REGA_GUI" gui)
   ];
 
   # Tests write temporary EXRs; fine in the sandbox.

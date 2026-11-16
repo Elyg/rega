@@ -1,6 +1,7 @@
 #include "app/ColourPane.h"
 
 #include "util/Fuzzy.h"
+#include "util/Paths.h"
 #include "util/Ui.h"
 
 #include <spdlog/fmt/fmt.h>
@@ -30,9 +31,9 @@ fs::path expandHome(const std::string& s)
 {
 	if(s.starts_with("~/"))
 	{
-		if(const char* home = std::getenv("HOME"))
+		if(const fs::path home = paths::home(); !home.empty())
 		{
-			return fs::path(home) / s.substr(2);
+			return home / s.substr(2);
 		}
 	}
 	return s;

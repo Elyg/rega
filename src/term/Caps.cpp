@@ -1,21 +1,30 @@
 #include "term/Caps.h"
 
+#ifndef _WIN32
 #include <sys/ioctl.h>
 #include <sys/select.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
-#include <fcntl.h>
 #include <fstream>
 #include <sstream>
 #include <string_view>
-#include <termios.h>
-#include <unistd.h>
 #include <unordered_map>
 #include <utility>
+
+#ifdef _WIN32
+// Only the window runs on Windows: no terminal to ask, no tmux.
+#define popen _popen
+#define pclose _pclose
+#else
+#include <fcntl.h>
+#include <termios.h>
+#include <unistd.h>
+#endif
 
 namespace rega
 {
@@ -179,9 +188,9 @@ std::vector<SshPeer> tmuxSshPeers()
 	std::string pid;
 	while(pids >> pid)
 	{
-		std::ifstream environ("/proc/" + pid + "/environ", std::ios::binary);
+		std::ifstream vars("/proc/" + pid + "/environ", std::ios::binary);
 		std::string var;
-		while(std::getline(environ, var, '\0'))
+		while(std::getline(vars, var, '\0'))
 		{
 			if(var.starts_with("SSH_CONNECTION="))
 			{
@@ -340,6 +349,9 @@ TerminalReply parseTerminalReply(std::string_view in)
 
 TerminalReply queryTerminal()
 {
+#ifdef _WIN32
+	return {};
+#else
 	static const TerminalReply REPLY = []
 	{
 		using Clock = std::chrono::steady_clock;
@@ -406,6 +418,7 @@ TerminalReply queryTerminal()
 		return parseTerminalReply(in);
 	}();
 	return REPLY;
+#endif
 }
 
 bool isOuterTmux(bool tmuxEnv, const std::string& term)
@@ -446,7 +459,16 @@ bool isKittyTerminal(const std::string& name)
 
 const char* graphicsModeName(GraphicsMode m)
 {
-	return m == GraphicsMode::KITTY ? "kitty" : "halfblock";
+	switch(m)
+	{
+		case GraphicsMode::KITTY:
+			return "kitty";
+		case GraphicsMode::NATIVE:
+			return "window";
+		case GraphicsMode::HALF_BLOCK:
+			break;
+	}
+	return "halfblock";
 }
 
 const char* transferName(Transfer t)
@@ -465,6 +487,10 @@ const char* transferName(Transfer t)
 
 bool refreshCellSize(TermCaps& caps)
 {
+#ifdef _WIN32
+	(void)caps;
+	return false;
+#else
 	struct winsize ws{};
 	if(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) != 0 || ws.ws_col == 0 ||
 	   ws.ws_row == 0)
@@ -507,6 +533,7 @@ bool refreshCellSize(TermCaps& caps)
 	caps.m_cellW = w;
 	caps.m_cellH = h;
 	return true;
+#endif
 }
 
 bool remoteSession()

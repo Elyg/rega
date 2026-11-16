@@ -1,6 +1,7 @@
 #include "app/Tutorial.h"
 
 #include "util/Parallel.h"
+#include "util/Paths.h"
 
 #include <Imath/ImathBox.h>
 #include <Imath/ImathVec.h>
@@ -825,20 +826,9 @@ std::string stampText(const Options& opts)
 
 fs::path defaultDir()
 {
-	fs::path base;
-	if(const char* x = std::getenv("XDG_CACHE_HOME"); x && *x)
-	{
-		base = x;
-	}
-	else if(const char* home = std::getenv("HOME"); home && *home)
-	{
-		base = fs::path(home) / ".cache";
-	}
-	else
-	{
-		base = fs::temp_directory_path();
-	}
-	return base / "rega" / "tutorial";
+	const fs::path dir = paths::cacheDir();
+	return (dir.empty() ? fs::temp_directory_path() / "rega" : dir) /
+	       "tutorial";
 }
 
 void write(const fs::path& dir, const Options& opts, const Progress& progress)
@@ -966,12 +956,15 @@ void write(const fs::path& dir, const Options& opts, const Progress& progress)
 
 bool ensure(const fs::path& dir, const Options& opts, const Progress& progress)
 {
-	std::ifstream in(dir / STAMP);
-	std::stringstream have;
-	have << in.rdbuf();
-	if(in && have.str() == stampText(opts))
 	{
-		return false;
+		// Closed before write() replaces it: Windows deletes no open file.
+		std::ifstream in(dir / STAMP);
+		std::stringstream have;
+		have << in.rdbuf();
+		if(in && have.str() == stampText(opts))
+		{
+			return false;
+		}
 	}
 	write(dir, opts, progress);
 	return true;

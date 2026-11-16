@@ -408,7 +408,7 @@ Rgba8Image paintPlaybar(const PlaybarState& s, int width, int height)
 
 Playbar::Playbar(const TermCaps& caps, kitty::Transmitter& tx)
 {
-	if(caps.m_graphics == GraphicsMode::KITTY)
+	if(drawsPixels(caps.m_graphics))
 	{
 		m_picture = std::make_unique<BitmapSlot>(caps, tx);
 	}

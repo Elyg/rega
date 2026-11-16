@@ -10,6 +10,9 @@
 
 TEST(StderrToLog, LogsWhatIsWrittenToStderrThenPutsItBack)
 {
+#ifdef _WIN32
+	GTEST_SKIP() << "the window's: no terminal to keep stderr off (Log.cpp)";
+#endif
 	std::ostringstream os;
 	auto logger = std::make_shared<spdlog::logger>(
 	    "capture", std::make_shared<spdlog::sinks::ostream_sink_mt>(os));

@@ -3,7 +3,17 @@
 #include "util/Parallel.h"
 
 #include <spdlog/spdlog.h>
+#ifdef _WIN32
+// Only the window runs on Windows: pictures never go through files or
+// shared memory there.
+#include <process.h>
+#define getpid _getpid
+#else
 #include <sys/mman.h>
+
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 #include <algorithm>
 #include <array>
@@ -13,12 +23,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fcntl.h>
 #include <filesystem>
 #include <libdeflate.h>
 #include <mutex>
 #include <stdexcept>
-#include <unistd.h>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -376,6 +384,11 @@ std::string transmitShared(const Rgba8Image& img,
 
 bool writeFile(const std::string& path, const Rgba8Image& img)
 {
+#ifdef _WIN32
+	(void)path;
+	(void)img;
+	return false;
+#else
 	const int fd = open(path.c_str(), O_CREAT | O_EXCL | O_WRONLY, 0600);
 	if(fd < 0)
 	{
@@ -400,10 +413,16 @@ bool writeFile(const std::string& path, const Rgba8Image& img)
 		return false;
 	}
 	return true;
+#endif
 }
 
 bool writeSharedMemory(const std::string& name, const Rgba8Image& img)
 {
+#ifdef _WIN32
+	(void)name;
+	(void)img;
+	return false;
+#else
 	const size_t n = img.m_pixels.size();
 	const int fd = shm_open(name.c_str(), O_CREAT | O_EXCL | O_RDWR, 0600);
 	if(fd < 0)
@@ -427,6 +446,7 @@ bool writeSharedMemory(const std::string& name, const Rgba8Image& img)
 		shm_unlink(name.c_str());
 	}
 	return ok;
+#endif
 }
 
 std::string deleteImage(uint32_t id, int tmux)
@@ -491,16 +511,22 @@ void Transmitter::removeStaleFiles() const
 		{
 			continue;
 		}
+#ifndef _WIN32
 		if(kill(pid, 0) != 0 && errno == ESRCH)
 		{
 			std::filesystem::remove(e.path(), ec);
 		}
+#endif
 	}
 }
 
 void Transmitter::removeLocal(const std::string& name) const
 {
 	// By the name, not the transfer now: it may have switched since.
+#ifdef _WIN32
+	std::error_code ec;
+	std::filesystem::remove(name, ec);
+#else
 	if(name.ends_with(".rgba"))
 	{
 		unlink(name.c_str());
@@ -509,6 +535,7 @@ void Transmitter::removeLocal(const std::string& name) const
 	{
 		shm_unlink(name.c_str());
 	}
+#endif
 }
 
 uint32_t Transmitter::allocId()

@@ -12,8 +12,24 @@
 #include "util/Log.h"
 #include "util/Sandbox.h"
 
+#ifdef REGA_GUI
+#include "gui/Gui.h"
+#endif
+
 #include <CLI/CLI.hpp>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <sys/stat.h>
+#endif
+#if defined(_WIN32) && defined(REGA_GUI)
+// WinMain for a window-only exe, and argv as UTF-8.
+#include <SDL3/SDL_main.h>
+#endif
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -268,10 +284,32 @@ CLI::Validator sizeValue()
 	    "SIZE");
 }
 
+#if defined(__APPLE__) && defined(REGA_GUI)
+/// Whether this is rega.app's binary (Finder, the Dock, Open With start it
+/// with no arguments): it opens the window.
+bool inAppBundle()
+{
+	char buf[4096];
+	uint32_t size = sizeof buf;
+	return _NSGetExecutablePath(buf, &size) == 0 &&
+	       std::string_view(buf).find(".app/Contents/MacOS/") !=
+	           std::string_view::npos;
+}
+#endif
+
 } // namespace
 
 int main(int argc, char** argv)
 {
+#ifdef _WIN32
+	// A window-only exe has no console: typed in one (`rega --help`), print
+	// to it.
+	if(AttachConsole(ATTACH_PARENT_PROCESS))
+	{
+		std::freopen("CONOUT$", "w", stdout);
+		std::freopen("CONOUT$", "w", stderr);
+	}
+#endif
 	CLI::App cli{"rega — terminal image browser/viewer for EXR, TIFF, PNG, "
 	             "JPEG, MOV and MP4"};
 	cli.set_version_flag(
@@ -367,11 +405,32 @@ int main(int argc, char** argv)
 	cli.add_option("--cwd-file",
 	               cwdFile,
 	               "On exit, write the last directory here");
+#ifdef REGA_GUI
+#ifdef _WIN32
+	bool gui = true; // no terminal for it here: always the window
+#else
+	bool gui = false;
+	cli.add_flag(
+	    "--gui",
+	    gui,
+	    "Open in a window of its own instead of the terminal: the same "
+	    "keys and panes, no kitty or Ghostty needed");
+#endif
+	rega::gui::GuiOptions guiOpts;
+	// Hidden: draw the window once things settle, save it as a PNG, quit.
+	cli.add_option("--gui-screenshot", guiOpts.m_screenshot)->group("");
+	cli.add_option("--gui-keys", guiOpts.m_keys)->group("");
+#endif
 	CLI11_PARSE(cli, argc, argv);
+#if defined(__APPLE__) && defined(REGA_GUI)
+	gui = gui || inAppBundle();
+#endif
 	rega::log::initConsole();
+#ifndef _WIN32
 	// The log, annotations, colour state and anything else written from here
 	// on name the files being worked on: for their owner only.
 	::umask(077);
+#endif
 	// Before any file is opened: rega never needs the network, and a decoder
 	// fed a hostile file must not get it either.
 	if(!rega::denyNetwork())
@@ -472,6 +531,12 @@ int main(int argc, char** argv)
 		opts.m_tutorial = tutorial;
 		opts.m_linkRate = static_cast<double>(linkRate);
 		opts.m_terminalCache = terminalCache;
+#ifdef REGA_GUI
+		if(gui || !guiOpts.m_screenshot.empty())
+		{
+			return rega::gui::run(opts, guiOpts);
+		}
+#endif
 		return rega::runApp(opts);
 	}
 	catch(const std::exception& e)

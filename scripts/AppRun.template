@@ -1,0 +1,29 @@
+#!/bin/bash
+# Custom AppRun for rega's AppImage (linuxdeploy; from the conventions' AppRun.template).
+# Sets the bundled library path, auto-detects the GPU vendor (NVIDIA vs Mesa), and execs
+# rega through the bundled loader to avoid host glibc symbol-lookup errors. The AppImage
+# is the window's download: rega always opens it (--gui).
+#
+HERE="$(dirname "$(readlink -f "$0")")"
+
+export LD_LIBRARY_PATH="$HERE/usr/lib"
+
+# Host GL drivers: Debian/Ubuntu layout, then Fedora/RHEL (lib64)
+case "$(uname -m)" in
+    aarch64) TRIPLET=aarch64-linux-gnu; LOADER=ld-linux-aarch64.so.1 ;;
+    *) TRIPLET=x86_64-linux-gnu; LOADER=ld-linux-x86-64.so.2 ;;
+esac
+export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:/usr/lib/$TRIPLET:/usr/lib/$TRIPLET/mesa:/usr/lib64"
+export LIBGL_DRIVERS_PATH="/usr/lib/$TRIPLET/dri:/usr/lib64/dri:/usr/lib/dri"
+# The bundled libglvnd looks for the host's EGL vendors here (Wayland draws through EGL).
+export __EGL_VENDOR_LIBRARY_DIRS="${__EGL_VENDOR_LIBRARY_DIRS:-/usr/share/glvnd/egl_vendor.d:/etc/glvnd/egl_vendor.d}"
+
+# GPU Vendor Auto-Detect
+if [ -f "/proc/driver/nvidia/version" ]; then
+    export __GL_VENDOR_LIBRARY_NAME=nvidia
+else
+    export __GLX_VENDOR_LIBRARY_NAME=mesa
+fi
+
+# Force the bundled glibc stack to prevent symbol lookup errors on the host.
+exec "$HERE/usr/lib/$LOADER" "$HERE/usr/bin/rega" --gui "$@"

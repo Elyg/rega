@@ -24,6 +24,18 @@
 #include <thread>
 #include <vector>
 
+#ifdef _WIN32
+// POSIX's environment calls, for the tests that set one (OCIO, REGA_*).
+inline int setenv(const char* name, const char* value, int /*overwrite*/)
+{
+	return _putenv_s(name, value);
+}
+inline int unsetenv(const char* name)
+{
+	return _putenv_s(name, "");
+}
+#endif
+
 namespace regatest
 {
 
