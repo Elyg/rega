@@ -901,7 +901,7 @@ TEST(ViewerNative, AStandInTileLandsWhereItsOwnPictureWill)
 	// Where the image is in a placement, window px: its opaque pixels.
 	struct R
 	{
-		double x0, y0, x1, y1;
+		double m_x0, m_y0, m_x1, m_y1;
 	};
 	auto imageRect = [&](const NativeImages::Placement& p)
 	{
@@ -962,19 +962,19 @@ TEST(ViewerNative, AStandInTileLandsWhereItsOwnPictureWill)
 				// Inside it: a stand-in has only what showed before (a tile
 				// partly off screen, part of it), where it will be.
 				constexpr double PX = 3; // rounding to output pixels
-				EXPECT_GE(s.x0, own.x0 - PX)
+				EXPECT_GE(s.m_x0, own.m_x0 - PX)
 				    << "step " << step << " id " << p.m_id;
-				EXPECT_GE(s.y0, own.y0 - PX)
+				EXPECT_GE(s.m_y0, own.m_y0 - PX)
 				    << "step " << step << " id " << p.m_id;
-				EXPECT_LE(s.x1, own.x1 + PX)
+				EXPECT_LE(s.m_x1, own.m_x1 + PX)
 				    << "step " << step << " id " << p.m_id;
-				EXPECT_LE(s.y1, own.y1 + PX)
+				EXPECT_LE(s.m_y1, own.m_y1 + PX)
 				    << "step " << step << " id " << p.m_id;
 				// And where both have it, the same place: the far edges
 				// of a whole stand-in meet its own picture's.
-				if(s.x1 - s.x0 > own.x1 - own.x0 - 2 * PX)
+				if(s.m_x1 - s.m_x0 > own.m_x1 - own.m_x0 - 2 * PX)
 				{
-					EXPECT_NEAR(s.x0, own.x0, PX) << "step " << step;
+					EXPECT_NEAR(s.m_x0, own.m_x0, PX) << "step " << step;
 				}
 				++compared;
 			}
