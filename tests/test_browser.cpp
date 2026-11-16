@@ -111,13 +111,15 @@ struct BrowserTest : ::testing::Test
 		}
 		return {-1, -1};
 	}
-	void click(std::pair<int, int> at)
+	void click(std::pair<int, int> at, bool shift = false, bool ctrl = false)
 	{
 		ftxui::Mouse m;
 		m.button = ftxui::Mouse::Left;
 		m.motion = ftxui::Mouse::Pressed;
 		m.x = at.first;
 		m.y = at.second;
+		m.shift = shift;
+		m.control = ctrl;
 		press(Event::Mouse("", m));
 	}
 };
@@ -230,6 +232,30 @@ TEST_F(BrowserTest, ClickSelectsAndASecondClickOpens)
 	ASSERT_TRUE(m_opened);
 	ASSERT_EQ(m_opened->size(), 1u);
 	EXPECT_EQ((*m_opened)[0].m_name, "b.png");
+}
+
+TEST_F(BrowserTest, ShiftClickMarksARangeCtrlClickOneMore)
+{
+	// sub, the sequence, b.png, notes.txt: from the top to b.png, the
+	// images in between are marked (not the dir).
+	select("sub");
+	const auto png = find("b.png", 13);
+	ASSERT_GE(png.first, 0);
+	click(png, true, false);
+	EXPECT_EQ(selected(), "b.png");
+	ASSERT_EQ(m_b.marks().size(), 2u);
+	EXPECT_EQ(m_b.marks()[0].m_kind, Entry::Kind::SEQUENCE);
+	EXPECT_EQ(m_b.marks()[1].m_name, "b.png");
+	EXPECT_FALSE(m_opened); // no double click either
+
+	click(png, false, true); // Ctrl: unmarked
+	ASSERT_EQ(m_b.marks().size(), 1u);
+	click(png, false, true); // and marked again
+	EXPECT_EQ(m_b.marks().size(), 2u);
+	click(find("notes.txt", 13), false, true); // not an image
+	EXPECT_EQ(m_b.marks().size(), 2u);
+	EXPECT_EQ(m_c.m_ctx.m_message, "only images can be marked");
+	EXPECT_FALSE(m_opened);
 }
 
 TEST_F(BrowserTest, ClickingADirInTheParentColumnGoesThere)

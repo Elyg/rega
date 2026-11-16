@@ -217,6 +217,11 @@ App::App(const AppOptions& opts, Host& host, std::optional<TermCaps> caps)
 	{
 		spdlog::info("annotations loaded from {}", m_annPath.string());
 	}
+	if(const fs::path dir = paths::stateDir(); !dir.empty())
+	{
+		m_ctx.m_backdropFile = dir / "backdrop";
+		m_ctx.loadBackdrop();
+	}
 	m_colour.loadDefault(); // $OCIO, else the config picked last time
 	if(!m_colour.error().empty())
 	{
@@ -855,8 +860,9 @@ Element App::renderHelp()
 	const int viewH = std::min(bodyH, maxH - 1);
 	m_helpScroll = std::clamp(m_helpScroll, 0, std::max(0, bodyH - viewH));
 	const Element footer =
-	    m_helpQuery.empty()
-	        ? text(" type to search   ↑/↓ scroll   ? / Esc close") | dim
+	    m_helpQuery.empty() && !m_helpSearch
+	        ? text(" type (or Ctrl+F) to search   ↑/↓ scroll   ? / Esc close") |
+	              dim
 	        : hbox({text(" search › ") | color(Color::Yellow) | bold,
 	                text(m_helpQuery),
 	                text(" ") | inverted,
@@ -906,9 +912,18 @@ bool App::helpEvent(Event e)
 		m_helpScroll = std::max(0, m_helpScroll + step); // render() caps it
 		return true;
 	}
-	if(e == Event::Escape && !m_helpQuery.empty())
+	if(e == Event::CtrlF)
+	{
+		// A fresh search, its prompt showing.
+		m_helpSearch = true;
+		m_helpQuery.clear();
+		m_helpScroll = 0;
+		return true;
+	}
+	if(e == Event::Escape && (!m_helpQuery.empty() || m_helpSearch))
 	{
 		m_helpQuery.clear();
+		m_helpSearch = false;
 		m_helpScroll = 0;
 		return true;
 	}
@@ -933,6 +948,7 @@ bool App::helpEvent(Event e)
 		return true;
 	}
 	m_help = false;
+	m_helpSearch = false;
 	m_helpQuery.clear();
 	return true;
 }
@@ -980,9 +996,12 @@ bool App::onEvent(Event e)
 		m_stats = !m_stats;
 		return true;
 	}
-	if(e == Event::Character('?') && !typing)
+	if((e == Event::Character('?') || e == Event::CtrlF) && !typing)
 	{
+		// Ctrl+F: the keys, searching.
 		m_help = true;
+		m_helpSearch = e == Event::CtrlF;
+		m_helpQuery.clear();
 		m_helpScroll = 0;
 		return true;
 	}

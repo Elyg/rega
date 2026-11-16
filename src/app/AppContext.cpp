@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 
 using namespace ftxui;
 
@@ -21,6 +22,37 @@ std::unique_ptr<ImageSlot> newSlot(AppContext& ctx)
 	    std::make_unique<ImageSlot>(ctx.m_caps, ctx.m_kitty, ctx.m_redraw);
 	slot->setMaxPixels(ctx.pixelBudget());
 	return slot;
+}
+
+void AppContext::loadBackdrop()
+{
+	if(m_backdropFile.empty())
+	{
+		return;
+	}
+	std::ifstream in(m_backdropFile);
+	std::string name;
+	if(in >> name)
+	{
+		if(const auto b = backdropFromName(name))
+		{
+			m_backdrop = *b;
+		}
+	}
+}
+
+void AppContext::cycleBackdrop()
+{
+	m_backdrop = m_backdrop == Backdrop::GREY    ? Backdrop::BLACK
+	             : m_backdrop == Backdrop::BLACK ? Backdrop::CHECKER
+	                                             : Backdrop::GREY;
+	m_message = std::string("backdrop: ") + backdropName(m_backdrop);
+	if(!m_backdropFile.empty())
+	{
+		std::error_code ec;
+		std::filesystem::create_directories(m_backdropFile.parent_path(), ec);
+		std::ofstream(m_backdropFile) << backdropName(m_backdrop) << "\n";
+	}
 }
 
 void AppContext::copyText(std::string_view text)

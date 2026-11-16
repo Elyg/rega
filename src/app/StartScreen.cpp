@@ -144,7 +144,84 @@ void StartScreen::show()
 		}
 	}
 	m_field.reset();
+	m_pickAnchor = -1;
+	m_lastClick = -1;
 	m_sel = 0;
+}
+
+bool StartScreen::inList(int i) const
+{
+	if(i < 0 || i >= static_cast<int>(m_items.size()))
+	{
+		return false;
+	}
+	return std::ranges::all_of(m_items[static_cast<size_t>(i)].m_paths,
+	                           [&](const std::string& path)
+	                           {
+		                           return std::ranges::any_of(
+		                               m_pasted,
+		                               [&](const Pasted& p)
+		                               { return p.m_path == path; });
+	                           });
+}
+
+void StartScreen::toggleInList(int i)
+{
+	if(i < 0 || i >= static_cast<int>(m_items.size()))
+	{
+		return;
+	}
+	const std::vector<std::string>& paths =
+	    m_items[static_cast<size_t>(i)].m_paths;
+	if(inList(i))
+	{
+		std::erase_if(m_pasted,
+		              [&](const Pasted& p)
+		              {
+			              return std::ranges::find(paths, p.m_path) !=
+			                     paths.end();
+		              });
+	}
+	else
+	{
+		for(const std::string& p : paths)
+		{
+			add(p);
+		}
+	}
+	// The pasted rows above moved it: the cursor stays on the item.
+	m_sel = firstRecent() + i;
+}
+
+void StartScreen::addRange(int i)
+{
+	if(m_pickAnchor < 0)
+	{
+		m_pickAnchor = i;
+	}
+	for(int k = std::min(m_pickAnchor, i); k <= std::max(m_pickAnchor, i); ++k)
+	{
+		for(const std::string& p : m_items[static_cast<size_t>(k)].m_paths)
+		{
+			add(p);
+		}
+	}
+	m_sel = firstRecent() + i;
+}
+
+void StartScreen::forgetRecent()
+{
+	const RecentItem item = m_items[static_cast<size_t>(m_sel - firstRecent())];
+	const auto& all = m_recent.items();
+	if(const auto it = std::ranges::find(all, item); it != all.end())
+	{
+		m_recent.remove(static_cast<size_t>(it - all.begin()));
+	}
+	const int sel = m_sel;
+	std::vector<Pasted> keep = std::move(m_pasted);
+	show();
+	m_pasted = std::move(keep);
+	m_sel = std::min(sel, rows() - 1);
 }
 
 bool StartScreen::add(const std::string& path)
@@ -334,7 +411,41 @@ bool StartScreen::event(Event e)
 		{
 			return true; // typing: hovering doesn't move off the field
 		}
+		const int before = m_sel;
 		m_sel = r;
+		if(press && onRecent(r))
+		{
+			// A click puts it in the list to open (again: out), Shift a
+			// range of them; a double click opens it alone, at once.
+			const int idx = r - firstRecent();
+			const auto now = std::chrono::steady_clock::now();
+			constexpr auto DOUBLE_CLICK = std::chrono::milliseconds(400);
+			if(idx == m_lastClick && now - m_lastClickAt < DOUBLE_CLICK &&
+			   !m.shift)
+			{
+				m_lastClick = -1;
+				toggleInList(idx); // the first click's undone
+				activate(firstRecent() + idx);
+				return true;
+			}
+			m_lastClick = idx;
+			m_lastClickAt = now;
+			m_field.reset();
+			if(m.shift)
+			{
+				if(m_pickAnchor < 0 && onRecent(before))
+				{
+					m_pickAnchor = before - firstRecent();
+				}
+				addRange(idx);
+			}
+			else
+			{
+				toggleInList(idx);
+				m_pickAnchor = idx;
+			}
+			return true;
+		}
 		if(press)
 		{
 			if(r != PASTE)
@@ -398,6 +509,25 @@ bool StartScreen::event(Event e)
 	{
 		m_sel = rows() - 1;
 	}
+	else if(ch(' ') && onRecent(m_sel))
+	{
+		// As the browser's marks: into the list to open, or out of it.
+		const int idx = m_sel - firstRecent();
+		toggleInList(idx);
+		m_pickAnchor = idx;
+	}
+	else if((ch('J') || ch('K')) && onRecent(m_sel))
+	{
+		// Extend the range into the list, as Shift+click does.
+		const int idx = m_sel - firstRecent();
+		if(m_pickAnchor < 0)
+		{
+			m_pickAnchor = idx;
+		}
+		addRange(std::clamp(idx + (ch('J') ? 1 : -1),
+		                    0,
+		                    static_cast<int>(m_items.size()) - 1));
+	}
 	else if(e == Event::Return || ch('l') || e == Event::ArrowRight)
 	{
 		activate(m_sel);
@@ -406,21 +536,9 @@ bool StartScreen::event(Event e)
 	{
 		removePasted(m_sel);
 	}
-	else if((ch('x') || e == Event::Delete) && m_sel >= firstRecent())
+	else if((ch('x') || e == Event::Delete) && onRecent(m_sel))
 	{
-		// Forget it.
-		const RecentItem& item =
-		    m_items[static_cast<size_t>(m_sel - firstRecent())];
-		const auto& all = m_recent.items();
-		if(const auto it = std::ranges::find(all, item); it != all.end())
-		{
-			m_recent.remove(static_cast<size_t>(it - all.begin()));
-		}
-		const int sel = m_sel;
-		std::vector<Pasted> keep = std::move(m_pasted);
-		show();
-		m_pasted = std::move(keep);
-		m_sel = std::min(sel, rows() - 1);
+		forgetRecent();
 	}
 	else if(ch('X') && !m_pasted.empty())
 	{
@@ -557,8 +675,12 @@ Element StartScreen::render(const fs::path& browseDir)
 		lines.push_back(
 		    row(openPastedRow(),
 		        {text(std::string(2 + static_cast<size_t>(nameW) + 2, ' ')),
-		         text(fmt::format("Open ({})", found)) | bold |
-		             color(Color::Cyan)},
+		         // Filled, as a button; brighter when selected.
+		         text(fmt::format("  Open ({})  ", found)) | bold |
+		             color(Color::Black) |
+		             bgcolor(m_sel == openPastedRow() && hilite
+		                         ? Color::CyanLight
+		                         : Color::Cyan)},
 		        "Enter  X clear"));
 	}
 
@@ -572,15 +694,20 @@ Element StartScreen::render(const fs::path& browseDir)
 	{
 		const RecentItem& item = m_items[n];
 		const RecentLabel label = recentLabel(item, home);
-		Elements cells = pathCells(label, nameStyle(label));
+		// Picked: marked as the browser marks them, in yellow.
+		const bool picked = inList(static_cast<int>(n));
+		Elements cells =
+		    pathCells(label,
+		              picked ? color(Color::Yellow) | bold : nameStyle(label));
+		cells[0] = picked ? text("▍ ") | color(Color::Yellow) : text("  ");
 		cells.push_back(
 		    text(rightAligned(agoText(
 		                          std::max<std::int64_t>(0, now - item.m_when)),
 		                      TAIL_W)) |
 		    dim);
 		cells.push_back(text("  "));
-		lines.push_back(
-		    row(firstRecent() + static_cast<int>(n), std::move(cells)));
+		Element r = row(firstRecent() + static_cast<int>(n), std::move(cells));
+		lines.push_back(r);
 	}
 
 	Element body =
@@ -588,7 +715,8 @@ Element StartScreen::render(const fs::path& browseDir)
 	return vbox(
 	    {body,
 	     m_ctx.statusLine(m_field ? "enter add  esc done"
-	                              : "drop files anywhere  ? keys  q quit")});
+	                              : "drop files anywhere  click recent: "
+	                                "to the list  ? keys  q quit")});
 }
 
 } // namespace rega

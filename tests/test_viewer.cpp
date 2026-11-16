@@ -789,6 +789,20 @@ TEST_F(ViewerTest, TNumbersTiledFilesButNotLayers)
 	EXPECT_EQ(tileNameLabel(0, "a.exr"), "[1] a.exr");
 }
 
+TEST_F(ViewerTest, BCyclesTheBackdropAndZeroKeepsIt)
+{
+	m_v.open({layersEntry()});
+	press(key("B"));
+	EXPECT_EQ(m_c.m_ctx.m_backdrop, Backdrop::BLACK);
+	EXPECT_EQ(m_c.m_ctx.m_message, "backdrop: black");
+	press(key("B"));
+	EXPECT_EQ(m_c.m_ctx.m_backdrop, Backdrop::CHECKER);
+	press(key("0")); // resets the display, not the backdrop
+	EXPECT_EQ(m_c.m_ctx.m_backdrop, Backdrop::CHECKER);
+	press(key("B"));
+	EXPECT_EQ(m_c.m_ctx.m_backdrop, Backdrop::GREY);
+}
+
 TEST_F(ViewerTest, FpsCyclesUpFromTheFileRate)
 {
 	m_v.open({sequenceEntry()});

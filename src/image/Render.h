@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -36,6 +37,17 @@ enum class Outlines
 };
 
 /// Display transform (see applyDisplay) and outlines.
+/// What shows around the image and through its transparent pixels (`B`).
+enum class Backdrop
+{
+	GREY,   ///< the UI's own (transparent: the terminal's or window's)
+	BLACK,  ///< black, the whole view
+	CHECKER ///< a checkerboard inside the frame, alpha composited over it
+};
+/// "grey" / "black" / "checker", and back (nullopt: none of them).
+const char* backdropName(Backdrop b);
+std::optional<Backdrop> backdropFromName(std::string_view name);
+
 struct DisplayParams
 {
 	ChannelMode m_mode = ChannelMode::COLOR;
@@ -52,6 +64,7 @@ struct DisplayParams
 	bool m_showNonFinite = false;
 	/// Image pixel (x, y) ringed in red: the inspector's picked one.
 	std::optional<std::pair<int, int>> m_marker;
+	Backdrop m_backdrop = Backdrop::GREY;
 	bool operator==(const DisplayParams&) const = default;
 };
 

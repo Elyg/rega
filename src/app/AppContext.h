@@ -8,6 +8,7 @@
 
 #include <ftxui/dom/elements.hpp>
 
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -55,6 +56,15 @@ struct AppContext
 	std::optional<std::pair<double, double>> m_pointer = {};
 	/// The window's clipboard (`--gui`); empty: the terminal's (tmux / OSC 52).
 	std::function<bool(std::string_view)> m_clipboard = {};
+	/// `B`: what shows around images (the viewer, tiles, the preview).
+	Backdrop m_backdrop = Backdrop::GREY;
+	/// Where m_backdrop is kept between runs (empty: not kept).
+	std::filesystem::path m_backdropFile = {};
+
+	/// Read m_backdrop from m_backdropFile (left as it is without one).
+	void loadBackdrop();
+	/// `B`: grey → black → checker → grey; kept, and said in the status bar.
+	void cycleBackdrop();
 
 	/// Pixels a draw may make: TOTAL_PIXEL_BUDGET, the window's own in it.
 	[[nodiscard]] int pixelBudget() const noexcept

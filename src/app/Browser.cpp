@@ -360,8 +360,40 @@ int Browser::ListBoxes::rowAt(int x, int y) const
 	return -1;
 }
 
-void Browser::clickRow(int row)
+void Browser::clickRow(int row, bool shift, bool ctrl)
 {
+	const std::vector<int> vis = visibleIndices();
+	if((shift || ctrl) && row >= 0 && row < static_cast<int>(vis.size()))
+	{
+		// Shift: mark the images from the selected row to this one; Ctrl:
+		// this one marked or not (as space). The cursor follows.
+		const int from =
+		    shift ? std::clamp(m_sel, 0, static_cast<int>(vis.size()) - 1)
+		          : row;
+		std::vector<Entry> range;
+		for(int r = std::min(from, row); r <= std::max(from, row); ++r)
+		{
+			range.push_back(m_entries[vis[r]]);
+		}
+		if(ctrl && !shift)
+		{
+			if(range.front().isImage())
+			{
+				toggleMark(range.front());
+			}
+			else
+			{
+				m_ctx.m_message = "only images can be marked";
+			}
+		}
+		else
+		{
+			mark(range);
+		}
+		m_lastClickRow = -1;
+		moveSelection(row - m_sel);
+		return;
+	}
 	// A click selects; a second one on the same row soon after opens it,
 	// as l / Enter would.
 	constexpr auto DOUBLE_CLICK = std::chrono::milliseconds(400);
@@ -588,7 +620,7 @@ bool Browser::mouseEvent(Event e)
 			m_previewFocus = overPreview && textShown;
 			if(const int r = m_currentBoxes.rowAt(m.x, m.y); r >= 0)
 			{
-				clickRow(r);
+				clickRow(r, m.shift, m.control);
 			}
 			else if(const int p = m_parentBoxes.rowAt(m.x, m.y); p >= 0)
 			{
@@ -1138,6 +1170,7 @@ Element Browser::renderPreview()
 
 	// The viewer's colour management (OCIO view), at default exposure.
 	DisplayParams disp;
+	disp.m_backdrop = m_ctx.m_backdrop;
 	disp.m_ocio = m_ctx.m_colour.transformFor(p,
 	                                          sourceKey(Source{*e}),
 	                                          info->m_displayReferred);

@@ -9,6 +9,9 @@
 #include <ftxui/screen/screen.hpp>
 #include <gtest/gtest.h>
 
+#include <set>
+#include <thread>
+
 using namespace rega;
 using regatest::freshDir;
 using regatest::key;
@@ -320,4 +323,107 @@ TEST(StartScreen, PastedPathsListUpAndOpenTogether)
 	EXPECT_EQ(s.m_calls[0], "open " + a + " " + b);
 	EXPECT_TRUE(s.m_screen.event(key("X"))); // clear the list
 	EXPECT_TRUE(s.m_screen.pasted().empty());
+}
+
+TEST(StartScreen, RecentItemsGoToTheListToOpenTogether)
+{
+	Start s;
+	for(const char* n : {"a.exr", "b.exr", "c.exr"})
+	{
+		touch(s.m_dir / n);
+	}
+	s.m_recent.add({(s.m_dir / "c.exr").string()}, 1);
+	s.m_recent.add({(s.m_dir / "b.exr").string()}, 2);
+	s.m_recent.add({(s.m_dir / "a.exr").string()}, 3); // a, b, c
+	s.m_screen.show();
+	auto listed = [&]
+	{
+		std::string out;
+		for(const auto& p : s.m_screen.pasted())
+		{
+			out += fs::path(p.m_path).filename().string() + " ";
+		}
+		return out;
+	};
+	while(s.m_screen.selected() != s.m_screen.firstRecent())
+	{
+		(void)s.m_screen.event(ftxui::Event::ArrowDown);
+	}
+
+	// Space puts it in the list (the cursor stays on it); J a range more.
+	EXPECT_TRUE(s.m_screen.event(key(" ")));
+	EXPECT_EQ(listed(), "a.exr ");
+	EXPECT_TRUE(s.m_screen.inList(0));
+	EXPECT_EQ(s.m_screen.selected(), s.m_screen.firstRecent());
+	EXPECT_TRUE(s.m_screen.event(key("J")));
+	EXPECT_TRUE(s.m_screen.event(key("J")));
+	EXPECT_EQ(listed(), "a.exr b.exr c.exr ");
+	EXPECT_TRUE(s.m_screen.event(key(" "))); // c again: out
+	EXPECT_EQ(listed(), "a.exr b.exr ");
+
+	// Enter on a recent item opens it alone; Open (n) the list.
+	EXPECT_TRUE(s.m_screen.event(ftxui::Event::Return));
+	ASSERT_EQ(s.m_calls.size(), 1u);
+	EXPECT_EQ(s.m_calls[0], "open " + (s.m_dir / "c.exr").string());
+	while(s.m_screen.selected() != s.m_screen.openPastedRow())
+	{
+		(void)s.m_screen.event(ftxui::Event::ArrowUp);
+	}
+	EXPECT_TRUE(s.m_screen.event(ftxui::Event::Return));
+	ASSERT_EQ(s.m_calls.size(), 2u);
+	EXPECT_EQ(s.m_calls[1],
+	          "open " + (s.m_dir / "a.exr").string() + " " +
+	              (s.m_dir / "b.exr").string());
+}
+
+TEST(StartScreen, ClickingRecentAddsItADoubleClickOpensIt)
+{
+	Start s;
+	touch(s.m_dir / "a.exr");
+	s.m_recent.add({(s.m_dir / "a.exr").string()}, 1);
+	s.m_screen.show();
+	auto rowOf = [&](std::string_view what)
+	{
+		ui::setScreenSize(ftxui::Dimensions{100, 30});
+		ftxui::Element el = s.m_screen.render(s.m_dir);
+		ftxui::Screen screen(100, 30);
+		ftxui::Render(screen, el);
+		ui::setScreenSize(std::nullopt);
+		int last = -1; // the recent row is below the pasted one
+		for(int y = 0; y < 30; ++y)
+		{
+			std::string line;
+			for(int x = 0; x < 100; ++x)
+			{
+				line += screen.PixelAt(x, y).character;
+			}
+			if(line.find(what) != std::string::npos)
+			{
+				last = y;
+			}
+		}
+		return last;
+	};
+	auto click = [&](int y)
+	{
+		ftxui::Mouse m;
+		m.button = ftxui::Mouse::Left;
+		m.motion = ftxui::Mouse::Pressed;
+		m.x = 20;
+		m.y = y;
+		EXPECT_TRUE(s.m_screen.event(ftxui::Event::Mouse("", m)));
+	};
+	click(rowOf("a.exr"));
+	ASSERT_EQ(s.m_screen.pasted().size(), 1u); // in the list
+	EXPECT_TRUE(s.m_calls.empty());
+	std::this_thread::sleep_for(std::chrono::milliseconds(450));
+	click(rowOf("a.exr")); // a while later: out again
+	EXPECT_TRUE(s.m_screen.pasted().empty());
+	std::this_thread::sleep_for(std::chrono::milliseconds(450));
+	const int y = rowOf("a.exr");
+	click(y);
+	click(rowOf("a.exr")); // at once: a double click opens it
+	ASSERT_EQ(s.m_calls.size(), 1u);
+	EXPECT_EQ(s.m_calls[0], "open " + (s.m_dir / "a.exr").string());
+	EXPECT_TRUE(s.m_screen.pasted().empty()); // the first click undone
 }

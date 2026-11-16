@@ -8,6 +8,7 @@
 #include <ftxui/dom/elements.hpp>
 #include <ftxui/screen/box.hpp>
 
+#include <chrono>
 #include <filesystem>
 #include <functional>
 #include <optional>
@@ -93,6 +94,9 @@ public:
 	{
 		return m_sel;
 	}
+	/// Whether recent item `i` (into shown()) is in the pasted list, all
+	/// of its paths.
+	[[nodiscard]] bool inList(int i) const;
 	[[nodiscard]] int firstPasted() const noexcept
 	{
 		return PASTE + 1;
@@ -116,6 +120,17 @@ private:
 	{
 		return row >= firstPasted() && row < openPastedRow();
 	}
+	[[nodiscard]] bool onRecent(int row) const noexcept
+	{
+		return row >= firstRecent() && row < rows();
+	}
+	/// Recent item `i` into the pasted list, or out of it when it is in.
+	void toggleInList(int i);
+	/// Recent items from the anchor to `i` into the pasted list (the
+	/// anchor set to `i` when there is none).
+	void addRange(int i);
+	/// Forget the recent item selected.
+	void forgetRecent();
 	void activate(int row);
 	/// Add `path` to the pasted list (not twice); false if nothing to add.
 	bool add(const std::string& path);
@@ -129,6 +144,9 @@ private:
 	std::vector<RecentItem> m_items;
 	std::vector<Pasted> m_pasted;
 	std::optional<LineEditor> m_field; ///< set while typing in the field
+	int m_pickAnchor = -1;             ///< where a Shift range starts
+	int m_lastClick = -1;              ///< recent item clicked last
+	std::chrono::steady_clock::time_point m_lastClickAt{};
 	int m_sel = 0;
 	std::vector<ftxui::Box> m_boxes;  ///< where each row was drawn
 	std::vector<ftxui::Box> m_remove; ///< each pasted row's ×

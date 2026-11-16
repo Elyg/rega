@@ -55,6 +55,32 @@ ViewMapping resolveView(
 	return m;
 }
 
+const char* backdropName(Backdrop b)
+{
+	switch(b)
+	{
+		case Backdrop::BLACK:
+			return "black";
+		case Backdrop::CHECKER:
+			return "checker";
+		case Backdrop::GREY:
+			break;
+	}
+	return "grey";
+}
+
+std::optional<Backdrop> backdropFromName(std::string_view name)
+{
+	for(const Backdrop b : {Backdrop::GREY, Backdrop::BLACK, Backdrop::CHECKER})
+	{
+		if(name == backdropName(b))
+		{
+			return b;
+		}
+	}
+	return std::nullopt;
+}
+
 float applyDisplay(float v, const DisplayParams& p)
 {
 	if(!std::isfinite(v))
@@ -412,6 +438,13 @@ Rgba8Image renderLayer(const LayerImage& img,
 	}
 	const DisplayLut lut(lutParams);
 	const int planeW = img.m_width;
+	// `B` checker: squares of a size that reads at any slot size (half-block
+	// slots are small), in display greys the image's alpha blends over.
+	const bool checker = disp.m_backdrop == Backdrop::CHECKER;
+	const int square =
+	    std::clamp(std::min(out.m_width, out.m_height) / 40, 2, 16);
+	auto checkerAt = [square](int x, int y) -> uint8_t
+	{ return ((x / square + y / square) & 1) ? 84 : 56; };
 
 	// One pass over the output, reading the planes as `T` (half bits or
 	// float): a single storage type keeps the type check out of the loop.
@@ -546,6 +579,21 @@ Rgba8Image renderLayer(const LayerImage& img,
 						    px[1] = lut(g);
 						    px[2] = lut(b);
 					    }
+					    if(checker && pa && disp.m_mode != ChannelMode::ALPHA)
+					    {
+						    // Premultiplied colour over the checker.
+						    const float a = std::clamp(sample(pa), 0.0f, 1.0f);
+						    if(a < 1.0f)
+						    {
+							    const float under =
+							        (1.0f - a) * checkerAt(ox, oy);
+							    for(int k = 0; k < 3; ++k)
+							    {
+								    px[k] = static_cast<uint8_t>(
+								        std::min(255.0f, px[k] + under + 0.5f));
+							    }
+						    }
+					    }
 					    px[3] = 255;
 				    }
 			    }
@@ -625,8 +673,21 @@ Rgba8Image renderLayer(const LayerImage& img,
 			    &out.m_pixels[static_cast<size_t>(y) * out.m_width * 4];
 			for(int x = x0; x < x1; ++x)
 			{
-				row[x * 4 + 3] = 255; // RGB already 0 where nothing was drawn
+				uint8_t* px = &row[x * 4];
+				if(checker && px[3] == 0)
+				{
+					px[0] = px[1] = px[2] = checkerAt(x, y);
+				}
+				px[3] = 255; // RGB already 0 where nothing was drawn
 			}
+		}
+	}
+	// `B` black: the whole view, around the frame too.
+	if(disp.m_backdrop == Backdrop::BLACK)
+	{
+		for(size_t i = 3; i < out.m_pixels.size(); i += 4)
+		{
+			out.m_pixels[i] = 255; // RGB is 0 where nothing was drawn
 		}
 	}
 	if(m.m_scale >= PIXEL_GRID_MIN_SCALE)

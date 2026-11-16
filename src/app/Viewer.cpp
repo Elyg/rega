@@ -233,6 +233,7 @@ std::vector<fs::path> Viewer::shownDirs() const
 DisplayParams Viewer::displayFor(int source, const fs::path& path)
 {
 	DisplayParams disp = m_state.m_disp;
+	disp.m_backdrop = m_ctx.m_backdrop;
 	if(disp.m_srgb && source >= 0 &&
 	   source < static_cast<int>(m_state.m_sources.size()))
 	{
@@ -1726,6 +1727,10 @@ bool Viewer::keyEvent(const Event& e, const ImageInfoPtr& info)
 	else if(ch("0"))
 	{
 		m_state.m_disp = DisplayParams{};
+	}
+	else if(ch("B"))
+	{
+		m_ctx.cycleBackdrop();
 	}
 	else if(ch("!"))
 	{

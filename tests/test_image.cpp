@@ -427,6 +427,43 @@ TEST(Render, PixelGridOnlyWhenZoomedIn)
 	EXPECT_EQ(red(out, 8, 4), 255);
 }
 
+TEST(Render, BackdropsGreyBlackAndChecker)
+{
+	// 4x2 fit into 4x6: the image on rows 2..3, letterbox above and below.
+	// Half transparent black: alpha 0.5, colour premultiplied (0).
+	rega::LayerImage img;
+	img.m_dataWindow = img.m_displayWindow = {0, 0, 3, 1};
+	img.m_width = 4;
+	img.m_height = 2;
+	img.m_channelNames = {"R", "G", "B", "A"};
+	img.m_planes.assign(3, rega::Plane(std::vector<float>(8, 0.0f)));
+	img.m_planes.emplace_back(std::vector<float>(8, 0.5f));
+	rega::DisplayParams d;
+	d.m_srgb = false;
+	auto at = [](const rega::Rgba8Image& o, int x, int y)
+	{ return &o.m_pixels[(y * o.m_width + x) * 4]; };
+
+	auto out = rega::renderLayer(img, 4, 6, {}, d); // grey: as ever
+	EXPECT_EQ(at(out, 0, 0)[3], 0);
+	EXPECT_EQ(at(out, 0, 2)[0], 0);
+
+	d.m_backdrop = rega::Backdrop::BLACK; // the letterbox too
+	out = rega::renderLayer(img, 4, 6, {}, d);
+	EXPECT_EQ(at(out, 0, 0)[3], 255);
+	EXPECT_EQ(at(out, 0, 0)[0], 0);
+
+	d.m_backdrop = rega::Backdrop::CHECKER; // half of it through the image
+	out = rega::renderLayer(img, 4, 6, {}, d);
+	EXPECT_EQ(at(out, 0, 0)[3], 0); // outside the frame: as grey
+	const int shown = at(out, 0, 2)[0];
+	EXPECT_TRUE(shown == 28 || shown == 42) << shown; // 56 / 84, halved
+	EXPECT_EQ(at(out, 0, 2)[3], 255);
+
+	EXPECT_EQ(rega::backdropFromName("checker"), rega::Backdrop::CHECKER);
+	EXPECT_EQ(rega::backdropName(rega::Backdrop::BLACK), std::string("black"));
+	EXPECT_FALSE(rega::backdropFromName("pink"));
+}
+
 TEST(Render, OutlinesTheDisplayWindow)
 {
 	rega::LayerImage img;

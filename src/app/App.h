@@ -153,9 +153,10 @@ private:
 	Recent m_recent;
 	bool m_remember = false; ///< opens now go to m_recent
 	bool m_help = false;
-	bool m_stats = false;    ///< `S`: the link and cache overlay
-	int m_helpScroll = 0;    ///< first help line shown (short terminals)
-	std::string m_helpQuery; ///< typed while the help is open: shows matches
+	bool m_helpSearch = false; ///< Ctrl+F: the search prompt shows
+	bool m_stats = false;      ///< `S`: the link and cache overlay
+	int m_helpScroll = 0;      ///< first help line shown (short terminals)
+	std::string m_helpQuery;   ///< typed while the help is open: shows matches
 
 	Browser m_browser;
 	Viewer m_viewer;

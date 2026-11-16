@@ -124,7 +124,9 @@ private:
 	                               ListBoxes& boxes);
 	/// A click on a row of the current column (`row` into visibleIndices())
 	/// or of the parent one.
-	void clickRow(int row);
+	/// `shift`: mark the images from the selected row to it; `ctrl`: mark
+	/// or unmark it.
+	void clickRow(int row, bool shift = false, bool ctrl = false);
 	void clickParentRow(int row);
 	ftxui::Element renderPreview();
 	/// First lines of a readable text file, or nullopt if it looks binary.
