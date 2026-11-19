@@ -12,7 +12,8 @@ zip=$(ls rega-*-windows-x64.zip)
 # rega.exe writes --version to the console it attaches to, not to a pipe, so only its exit
 # code tells: a missing DLL or a crash on start fails here.
 tmp=$(mktemp -d)
-python -m zipfile -e "$zip" "$tmp"
+# A Windows path: with the conversion off, Python would read /tmp/… as C:\tmp\….
+python -m zipfile -e "$zip" "$(cygpath -w "$tmp")"
 timeout 30 "$tmp/rega/rega.exe" --version || { echo "rega.exe --version failed ($?)"; exit 1; }
 echo "rega.exe from $zip starts"
 
