@@ -28,7 +28,7 @@ bool isSupportedImage(const std::filesystem::path& p)
 {
 	auto e = lowerExt(p);
 	return e == ".exr" || e == ".png" || e == ".jpg" || e == ".jpeg" ||
-	       e == ".tif" || e == ".tiff" || isMovie(p);
+	       e == ".tif" || e == ".tiff" || e == ".svg" || isMovie(p);
 }
 
 bool isMovie(const std::filesystem::path& p)
@@ -115,6 +115,10 @@ ImageInfo probeImage(const std::filesystem::path& p)
 	{
 		return probeExr(p);
 	}
+	if(e == ".svg")
+	{
+		return probeSvg(p);
+	}
 	return e == ".tif" || e == ".tiff" ? probeTiff(p) : probeStb(p);
 }
 
@@ -126,6 +130,7 @@ LayerImage loadLayer(const ImageInfo& info, int layerIndex)
 	}
 	LayerImage img = info.m_format == "exr"    ? loadExrLayer(info, layerIndex)
 	                 : info.m_format == "tiff" ? loadTiffLayer(info, layerIndex)
+	                 : info.m_format == "svg"  ? loadSvgLayer(info, layerIndex)
 	                 : isMovie(info.m_path) ? loadMovieLayer(info, layerIndex)
 	                                        : loadStbLayer(info, layerIndex);
 	scanLayer(img);

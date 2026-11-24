@@ -92,7 +92,8 @@ struct PartInfo
 struct ImageInfo
 {
 	std::string m_path;
-	std::string m_format; ///< "exr" | "png" | "jpeg" | "tiff" | "mov" | "mp4"
+	/// "exr" | "png" | "jpeg" | "tiff" | "svg" | "mov" | "mp4"
+	std::string m_format;
 	bool m_displayReferred =
 	    false; ///< integer formats: decoded with sRGB EOTF to linear
 	std::vector<PartInfo> m_parts;

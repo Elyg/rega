@@ -1,5 +1,5 @@
 // libFuzzer harness for the image loaders, built once per format with
-// REGA_FUZZ_EXT (".exr", ".tif", ".png", ".jpg", ".mov"). The loaders read
+// REGA_FUZZ_EXT (".exr", ".tif", ".png", ".jpg", ".svg", ".mov"). The loaders read
 // files by path, so each input is written to one first.
 //
 //   just fuzz            # every format, 60 s each

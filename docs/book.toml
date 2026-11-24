@@ -1,6 +1,6 @@
 [book]
 title = "rega"
-description = "User guide for rega, the terminal image browser/viewer for OpenEXR, TIFF, PNG, JPEG, MOV and MP4."
+description = "User guide for rega, the terminal image browser/viewer for OpenEXR, TIFF, PNG, JPEG, SVG, MOV and MP4."
 authors = ["etitas"]
 language = "en"
 src = "src"

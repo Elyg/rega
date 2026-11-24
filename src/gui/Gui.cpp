@@ -808,7 +808,7 @@ int run(const AppOptions& given, const GuiOptions& gui)
 		    [&](bool folder)
 		    {
 			    static const SDL_DialogFileFilter FILTERS[] = {
-			        {"Images and movies", "exr;tif;tiff;png;jpg;jpeg;mov;mp4"},
+			        {"Images and movies", "exr;tif;tiff;png;jpg;jpeg;svg;mov;mp4"},
 			        {"All files", "*"},
 			    };
 			    dialogDir = app.browserDir().string();

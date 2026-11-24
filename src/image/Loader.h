@@ -16,7 +16,7 @@ struct LoadError : std::runtime_error
 	using std::runtime_error::runtime_error;
 };
 
-/// .exr, .png, .jpg, .jpeg, .tif, .tiff, .mov or .mp4 (any case).
+/// .exr, .png, .jpg, .jpeg, .tif, .tiff, .svg, .mov or .mp4 (any case).
 bool isSupportedImage(const std::filesystem::path& p);
 
 /// .mov or .mp4 (any case): one file holding many frames.
@@ -53,6 +53,8 @@ ImageInfo probeStb(const std::filesystem::path& p);
 LayerImage loadStbLayer(const ImageInfo& info, int layerIndex);
 ImageInfo probeTiff(const std::filesystem::path& p);
 LayerImage loadTiffLayer(const ImageInfo& info, int layerIndex);
+ImageInfo probeSvg(const std::filesystem::path& p);
+LayerImage loadSvgLayer(const ImageInfo& info, int layerIndex);
 ImageInfo probeMovie(const std::filesystem::path& p);
 LayerImage loadMovieLayer(const ImageInfo& info, int layerIndex);
 

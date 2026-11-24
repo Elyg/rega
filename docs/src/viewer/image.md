@@ -65,3 +65,12 @@ in Nuke, counted from the bottom-left.
 A render that's still writing, or a file cut short, shows what's there: the strips that
 were written, the rest black, and **incomplete image** in the top-right corner. Once the
 file is complete on disk, the viewer reloads it.
+
+## SVG
+
+An SVG is drawn once when it opens, into a picture at least 2048 pixels on its longer
+side (larger drawings keep their own size, up to 16384), and is then viewed like a PNG.
+Zooming in far enough shows those pixels. The metadata pane (`2`) shows the drawing's own
+size and the scale it was drawn at. rega draws shapes, strokes, and solid and gradient
+fills. It doesn't draw text, embedded images, filters or masks, and a gradient whose
+`x1`…`y2` are plain fractions (`x2="1"`) instead of percentages draws as one colour.

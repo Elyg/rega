@@ -704,6 +704,54 @@ TEST(StbLoader, PngRoundTripsThroughSrgbView)
 	}
 }
 
+TEST(SvgLoader, DrawsScaledUpAndPremultiplied)
+{
+	// 40x20 px: the left half opaque red, a 50% blue square at its right,
+	// and the rest clear.
+	fs::path p = tmpDir() / "shapes.svg";
+	std::ofstream(p) << R"(<svg xmlns="http://www.w3.org/2000/svg"
+	    width="40" height="20" viewBox="0 0 40 20">
+	  <rect x="0" y="0" width="20" height="20" fill="#ff0000"/>
+	  <rect x="25" y="5" width="10" height="10" fill="#0000ff"
+	        fill-opacity="0.5"/>
+	</svg>)";
+	auto info = rega::probeImage(p);
+	EXPECT_EQ(info.m_format, "svg");
+	EXPECT_TRUE(info.m_displayReferred);
+	ASSERT_EQ(info.m_layers[0].m_channels,
+	          (std::vector<std::string>{"R", "G", "B", "A"}));
+	// Small drawings are drawn up to 2048 px on the longer side.
+	EXPECT_EQ(info.displayWindow().width(), 2048);
+	EXPECT_EQ(info.displayWindow().height(), 1024);
+
+	auto img = rega::loadLayer(info, 0);
+	ASSERT_EQ(img.m_width, 2048);
+	ASSERT_EQ(img.m_height, 1024);
+	const int red = 10 * 51, blue = 30 * 51, clear = 38 * 51, mid = 512;
+	EXPECT_NEAR(*img.at(0, red, mid), 1.0f, 1e-3f);
+	EXPECT_NEAR(*img.at(1, red, mid), 0.0f, 1e-3f);
+	EXPECT_NEAR(*img.at(3, red, mid), 1.0f, 1e-3f);
+	// Half alpha: colour premultiplied in sRGB codes, then linearised.
+	EXPECT_NEAR(*img.at(3, blue, mid), 0.5f, 0.01f);
+	EXPECT_NEAR(*img.at(2, blue, mid), rega::srgbToLinear(0.5f), 0.01f);
+	EXPECT_NEAR(*img.at(0, blue, mid), 0.0f, 1e-3f);
+	for(int c = 0; c < 4; ++c)
+	{
+		EXPECT_EQ(*img.at(c, clear, mid), 0.0f) << c;
+	}
+	// Drawn in strips: rows either side of a strip boundary agree.
+	EXPECT_EQ(*img.at(0, red, 255), *img.at(0, red, 256));
+}
+
+TEST(SvgLoader, NotAnSvgThrows)
+{
+	fs::path p = tmpDir() / "not.svg";
+	std::ofstream(p) << "hello";
+	EXPECT_THROW(rega::probeImage(p), rega::LoadError);
+	std::ofstream(p) << "<svg></svg>"; // no size, nothing drawn
+	EXPECT_THROW(rega::probeImage(p), rega::LoadError);
+}
+
 namespace
 {
 

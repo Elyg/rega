@@ -68,6 +68,14 @@ if(NOT TARGET stb::stb)
     add_library(stb::stb INTERFACE IMPORTED)
     target_include_directories(stb::stb INTERFACE ${STB_INCLUDE_DIR})
 endif()
+# nanosvg (SVG): header-only, its implementation compiled in SvgLoader.cpp. nixpkgs'
+# also ships prebuilt libraries under another target name; only its headers are used.
+find_package(nanosvg QUIET)
+if(NOT TARGET nanosvg::nanosvg)
+    find_path(NANOSVG_INCLUDE_DIR nanosvg.h PATH_SUFFIXES nanosvg REQUIRED)
+    add_library(nanosvg::nanosvg INTERFACE IMPORTED)
+    target_include_directories(nanosvg::nanosvg INTERFACE ${NANOSVG_INCLUDE_DIR})
+endif()
 
 configure_file(cmake/BuildInfo.h.in ${CMAKE_BINARY_DIR}/generated/BuildInfo.h @ONLY)
 
@@ -105,6 +113,7 @@ add_library(rega_core STATIC
     src/image/Render.cpp
     src/image/Sequence.cpp
     src/image/StbLoader.cpp
+    src/image/SvgLoader.cpp
     src/image/TiffLoader.cpp
     src/term/BitmapSlot.cpp
     src/term/Caps.cpp
@@ -124,7 +133,7 @@ add_library(rega_core STATIC
 target_include_directories(rega_core PUBLIC src ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(rega_core PUBLIC
     ${REGA_FTXUI} spdlog::spdlog OpenEXR::OpenEXR OpenColorIO::OpenColorIO
-    stb::stb TIFF::TIFF ZLIB::ZLIB ${REGA_FFMPEG}
+    stb::stb nanosvg::nanosvg TIFF::TIFF ZLIB::ZLIB ${REGA_FFMPEG}
     ${REGA_LIBDEFLATE} Threads::Threads)
 
 if(MINGW)
@@ -230,7 +239,7 @@ endif()
 # libFuzzer targets for the loaders, one per format (clang only): `just fuzz`.
 option(REGA_BUILD_FUZZERS "Build the loader fuzz targets" OFF)
 if(REGA_BUILD_FUZZERS)
-    foreach(_ext exr tif png jpg mov)
+    foreach(_ext exr tif png jpg svg mov)
         add_executable(rega_fuzz_${_ext} tests/fuzz/fuzz_loader.cpp)
         target_link_libraries(rega_fuzz_${_ext} PRIVATE rega_core)
         target_compile_definitions(rega_fuzz_${_ext} PRIVATE REGA_FUZZ_EXT=".${_ext}")

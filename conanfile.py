@@ -18,6 +18,7 @@ class RegaConan(ConanFile):
         self.requires("spdlog/1.16.0")
         self.requires("openexr/3.4.18")
         self.requires("stb/cci.20261021")
+        self.requires("nanosvg/cci.20231025")
         self.requires("libtiff/4.7.2")
         self.requires("zlib/1.3.2")
         # Same range as openexr, so both resolve to one libdeflate.

@@ -9,6 +9,7 @@
   spdlog,
   openexr,
   stb,
+  nanosvg,
   libtiff,
   zlib,
   libdeflate,
@@ -168,6 +169,7 @@ stdenv.mkDerivation {
     spdlog
     openexr
     stb
+    nanosvg
     (if stdenv.hostPlatform.isStatic then tiffStatic else libtiff)
     zlib
     libdeflate
@@ -188,7 +190,7 @@ stdenv.mkDerivation {
   doCheck = true;
 
   meta = {
-    description = "Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG, JPEG, MOV and MP4";
+    description = "Terminal image browser/viewer for OpenEXR (layers, AOVs, sequences), TIFF, PNG, JPEG, SVG, MOV and MP4";
     mainProgram = "rega";
     platforms = lib.platforms.unix;
   };
